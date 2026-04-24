@@ -1,6 +1,7 @@
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
 import { HangmanGame } from "../games/HangmanGame";
+import { IcebreakerGame } from "../games/IcebreakerGame";
 import { TwoTruthsGame } from "../games/TwoTruthsGame";
 import { TriviaGame } from "../games/TriviaGame";
 
@@ -52,6 +53,17 @@ export function GameScreen({
     if (session.gameState?.type === "trivia") {
       return (
         <TriviaGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "icebreaker") {
+      return (
+        <IcebreakerGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

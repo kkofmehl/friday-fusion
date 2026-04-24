@@ -1,11 +1,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { createReadStream, existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { WebSocket } from "ws";
+import { nanoid } from "nanoid";
 import {
   clientEventSchema,
   createSessionRequestSchema,
@@ -13,6 +15,7 @@ import {
   serverEventSchema,
   type ServerEvent
 } from "../../shared/contracts";
+import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
 import { SessionService, createSessionService } from "./sessionService";
 import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
 
@@ -22,6 +25,13 @@ const DEAD_CONNECTION_MS = 45_000;
 // closed automatically. Covers the case where everyone closes their tab
 // without clicking the explicit "Leave" button.
 const ABANDONED_SESSION_MS = 10 * 60 * 1000;
+const ICEBREAKER_MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const ICEBREAKER_IMAGE_MIME: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/gif": ".gif",
+  "image/webp": ".webp"
+};
 
 type ConnectionContext = {
   sessionId: string;
@@ -43,6 +53,9 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
   const app = Fastify({ logger: true });
   const sessionService = options.sessionService ?? createSessionService();
   await app.register(cors, { origin: true });
+  await app.register(multipart, {
+    limits: { fileSize: ICEBREAKER_MAX_UPLOAD_BYTES }
+  });
   await app.register(websocket);
 
   const serveStatic = options.serveStatic ?? true;
@@ -174,6 +187,79 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       }
       throw error;
     }
+  });
+
+  app.post("/api/sessions/:sessionId/icebreaker/upload", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    let participantId = "";
+    let fileBuffer: Buffer | null = null;
+    let mimeType = "";
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          if (part.fieldname !== "file") {
+            part.file.resume();
+            continue;
+          }
+          mimeType = part.mimetype;
+          fileBuffer = await part.toBuffer();
+        } else if (part.type === "field" && part.fieldname === "participantId") {
+          participantId = String(part.value ?? "").trim();
+        }
+      }
+    } catch (error) {
+      app.log.warn({ err: error }, "icebreaker upload parse failed");
+      return reply.code(400).send({ message: "Invalid multipart body." });
+    }
+    if (!participantId || !fileBuffer?.length) {
+      return reply.code(400).send({ message: "participantId and file are required." });
+    }
+    if (fileBuffer.length > ICEBREAKER_MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ message: "File too large." });
+    }
+    const ext = ICEBREAKER_IMAGE_MIME[mimeType];
+    if (!ext) {
+      return reply.code(400).send({ message: "Only JPEG, PNG, GIF, or WebP images are allowed." });
+    }
+    let fileId: string;
+    try {
+      const { questionIndex } = sessionService.assertIcebreakerUploadAllowed(sessionId, participantId);
+      const dataDir = sessionService.getDataDirectory();
+      const dir = icebreakerQuestionUploadDir(dataDir, sessionId, questionIndex);
+      await mkdir(dir, { recursive: true });
+      fileId = `${nanoid(18)}${ext}`;
+      await writeFile(path.join(dir, fileId), fileBuffer);
+    } catch (error) {
+      if (error instanceof Error && error.message === "Session not found.") {
+        return reply.code(404).send({ message: "Session not found." });
+      }
+      const message = error instanceof Error ? error.message : "Upload rejected.";
+      return reply.code(400).send({ message });
+    }
+    return reply.send({ fileId });
+  });
+
+  app.get("/api/sessions/:sessionId/icebreaker/file/:fileId", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
+    const abs = await resolveIcebreakerStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
   });
 
   app.get("/ws", { websocket: true }, (connection) => {
@@ -342,6 +428,24 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             throw new Error("Only host can move to the next question.");
           }
           await sessionService.nextTriviaQuestion(context.sessionId);
+        } else if (event.type === "icebreaker:startRound") {
+          await sessionService.startIcebreakerRound(
+            context.sessionId,
+            context.participantId,
+            event.payload.totalQuestions
+          );
+        } else if (event.type === "icebreaker:submit") {
+          await sessionService.submitIcebreakerAnswer(context.sessionId, context.participantId, event.payload);
+        } else if (event.type === "icebreaker:beginReveals") {
+          await sessionService.beginIcebreakerReveals(context.sessionId, context.participantId);
+        } else if (event.type === "icebreaker:reveal") {
+          await sessionService.revealIcebreakerParticipant(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId
+          );
+        } else if (event.type === "icebreaker:nextQuestion") {
+          await sessionService.nextIcebreakerQuestion(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);

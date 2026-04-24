@@ -92,3 +92,6 @@
 38. User requested full implementation of host-configurable trivia loading: host-selected question count/category/difficulty, multiple-choice-only Open Trivia batching with 5-second API cadence, favor-easy remainder split, loading progress bar UI during build, and start only after questions are loaded.
 39. User reported `npm run build -w web` failure and asked for diagnosis/fix.
 40. User reported they were trying to deploy the app to Fly.io.
+41. User requested a new **Icebreaker Questions** game: JSON prompt library, per-player text and optional image upload (files under `DATA_DIR`, purged on next question), host waits for all submissions then reveals answers one player at a time via dropdown + reveal, no scoring; assistant implemented contracts, loader, session service with redacted public state during collection, Fastify multipart upload + file GET routes, Web UI, tests, and prompt log update.
+42. User asked whether icebreaker answers can support **pasting an image** from the clipboard; assistant wired paste handling on the answer form (same allowed types as file upload) and refactored hooks so `IcebreakerGame` stays Rules-of-Hooks–safe.
+43. User requested a **confirm** before icebreaker **Next question** when some submitted players have not been revealed yet (`window.confirm` with the provided copy).

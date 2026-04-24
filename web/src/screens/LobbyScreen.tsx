@@ -32,6 +32,12 @@ const GAMES: GameOption[] = [
     title: "Trivia",
     description: "Answer a series of questions across mixed categories.",
     emoji: "Q"
+  },
+  {
+    id: "icebreaker",
+    title: "Icebreaker Questions",
+    description: "Fun prompts—share answers (and optional photos), then reveal together.",
+    emoji: "I"
   }
 ];
 

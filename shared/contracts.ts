@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const gameTypeSchema = z.enum(["hangman", "twoTruthsLie", "trivia"]);
+export const gameTypeSchema = z.enum(["hangman", "twoTruthsLie", "trivia", "icebreaker"]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
 export const participantSchema = z.object({
@@ -114,6 +114,35 @@ export const triviaStateSchema = z.object({
 });
 export type TriviaState = z.infer<typeof triviaStateSchema>;
 
+export const icebreakerQuestionSchema = z.object({
+  id: z.string(),
+  text: z.string()
+});
+export type IcebreakerQuestion = z.infer<typeof icebreakerQuestionSchema>;
+
+export const icebreakerRevealedEntrySchema = z.object({
+  participantId: z.string(),
+  text: z.string(),
+  imageUrl: z.string().nullable()
+});
+export type IcebreakerRevealedEntry = z.infer<typeof icebreakerRevealedEntrySchema>;
+
+export const icebreakerStateSchema = z.object({
+  questionIndex: z.number().int().nonnegative(),
+  totalQuestions: z.number().int().positive(),
+  activeQuestion: icebreakerQuestionSchema.nullable(),
+  submittedParticipantIds: z.array(z.string()),
+  revealed: z.array(icebreakerRevealedEntrySchema),
+  usedQuestionIds: z.array(z.string()),
+  status: z.enum(["idle", "collecting", "revealing", "finished"])
+});
+export type IcebreakerState = z.infer<typeof icebreakerStateSchema>;
+
+export const icebreakerRoundConfigSchema = z.object({
+  totalQuestions: z.number().int().positive()
+});
+export type IcebreakerRoundConfig = z.infer<typeof icebreakerRoundConfigSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -126,6 +155,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("trivia"),
     state: triviaStateSchema
+  }),
+  z.object({
+    type: z.literal("icebreaker"),
+    state: icebreakerStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -191,7 +224,18 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("trivia:start"), payload: triviaRoundConfigSchema }),
   z.object({ type: z.literal("trivia:answer"), payload: z.object({ answer: z.string() }) }),
   z.object({ type: z.literal("trivia:closeQuestion"), payload: z.object({}) }),
-  z.object({ type: z.literal("trivia:nextQuestion"), payload: z.object({}) })
+  z.object({ type: z.literal("trivia:nextQuestion"), payload: z.object({}) }),
+  z.object({ type: z.literal("icebreaker:startRound"), payload: icebreakerRoundConfigSchema }),
+  z.object({
+    type: z.literal("icebreaker:submit"),
+    payload: z.object({
+      text: z.string(),
+      imageFileId: z.string().nullable()
+    })
+  }),
+  z.object({ type: z.literal("icebreaker:beginReveals"), payload: z.object({}) }),
+  z.object({ type: z.literal("icebreaker:reveal"), payload: z.object({ participantId: z.string() }) }),
+  z.object({ type: z.literal("icebreaker:nextQuestion"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

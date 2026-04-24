@@ -32,6 +32,12 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Answering", tone: "answerer" };
     }
   }
+  if (session.gameState.type === "icebreaker") {
+    const st = session.gameState.state;
+    if (st.status === "collecting" && !st.submittedParticipantIds.includes(participantId)) {
+      return { label: "Submitting", tone: "submitting" };
+    }
+  }
   return null;
 };
 
@@ -42,7 +48,10 @@ export function PlayerList({
   session: SessionState;
   currentParticipantId: string;
 }): JSX.Element {
-  const ranked = [...session.participants].sort((a, b) => b.score - a.score);
+  const hideScores = session.activeGame === "icebreaker";
+  const ranked = hideScores
+    ? [...session.participants]
+    : [...session.participants].sort((a, b) => b.score - a.score);
   const topScore = ranked[0]?.score ?? 0;
 
   return (
@@ -50,7 +59,7 @@ export function PlayerList({
       {ranked.map((participant: Participant) => {
         const turnTag = resolveTurnTag(session, participant.id);
         const isYou = participant.id === currentParticipantId;
-        const isLeader = topScore > 0 && participant.score === topScore;
+        const isLeader = !hideScores && topScore > 0 && participant.score === topScore;
         return (
           <li key={participant.id} className={`player-row${isYou ? " player-row-you" : ""}`}>
             <div className="player-identity">
@@ -64,7 +73,7 @@ export function PlayerList({
                 {isLeader && <span className="tag tag-leader">Leader</span>}
               </div>
             </div>
-            <span className="player-score">{participant.score}</span>
+            {!hideScores && <span className="player-score">{participant.score}</span>}
           </li>
         );
       })}

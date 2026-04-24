@@ -8,6 +8,8 @@ import {
   type TriviaLoadingState,
   type TriviaQuestion
 } from "../../shared/contracts";
+import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
+import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
 import { FileStore } from "./storage/fileStore";
 import {
   createTriviaQuestionLoader,
@@ -60,7 +62,26 @@ type TriviaGameInternal = {
   status: "idle" | "loading" | "questionOpen" | "questionClosed" | "finished";
 };
 
-type GameInternal = HangmanGameInternal | TwoTruthsGameInternal | TriviaGameInternal;
+type IcebreakerRevealedInternal = {
+  participantId: string;
+  text: string;
+  imageFileId: string | null;
+};
+
+type IcebreakerGameInternal = {
+  id: string;
+  type: "icebreaker";
+  questions: Array<{ id: string; text: string }>;
+  totalQuestions: number;
+  questionIndex: number;
+  activeQuestion: { id: string; text: string } | null;
+  privateSubmissions: Record<string, { text: string; imageFileId: string | null }>;
+  revealed: IcebreakerRevealedInternal[];
+  usedQuestionIds: string[];
+  status: "idle" | "collecting" | "revealing" | "finished";
+};
+
+type GameInternal = HangmanGameInternal | TwoTruthsGameInternal | TriviaGameInternal | IcebreakerGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -167,7 +188,14 @@ const appendHangmanActivity = (
 };
 
 const ensureGameShape = (
-  game: GameInternal & { mode?: HangmanMode; usedQuestionIds?: string[]; loading?: TriviaLoadingState | null; totalQuestions?: number }
+  game: GameInternal & {
+    mode?: HangmanMode;
+    usedQuestionIds?: string[];
+    loading?: TriviaLoadingState | null;
+    totalQuestions?: number;
+    privateSubmissions?: Record<string, { text: string; imageFileId: string | null }>;
+    revealed?: IcebreakerRevealedInternal[];
+  }
 ): GameInternal => {
   if (game.type === "hangman") {
     return {
@@ -188,6 +216,19 @@ const ensureGameShape = (
       totalQuestions: game.totalQuestions ?? (game.questions.length || 1)
     };
   }
+  if (game.type === "icebreaker") {
+    return {
+      ...game,
+      id: game.id ?? nanoid(6),
+      questions: game.questions ?? [],
+      totalQuestions: game.totalQuestions ?? (game.questions?.length || 1),
+      questionIndex: game.questionIndex ?? 0,
+      activeQuestion: game.activeQuestion ?? null,
+      privateSubmissions: game.privateSubmissions ?? {},
+      revealed: game.revealed ?? [],
+      usedQuestionIds: game.usedQuestionIds ?? []
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -195,14 +236,33 @@ export class SessionService {
   private sessions = new Map<string, SessionInternal>();
   private readonly store: FileStore<PersistedState>;
   private readonly triviaQuestionLoader: TriviaQuestionLoader;
+  private readonly dataDirectory: string;
   private onSessionUpdated?: (sessionId: string) => void;
 
   public constructor(
     store: FileStore<PersistedState>,
-    triviaQuestionLoader: TriviaQuestionLoader = createTriviaQuestionLoader()
+    triviaQuestionLoader: TriviaQuestionLoader = createTriviaQuestionLoader(),
+    dataDirectory: string = process.env.DATA_DIR ?? "./data"
   ) {
     this.store = store;
     this.triviaQuestionLoader = triviaQuestionLoader;
+    this.dataDirectory = dataDirectory;
+  }
+
+  public getDataDirectory(): string {
+    return this.dataDirectory;
+  }
+
+  public assertIcebreakerUploadAllowed(sessionId: string, participantId: string): { questionIndex: number } {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "collecting") {
+      throw new Error("Icebreaker is not accepting uploads.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    return { questionIndex: game.questionIndex };
   }
 
   public setStateUpdateListener(listener: ((sessionId: string) => void) | undefined): void {
@@ -218,9 +278,9 @@ export class SessionService {
           game?: (GameInternal & { mode?: HangmanMode }) | null;
         };
         const games: GameInternal[] = Array.isArray(legacy.games)
-          ? legacy.games
+          ? legacy.games.map((entry) => ensureGameShape(entry as GameInternal))
           : legacy.game
-            ? [ensureGameShape(legacy.game)]
+            ? [ensureGameShape(legacy.game as GameInternal)]
             : [];
         const migrated: SessionInternal = {
           sessionId: session.sessionId,
@@ -397,7 +457,7 @@ export class SessionService {
         votes: {},
         status: "collecting"
       };
-    } else {
+    } else if (game === "trivia") {
       next = {
         id: nanoid(6),
         type: "trivia",
@@ -408,6 +468,20 @@ export class SessionService {
         answers: {},
         usedQuestionIds: previousTrivia?.usedQuestionIds ?? [],
         loading: null,
+        status: "idle"
+      };
+    } else {
+      const previousIcebreaker = session.games.find((entry): entry is IcebreakerGameInternal => entry.type === "icebreaker");
+      next = {
+        id: nanoid(6),
+        type: "icebreaker",
+        questions: [],
+        totalQuestions: 1,
+        questionIndex: 0,
+        activeQuestion: null,
+        privateSubmissions: {},
+        revealed: [],
+        usedQuestionIds: previousIcebreaker?.usedQuestionIds ?? [],
         status: "idle"
       };
     }
@@ -421,6 +495,10 @@ export class SessionService {
     if (!isHost) {
       throw new Error("Only the host can end the game.");
     }
+    const active = session.games[0];
+    if (active?.type === "icebreaker") {
+      await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -432,6 +510,7 @@ export class SessionService {
     if (!isHost) {
       throw new Error("Only the host can close the session.");
     }
+    await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
   }
@@ -440,6 +519,7 @@ export class SessionService {
     if (!this.sessions.has(sessionId)) {
       return false;
     }
+    await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
     return true;
@@ -462,6 +542,7 @@ export class SessionService {
     session.updatedAt = Date.now();
 
     if (session.participants.length === 0) {
+      await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       this.sessions.delete(sessionId);
       await this.persist();
       return { sessionDeleted: true };
@@ -485,6 +566,12 @@ export class SessionService {
       } else if (activeHangman.currentTurnId === participantId) {
         activeHangman.currentTurnId = pickNextGuesser(session, activeHangman, participantId);
       }
+    }
+
+    const activeIcebreaker = session.games[0];
+    if (activeIcebreaker?.type === "icebreaker") {
+      delete activeIcebreaker.privateSubmissions[participantId];
+      activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
     }
 
     await this.persist();
@@ -990,6 +1077,7 @@ export class SessionService {
     let changed = false;
     for (const [sessionId, session] of this.sessions.entries()) {
       if (now - session.updatedAt > maxAgeMs) {
+        await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
         this.sessions.delete(sessionId);
         changed = true;
       }
@@ -997,6 +1085,137 @@ export class SessionService {
     if (changed) {
       await this.persist();
     }
+  }
+
+  public async startIcebreakerRound(sessionId: string, hostParticipantId: string, totalQuestions: number): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can start the icebreaker round.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker") {
+      throw new Error("Icebreaker game is not active.");
+    }
+    const count = Math.max(1, Math.min(500, Math.floor(totalQuestions)));
+    const used = new Set(game.usedQuestionIds);
+    const picked = pickIcebreakerQuestions(used, count);
+    picked.forEach((q) => used.add(q.id));
+    game.usedQuestionIds = [...used];
+    game.questions = picked;
+    game.totalQuestions = picked.length;
+    game.questionIndex = 0;
+    game.activeQuestion = picked[0] ?? null;
+    game.privateSubmissions = {};
+    game.revealed = [];
+    game.status = picked.length > 0 ? "collecting" : "finished";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async submitIcebreakerAnswer(
+    sessionId: string,
+    participantId: string,
+    payload: { text: string; imageFileId: string | null }
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "collecting") {
+      throw new Error("Icebreaker is not accepting answers.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const text = payload.text.trim();
+    const imageFileId = payload.imageFileId?.trim() || null;
+    if (text.length === 0 && !imageFileId) {
+      throw new Error("Enter an answer or attach an image.");
+    }
+    game.privateSubmissions[participantId] = { text, imageFileId };
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async beginIcebreakerReveals(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can begin reveals.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "collecting") {
+      throw new Error("Icebreaker is not ready for reveals.");
+    }
+    const valid = (s: { text: string; imageFileId: string | null }): boolean =>
+      s.text.trim().length > 0 || Boolean(s.imageFileId);
+    const allReady = session.participants.every((p) => {
+      const sub = game.privateSubmissions[p.id];
+      return sub && valid(sub);
+    });
+    if (!allReady) {
+      throw new Error("Not all participants have submitted.");
+    }
+    game.status = "revealing";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async revealIcebreakerParticipant(
+    sessionId: string,
+    hostParticipantId: string,
+    participantId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can reveal an answer.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "revealing") {
+      throw new Error("Icebreaker reveals are not active.");
+    }
+    const submission = game.privateSubmissions[participantId];
+    if (!submission) {
+      throw new Error("That participant has no submission.");
+    }
+    if (game.revealed.some((r) => r.participantId === participantId)) {
+      throw new Error("That answer is already revealed.");
+    }
+    game.revealed.push({
+      participantId,
+      text: submission.text,
+      imageFileId: submission.imageFileId
+    });
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async nextIcebreakerQuestion(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can move to the next question.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker") {
+      throw new Error("Icebreaker game is not active.");
+    }
+    if (game.status !== "revealing") {
+      throw new Error("Move to the next question after the reveal phase.");
+    }
+    await purgeIcebreakerQuestionUploads(this.dataDirectory, sessionId, game.questionIndex);
+    const nextIndex = game.questionIndex + 1;
+    const nextQuestion = game.questions[nextIndex];
+    if (nextQuestion) {
+      game.questionIndex = nextIndex;
+      game.activeQuestion = nextQuestion;
+      game.privateSubmissions = {};
+      game.revealed = [];
+      game.status = "collecting";
+    } else {
+      game.questionIndex = nextIndex;
+      game.activeQuestion = null;
+      game.privateSubmissions = {};
+      game.status = "finished";
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
   }
 
   private toPublicState(session: SessionInternal): SessionState {
@@ -1051,26 +1270,69 @@ export class SessionService {
       };
     }
 
-    return {
-      ...base,
-      activeGame: "trivia",
-      gameState: {
-        type: "trivia",
-        state: {
-          questionIndex: game.questionIndex,
-          totalQuestions: game.totalQuestions,
-          activeQuestion: game.activeQuestion,
-          answers: game.answers,
-          loading: game.loading,
-          status: game.status
+    if (game.type === "trivia") {
+      return {
+        ...base,
+        activeGame: "trivia",
+        gameState: {
+          type: "trivia",
+          state: {
+            questionIndex: game.questionIndex,
+            totalQuestions: game.totalQuestions,
+            activeQuestion: game.activeQuestion,
+            answers: game.answers,
+            loading: game.loading,
+            status: game.status
+          }
         }
-      }
-    };
+      };
+    }
+
+    if (game.type === "icebreaker") {
+      const submittedParticipantIds =
+        game.status === "idle" || game.status === "finished"
+          ? []
+          : session.participants
+            .filter((p) => {
+              const s = game.privateSubmissions[p.id];
+              return Boolean(s && (s.text.trim().length > 0 || s.imageFileId));
+            })
+            .map((p) => p.id);
+      const revealed =
+        game.status === "collecting"
+          ? []
+          : game.revealed.map((r) => ({
+            participantId: r.participantId,
+            text: r.text,
+            imageUrl: r.imageFileId
+              ? `/api/sessions/${session.sessionId}/icebreaker/file/${encodeURIComponent(r.imageFileId)}`
+              : null
+          }));
+      return {
+        ...base,
+        activeGame: "icebreaker",
+        gameState: {
+          type: "icebreaker",
+          state: {
+            questionIndex: game.questionIndex,
+            totalQuestions: game.totalQuestions,
+            activeQuestion: game.activeQuestion,
+            submittedParticipantIds,
+            revealed,
+            usedQuestionIds: game.usedQuestionIds,
+            status: game.status
+          }
+        }
+      };
+    }
+
+    const _never: never = game;
+    throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
   }
 }
 
 export const createSessionService = (): SessionService => {
   const dataDir = process.env.DATA_DIR ?? "./data";
   const store = new FileStore<PersistedState>(`${dataDir}/sessions.json`);
-  return new SessionService(store);
+  return new SessionService(store, createTriviaQuestionLoader(), dataDir);
 };

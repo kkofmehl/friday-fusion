@@ -17,7 +17,7 @@ const bootApp = async (): Promise<{
 }> => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "fusion-ws-"));
   const store = new FileStore<{ sessions: any[] }>(path.join(tempDir, "sessions.json"));
-  const service = new SessionService(store);
+  const service = new SessionService(store, undefined, tempDir);
   await service.load();
   const { app } = await buildApp({ sessionService: service, serveStatic: false });
   await app.listen({ port: 0, host: "127.0.0.1" });

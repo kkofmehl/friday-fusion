@@ -9,7 +9,7 @@ import { FileStore } from "./storage/fileStore";
 const createService = async (): Promise<{ service: SessionService; tempDir: string }> => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "fusion-test-"));
   const store = new FileStore<{ sessions: any[] }>(path.join(tempDir, "sessions.json"));
-  const service = new SessionService(store);
+  const service = new SessionService(store, undefined, tempDir);
   await service.load();
   return { service, tempDir };
 };
@@ -198,7 +198,8 @@ describe("SessionService", () => {
             correctAnswer: "Water"
           }
         ];
-      }
+      },
+      localTempDir
     );
     await service.load();
     service.setStateUpdateListener((sessionId) => {
@@ -688,5 +689,81 @@ describe("SessionService", () => {
       throw new Error("Expected trivia state");
     }
     expect(seen.has(nextState.gameState.state.activeQuestion.id)).toBe(false);
+  });
+
+  it("runs icebreaker collect → reveal → next question without exposing answers before reveal", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.startIcebreakerRound(host.sessionId, host.participantId, 2);
+
+    let state = setup.service.getState(host.sessionId);
+    expect(state.gameState?.type).toBe("icebreaker");
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("collecting");
+    expect(state.gameState.state.submittedParticipantIds).toEqual([]);
+
+    await setup.service.submitIcebreakerAnswer(host.sessionId, host.participantId, {
+      text: "Host secret",
+      imageFileId: null
+    });
+    await setup.service.submitIcebreakerAnswer(host.sessionId, guest.participantId, {
+      text: "Guest secret",
+      imageFileId: null
+    });
+
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.submittedParticipantIds.sort()).toEqual(
+      [host.participantId, guest.participantId].sort()
+    );
+    expect(state.gameState.state.revealed).toEqual([]);
+
+    await setup.service.beginIcebreakerReveals(host.sessionId, host.participantId);
+    await setup.service.revealIcebreakerParticipant(host.sessionId, host.participantId, guest.participantId);
+
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.revealed).toHaveLength(1);
+    expect(state.gameState.state.revealed[0]?.text).toBe("Guest secret");
+
+    await expect(
+      setup.service.revealIcebreakerParticipant(host.sessionId, host.participantId, guest.participantId)
+    ).rejects.toThrow("already revealed");
+
+    await setup.service.nextIcebreakerQuestion(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("collecting");
+    expect(state.gameState.state.questionIndex).toBe(1);
+    expect(state.gameState.state.submittedParticipantIds).toEqual([]);
+  });
+
+  it("rejects icebreaker beginReveals from a non-host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.startIcebreakerRound(host.sessionId, host.participantId, 1);
+    await setup.service.submitIcebreakerAnswer(host.sessionId, host.participantId, { text: "A", imageFileId: null });
+    await setup.service.submitIcebreakerAnswer(host.sessionId, guest.participantId, { text: "B", imageFileId: null });
+
+    await expect(setup.service.beginIcebreakerReveals(host.sessionId, guest.participantId)).rejects.toThrow(
+      "Only host can begin reveals."
+    );
+  });
+
+  it("rejects icebreaker startRound from a non-host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await expect(setup.service.startIcebreakerRound(host.sessionId, guest.participantId, 3)).rejects.toThrow(
+      "Only host can start the icebreaker round."
+    );
   });
 });
