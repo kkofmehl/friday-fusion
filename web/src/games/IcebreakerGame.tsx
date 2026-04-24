@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ClipboardEvent } from "react";
-import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import {
+  ICEBREAKER_PROMPT_MAX_CHARS,
+  type ClientEvent,
+  type SessionState
+} from "../../../shared/contracts";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 
 const clampQuestionCount = (value: number): number => {
@@ -27,10 +31,36 @@ export function IcebreakerGame({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [revealTargetId, setRevealTargetId] = useState("");
   const [submitBusy, setSubmitBusy] = useState(false);
+  const [idleSetup, setIdleSetup] = useState<"mode" | "stock" | "custom">("mode");
+  const [promptsPerPlayerChoice, setPromptsPerPlayerChoice] = useState(2);
+  const [promptDraft, setPromptDraft] = useState<string[]>([]);
 
   const icebreakerGame = session.gameState?.type === "icebreaker" ? session.gameState : null;
   const state = icebreakerGame?.state;
-  const mySubmitted = (state?.submittedParticipantIds ?? []).includes(currentParticipantId);
+  const myAnswerSubmitted =
+    state?.status === "collecting" && state.submittedParticipantIds.includes(currentParticipantId);
+  const myPromptsSubmitted =
+    state?.status === "gatheringPrompts" &&
+    state.submittedPromptParticipantIds.includes(currentParticipantId);
+
+  useEffect(() => {
+    if (state?.status === "idle") {
+      setIdleSetup("mode");
+    }
+  }, [state?.status]);
+
+  const gatheringPromptCount = state?.status === "gatheringPrompts" ? state.promptsPerParticipant : -1;
+  useEffect(() => {
+    if (gatheringPromptCount < 1) {
+      return;
+    }
+    setPromptDraft((prev) => {
+      if (prev.length === gatheringPromptCount) {
+        return prev;
+      }
+      return Array.from({ length: gatheringPromptCount }, (_, i) => prev[i] ?? "");
+    });
+  }, [gatheringPromptCount]);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -53,7 +83,7 @@ export function IcebreakerGame({
 
   const handlePasteImage = useCallback(
     (event: ClipboardEvent) => {
-      if (mySubmitted || state?.status !== "collecting" || submitBusy) {
+      if (myAnswerSubmitted || state?.status !== "collecting" || submitBusy) {
         return;
       }
       const file = imageFileFromClipboard(event);
@@ -63,7 +93,7 @@ export function IcebreakerGame({
       event.preventDefault();
       setPendingFile(file);
     },
-    [mySubmitted, state?.status, submitBusy]
+    [myAnswerSubmitted, state?.status, submitBusy]
   );
 
   useEffect(() => {
@@ -93,6 +123,12 @@ export function IcebreakerGame({
   const submittedCount = state.submittedParticipantIds.length;
   const everyoneSubmitted =
     totalParticipants > 0 && session.participants.every((p) => state.submittedParticipantIds.includes(p.id));
+  const everyonePromptsSubmitted =
+    state.status === "gatheringPrompts" &&
+    totalParticipants > 0 &&
+    session.participants.every((p) => state.submittedPromptParticipantIds.includes(p.id));
+  const promptsSubmittedCount =
+    state.status === "gatheringPrompts" ? state.submittedPromptParticipantIds.length : 0;
 
   const startRound = () => {
     send({
@@ -137,11 +173,13 @@ export function IcebreakerGame({
   const statusLabel =
     state.status === "idle"
       ? "Not started"
-      : state.status === "collecting"
-        ? `Question ${state.questionIndex + 1} of ${state.totalQuestions}`
-        : state.status === "revealing"
-          ? "Revealing"
-          : "Finished";
+      : state.status === "gatheringPrompts"
+        ? "Writing questions"
+        : state.status === "collecting"
+          ? `Question ${state.questionIndex + 1} of ${state.totalQuestions}`
+          : state.status === "revealing"
+            ? "Revealing"
+            : "Finished";
 
   if (state.status === "idle") {
     return (
@@ -151,22 +189,142 @@ export function IcebreakerGame({
           <span className="pill pill-status pill-status-idle">{statusLabel}</span>
         </header>
         {isHost ? (
-          <div className="icebreaker-setup trivia-setup">
-            <label htmlFor="icebreaker-count">How many questions?</label>
-            <input
-              id="icebreaker-count"
-              type="number"
-              min={1}
-              max={500}
-              value={questionCount}
-              onChange={(event) => setQuestionCount(clampQuestionCount(Number(event.target.value)))}
-            />
-            <button type="button" className="btn btn-primary" onClick={startRound}>
-              Start round
-            </button>
+          <div className="icebreaker-setup trivia-setup icebreaker-idle-wizard">
+            {idleSetup === "mode" && (
+              <>
+                <p className="icebreaker-mode-prompt">Would you like to use stock questions or submitted questions?</p>
+                <div className="row icebreaker-mode-row">
+                  <button type="button" className="btn btn-primary" onClick={() => setIdleSetup("stock")}>
+                    Stock questions
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={() => setIdleSetup("custom")}>
+                    Submitted questions
+                  </button>
+                </div>
+              </>
+            )}
+            {idleSetup === "stock" && (
+              <>
+                <button type="button" className="btn btn-ghost icebreaker-back-setup" onClick={() => setIdleSetup("mode")}>
+                  Back
+                </button>
+                <label htmlFor="icebreaker-count">How many questions?</label>
+                <input
+                  id="icebreaker-count"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={questionCount}
+                  onChange={(event) => setQuestionCount(clampQuestionCount(Number(event.target.value)))}
+                />
+                <button type="button" className="btn btn-primary" onClick={startRound}>
+                  Start round
+                </button>
+              </>
+            )}
+            {idleSetup === "custom" && (
+              <>
+                <button type="button" className="btn btn-ghost icebreaker-back-setup" onClick={() => setIdleSetup("mode")}>
+                  Back
+                </button>
+                <label htmlFor="icebreaker-prompts-per">How many questions should each person submit?</label>
+                <select
+                  id="icebreaker-prompts-per"
+                  value={promptsPerPlayerChoice}
+                  onChange={(event) => setPromptsPerPlayerChoice(Number(event.target.value))}
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() =>
+                    send({
+                      type: "icebreaker:beginPromptGathering",
+                      payload: { promptsPerParticipant: promptsPerPlayerChoice }
+                    })
+                  }
+                >
+                  OK
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <p>Waiting for the host to start the round...</p>
+        )}
+      </section>
+    );
+  }
+
+  if (state.status === "gatheringPrompts") {
+    const n = state.promptsPerParticipant;
+    const submitPrompts = () => {
+      const texts = promptDraft.map((s) => s.trim());
+      if (texts.length !== n || texts.some((t) => t.length === 0 || t.length > ICEBREAKER_PROMPT_MAX_CHARS)) {
+        return;
+      }
+      send({ type: "icebreaker:submitPrompts", payload: { texts } });
+    };
+    const promptsValid =
+      promptDraft.length === n &&
+      promptDraft.every(
+        (t) => t.trim().length > 0 && t.trim().length <= ICEBREAKER_PROMPT_MAX_CHARS
+      );
+
+    return (
+      <section className="card game-card-icebreaker">
+        <header className="card-head">
+          <h2>Icebreaker Questions</h2>
+          <span className="pill pill-status pill-status-idle">{statusLabel}</span>
+        </header>
+        <p className="icebreaker-gather-intro">
+          The host asked each person to submit {n} question{n === 1 ? "" : "s"}. Enter yours below (max{" "}
+          {ICEBREAKER_PROMPT_MAX_CHARS} characters each).
+        </p>
+        {!myPromptsSubmitted ? (
+          <div className="icebreaker-prompt-form">
+            {Array.from({ length: n }, (_, i) => (
+              <div key={i} className="icebreaker-prompt-field">
+                <label htmlFor={`icebreaker-prompt-${i}`}>Question {i + 1}</label>
+                <textarea
+                  id={`icebreaker-prompt-${i}`}
+                  className="icebreaker-textarea"
+                  rows={2}
+                  maxLength={ICEBREAKER_PROMPT_MAX_CHARS}
+                  value={promptDraft[i] ?? ""}
+                  onChange={(event) => {
+                    const next = [...promptDraft];
+                    next[i] = event.target.value;
+                    setPromptDraft(next);
+                  }}
+                />
+              </div>
+            ))}
+            <button type="button" className="btn btn-primary" disabled={!promptsValid} onClick={submitPrompts}>
+              Submit
+            </button>
+          </div>
+        ) : (
+          <p className="icebreaker-submitted-self">You have submitted your questions.</p>
+        )}
+        <p className="icebreaker-progress">
+          {everyonePromptsSubmitted
+            ? isHost
+              ? "Everyone has submitted their questions. Start the round when you are ready."
+              : "Everyone has submitted. Waiting for the host…"
+            : `${promptsSubmittedCount}/${totalParticipants} submitted`}
+        </p>
+        {isHost && everyonePromptsSubmitted && (
+          <div className="row">
+            <button type="button" className="btn btn-primary" onClick={() => send({ type: "icebreaker:startCustomRound", payload: {} })}>
+              Start round
+            </button>
+          </div>
         )}
       </section>
     );
@@ -202,7 +360,7 @@ export function IcebreakerGame({
         )}
         <p className="icebreaker-finished-note">That is the end of this round.</p>
         {isHost && (
-          <button type="button" className="btn btn-primary" onClick={startRound}>
+          <button type="button" className="btn btn-primary" onClick={() => send({ type: "icebreaker:returnToSetup", payload: {} })}>
             Play again
           </button>
         )}
@@ -223,7 +381,7 @@ export function IcebreakerGame({
 
           {state.status === "collecting" && (
             <div className="icebreaker-answer-form" onPaste={handlePasteImage}>
-              {!mySubmitted ? (
+              {!myAnswerSubmitted ? (
                 <>
                   <label htmlFor="icebreaker-answer">Your answer</label>
                   <textarea

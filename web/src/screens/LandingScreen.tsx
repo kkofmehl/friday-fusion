@@ -1,12 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
-import type { SessionState } from "../../../shared/contracts";
-
-type ActiveSession = {
-  sessionId: string;
-  sessionName: string;
-  joinCode: string;
-  participantCount: number;
-};
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import type { ActiveSessionSummary, SessionState } from "../../../shared/contracts";
+import { useActiveSessionsLobby } from "../hooks/useActiveSessionsLobby";
 
 export type LandingSuccess = {
   sessionId: string;
@@ -30,15 +24,19 @@ export function LandingScreen({
   const [sessionName, setSessionName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveSessionSummary[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const applyActiveSessions = useCallback((sessions: ActiveSessionSummary[]) => {
+    setActiveSessions(sessions);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     fetch(`${apiBase}/api/active-sessions`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load active sessions.");
-        return (await response.json()) as ActiveSession[];
+        return (await response.json()) as ActiveSessionSummary[];
       })
       .then((sessions) => {
         if (!cancelled) setActiveSessions(sessions);
@@ -50,6 +48,8 @@ export function LandingScreen({
       cancelled = true;
     };
   }, [apiBase]);
+
+  useActiveSessionsLobby(apiBase, applyActiveSessions);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

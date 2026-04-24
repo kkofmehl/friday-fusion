@@ -43,7 +43,7 @@ describe("IcebreakerGame", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends startRound when host starts from idle", () => {
+  it("sends startRound when host starts from idle with stock questions", () => {
     const send = vi.fn();
     render(
       <IcebreakerGame
@@ -54,9 +54,87 @@ describe("IcebreakerGame", () => {
         apiBase="http://localhost:3000"
       />
     );
+    fireEvent.click(screen.getByRole("button", { name: "Stock questions" }));
     fireEvent.change(screen.getByLabelText("How many questions?"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Start round" }));
     expect(send).toHaveBeenCalledWith({ type: "icebreaker:startRound", payload: { totalQuestions: 3 } });
+  });
+
+  it("sends beginPromptGathering when host chooses submitted questions and OK", () => {
+    const send = vi.fn();
+    render(
+      <IcebreakerGame
+        session={baseSession()}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Submitted questions" }));
+    fireEvent.change(screen.getByLabelText("How many questions should each person submit?"), {
+      target: { value: "4" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(send).toHaveBeenCalledWith({
+      type: "icebreaker:beginPromptGathering",
+      payload: { promptsPerParticipant: 4 }
+    });
+  });
+
+  it("sends submitPrompts from gathering state with filled fields", () => {
+    const send = vi.fn();
+    const session: SessionState = {
+      ...baseSession(),
+      gameState: {
+        type: "icebreaker",
+        state: {
+          questionIndex: 0,
+          totalQuestions: 1,
+          activeQuestion: null,
+          submittedParticipantIds: [],
+          revealed: [],
+          usedQuestionIds: [],
+          status: "gatheringPrompts",
+          promptsPerParticipant: 2,
+          submittedPromptParticipantIds: []
+        }
+      }
+    };
+    render(
+      <IcebreakerGame session={session} currentParticipantId="p1" isHost send={send} apiBase="http://localhost:3000" />
+    );
+    fireEvent.change(screen.getByLabelText("Question 1"), { target: { value: "First?" } });
+    fireEvent.change(screen.getByLabelText("Question 2"), { target: { value: "Second?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(send).toHaveBeenCalledWith({
+      type: "icebreaker:submitPrompts",
+      payload: { texts: ["First?", "Second?"] }
+    });
+  });
+
+  it("sends returnToSetup when host plays again from finished", () => {
+    const send = vi.fn();
+    const session: SessionState = {
+      ...baseSession(),
+      gameState: {
+        type: "icebreaker",
+        state: {
+          questionIndex: 1,
+          totalQuestions: 1,
+          activeQuestion: null,
+          submittedParticipantIds: [],
+          revealed: [{ participantId: "p1", text: "Done", imageUrl: null }],
+          usedQuestionIds: ["ib-1"],
+          status: "finished"
+        }
+      }
+    };
+    render(
+      <IcebreakerGame session={session} currentParticipantId="p1" isHost send={send} apiBase="http://localhost:3000" />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Play again" }));
+    expect(send).toHaveBeenCalledWith({ type: "icebreaker:returnToSetup", payload: {} });
   });
 
   it("sends submit with text when no image", () => {

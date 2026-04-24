@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import {
+  ICEBREAKER_PROMPT_MAX_CHARS,
   type GameStartOptions,
   type GameType,
   type HangmanActivity,
@@ -82,7 +83,10 @@ type IcebreakerGameInternal = {
   privateSubmissions: Record<string, { text: string; imageFileId: string | null }>;
   revealed: IcebreakerRevealedInternal[];
   usedQuestionIds: string[];
-  status: "idle" | "collecting" | "revealing" | "finished";
+  status: "idle" | "gatheringPrompts" | "collecting" | "revealing" | "finished";
+  /** Set while status is `gatheringPrompts`. */
+  promptsPerParticipant: number | null;
+  promptDraftsByParticipant: Record<string, string[]>;
 };
 
 type GuessTheImageResultInternal = {
@@ -266,6 +270,7 @@ const ensureGameShape = (
     };
   }
   if (game.type === "icebreaker") {
+    const raw = game as IcebreakerGameInternal & { promptsPerParticipant?: number | null };
     return {
       ...game,
       id: game.id ?? nanoid(6),
@@ -275,7 +280,9 @@ const ensureGameShape = (
       activeQuestion: game.activeQuestion ?? null,
       privateSubmissions: game.privateSubmissions ?? {},
       revealed: game.revealed ?? [],
-      usedQuestionIds: game.usedQuestionIds ?? []
+      usedQuestionIds: game.usedQuestionIds ?? [],
+      promptsPerParticipant: raw.promptsPerParticipant ?? null,
+      promptDraftsByParticipant: raw.promptDraftsByParticipant ?? {}
     };
   }
   if (game.type === "guessTheImage") {
@@ -676,7 +683,9 @@ export class SessionService {
         privateSubmissions: {},
         revealed: [],
         usedQuestionIds: previousIcebreaker?.usedQuestionIds ?? [],
-        status: "idle"
+        status: "idle",
+        promptsPerParticipant: null,
+        promptDraftsByParticipant: {}
       };
     } else if (game === "guessTheImage") {
       const hostId = session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id;
@@ -806,6 +815,7 @@ export class SessionService {
     if (activeIcebreaker?.type === "icebreaker") {
       delete activeIcebreaker.privateSubmissions[participantId];
       activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
+      delete activeIcebreaker.promptDraftsByParticipant[participantId];
     }
 
     const activeGuess = session.games[0];
@@ -1343,6 +1353,9 @@ export class SessionService {
     if (game?.type !== "icebreaker") {
       throw new Error("Icebreaker game is not active.");
     }
+    if (game.status !== "idle") {
+      throw new Error("Icebreaker stock round can only start from the lobby.");
+    }
     const count = Math.max(1, Math.min(500, Math.floor(totalQuestions)));
     const used = new Set(game.usedQuestionIds);
     const picked = pickIcebreakerQuestions(used, count);
@@ -1355,6 +1368,127 @@ export class SessionService {
     game.privateSubmissions = {};
     game.revealed = [];
     game.status = picked.length > 0 ? "collecting" : "finished";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async beginIcebreakerPromptGathering(
+    sessionId: string,
+    hostParticipantId: string,
+    promptsPerParticipant: number
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can begin custom question gathering.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker") {
+      throw new Error("Icebreaker game is not active.");
+    }
+    if (game.status !== "idle") {
+      throw new Error("Custom questions can only be gathered from the lobby.");
+    }
+    const n = Math.max(1, Math.min(5, Math.floor(promptsPerParticipant)));
+    game.status = "gatheringPrompts";
+    game.promptsPerParticipant = n;
+    game.promptDraftsByParticipant = {};
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async submitIcebreakerPrompts(sessionId: string, participantId: string, texts: string[]): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "gatheringPrompts") {
+      throw new Error("Icebreaker is not accepting custom questions.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const expected = game.promptsPerParticipant;
+    if (typeof expected !== "number" || expected < 1) {
+      throw new Error("Invalid prompt gathering configuration.");
+    }
+    if (texts.length !== expected) {
+      throw new Error(`Submit exactly ${expected} question(s).`);
+    }
+    const trimmed: string[] = [];
+    for (const raw of texts) {
+      const t = raw.trim();
+      if (t.length === 0) {
+        throw new Error("Each question must be non-empty.");
+      }
+      if (t.length > ICEBREAKER_PROMPT_MAX_CHARS) {
+        throw new Error(`Each question must be at most ${ICEBREAKER_PROMPT_MAX_CHARS} characters.`);
+      }
+      trimmed.push(t);
+    }
+    game.promptDraftsByParticipant[participantId] = trimmed;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async startIcebreakerCustomRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can start the icebreaker round.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "gatheringPrompts") {
+      throw new Error("Icebreaker is not ready to start from submitted questions.");
+    }
+    const expected = game.promptsPerParticipant;
+    if (typeof expected !== "number") {
+      throw new Error("Invalid prompt gathering configuration.");
+    }
+    const pool: Array<{ id: string; text: string }> = [];
+    for (const p of session.participants) {
+      const draft = game.promptDraftsByParticipant[p.id];
+      if (!draft || draft.length !== expected) {
+        throw new Error("Not all participants have submitted their questions.");
+      }
+      for (const text of draft) {
+        pool.push({ id: `custom-${nanoid(12)}`, text });
+      }
+    }
+    if (pool.length === 0) {
+      throw new Error("No questions to play.");
+    }
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+    }
+    game.questions = pool;
+    game.totalQuestions = pool.length;
+    game.questionIndex = 0;
+    game.activeQuestion = pool[0] ?? null;
+    game.privateSubmissions = {};
+    game.revealed = [];
+    game.promptDraftsByParticipant = {};
+    game.promptsPerParticipant = null;
+    game.status = "collecting";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async resetIcebreakerToIdle(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can return to setup.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "icebreaker" || game.status !== "finished") {
+      throw new Error("Icebreaker can only return to setup after the round has finished.");
+    }
+    game.questions = [];
+    game.totalQuestions = 1;
+    game.questionIndex = 0;
+    game.activeQuestion = null;
+    game.privateSubmissions = {};
+    game.revealed = [];
+    game.promptDraftsByParticipant = {};
+    game.promptsPerParticipant = null;
+    game.status = "idle";
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -1994,7 +2128,7 @@ export class SessionService {
 
     if (game.type === "icebreaker") {
       const submittedParticipantIds =
-        game.status === "idle" || game.status === "finished"
+        game.status === "idle" || game.status === "finished" || game.status === "gatheringPrompts"
           ? []
           : session.participants
             .filter((p) => {
@@ -2012,18 +2146,62 @@ export class SessionService {
               ? `/api/sessions/${session.sessionId}/icebreaker/file/${encodeURIComponent(r.imageFileId)}`
               : null
           }));
+      const scaffold = {
+        questionIndex: game.questionIndex,
+        totalQuestions: game.totalQuestions,
+        activeQuestion: game.activeQuestion,
+        submittedParticipantIds,
+        revealed,
+        usedQuestionIds: game.usedQuestionIds
+      };
+      if (game.status === "idle") {
+        return {
+          ...base,
+          activeGame: "icebreaker",
+          gameState: {
+            type: "icebreaker",
+            state: {
+              ...scaffold,
+              status: "idle" as const
+            }
+          }
+        };
+      }
+      if (game.status === "gatheringPrompts") {
+        const ppp = game.promptsPerParticipant ?? 1;
+        const submittedPromptParticipantIds = session.participants
+          .filter((p) => {
+            const d = game.promptDraftsByParticipant[p.id];
+            return (
+              d
+              && d.length === ppp
+              && d.every(
+                (t) => t.trim().length > 0 && t.trim().length <= ICEBREAKER_PROMPT_MAX_CHARS
+              )
+            );
+          })
+          .map((p) => p.id);
+        return {
+          ...base,
+          activeGame: "icebreaker",
+          gameState: {
+            type: "icebreaker",
+            state: {
+              ...scaffold,
+              status: "gatheringPrompts" as const,
+              promptsPerParticipant: ppp,
+              submittedPromptParticipantIds
+            }
+          }
+        };
+      }
       return {
         ...base,
         activeGame: "icebreaker",
         gameState: {
           type: "icebreaker",
           state: {
-            questionIndex: game.questionIndex,
-            totalQuestions: game.totalQuestions,
-            activeQuestion: game.activeQuestion,
-            submittedParticipantIds,
-            revealed,
-            usedQuestionIds: game.usedQuestionIds,
+            ...scaffold,
             status: game.status
           }
         }

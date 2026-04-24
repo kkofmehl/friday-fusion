@@ -34,6 +34,9 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
   }
   if (session.gameState.type === "icebreaker") {
     const st = session.gameState.state;
+    if (st.status === "gatheringPrompts" && !st.submittedPromptParticipantIds.includes(participantId)) {
+      return { label: "Submitting", tone: "submitting" };
+    }
     if (st.status === "collecting" && !st.submittedParticipantIds.includes(participantId)) {
       return { label: "Submitting", tone: "submitting" };
     }

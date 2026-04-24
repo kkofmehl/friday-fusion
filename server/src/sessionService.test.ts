@@ -767,6 +767,114 @@ describe("SessionService", () => {
     );
   });
 
+  it("runs icebreaker custom prompt gathering then startCustomRound", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.beginIcebreakerPromptGathering(host.sessionId, host.participantId, 2);
+
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("gatheringPrompts");
+    if (state.gameState.state.status !== "gatheringPrompts") throw new Error("expected gatheringPrompts");
+    expect(state.gameState.state.promptsPerParticipant).toBe(2);
+    expect(state.gameState.state.submittedPromptParticipantIds).toEqual([]);
+
+    await setup.service.submitIcebreakerPrompts(host.sessionId, host.participantId, ["H1?", "H2?"]);
+    await setup.service.submitIcebreakerPrompts(host.sessionId, guest.participantId, ["G1?", "G2?"]);
+
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker" || state.gameState.state.status !== "gatheringPrompts") {
+      throw new Error("expected gatheringPrompts");
+    }
+    expect(state.gameState.state.submittedPromptParticipantIds.sort()).toEqual(
+      [host.participantId, guest.participantId].sort()
+    );
+
+    await setup.service.startIcebreakerCustomRound(host.sessionId, host.participantId);
+
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("collecting");
+    expect(state.gameState.state.totalQuestions).toBe(4);
+    const active = state.gameState.state.activeQuestion?.text;
+    expect(["H1?", "H2?", "G1?", "G2?"]).toContain(active);
+
+    await expect(setup.service.startIcebreakerCustomRound(host.sessionId, host.participantId)).rejects.toThrow();
+    await expect(setup.service.startIcebreakerRound(host.sessionId, host.participantId, 3)).rejects.toThrow("lobby");
+  });
+
+  it("rejects startIcebreakerCustomRound until every participant submitted prompts", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.beginIcebreakerPromptGathering(host.sessionId, host.participantId, 1);
+    await setup.service.submitIcebreakerPrompts(host.sessionId, host.participantId, ["Only host"]);
+    await expect(setup.service.startIcebreakerCustomRound(host.sessionId, host.participantId)).rejects.toThrow(
+      "Not all participants have submitted"
+    );
+    await setup.service.submitIcebreakerPrompts(host.sessionId, guest.participantId, ["Guest q"]);
+    await setup.service.startIcebreakerCustomRound(host.sessionId, host.participantId);
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("collecting");
+    expect(state.gameState.state.totalQuestions).toBe(2);
+  });
+
+  it("rejects submitIcebreakerPrompts with wrong count or empty line", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.beginIcebreakerPromptGathering(host.sessionId, host.participantId, 2);
+    await expect(setup.service.submitIcebreakerPrompts(host.sessionId, host.participantId, ["a"])).rejects.toThrow(
+      "Submit exactly 2"
+    );
+    await expect(
+      setup.service.submitIcebreakerPrompts(host.sessionId, host.participantId, ["a", "  "])
+    ).rejects.toThrow("non-empty");
+  });
+
+  it("returns icebreaker to idle from finished for host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.startIcebreakerRound(host.sessionId, host.participantId, 1);
+    await setup.service.submitIcebreakerAnswer(host.sessionId, host.participantId, { text: "a", imageFileId: null });
+    await setup.service.submitIcebreakerAnswer(host.sessionId, guest.participantId, { text: "b", imageFileId: null });
+    await setup.service.beginIcebreakerReveals(host.sessionId, host.participantId);
+    await setup.service.revealIcebreakerParticipant(host.sessionId, host.participantId, host.participantId);
+    await setup.service.revealIcebreakerParticipant(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.nextIcebreakerQuestion(host.sessionId, host.participantId);
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("finished");
+
+    await setup.service.resetIcebreakerToIdle(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "icebreaker") throw new Error("expected icebreaker");
+    expect(state.gameState.state.status).toBe("idle");
+  });
+
+  it("rejects resetIcebreakerToIdle when round is not finished", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "icebreaker");
+    await setup.service.startIcebreakerRound(host.sessionId, host.participantId, 1);
+    await expect(setup.service.resetIcebreakerToIdle(host.sessionId, host.participantId)).rejects.toThrow(
+      "only return to setup after the round has finished"
+    );
+  });
+
   it("shuffles guess-the-image options and scores fastest correct 3 / other correct 1", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

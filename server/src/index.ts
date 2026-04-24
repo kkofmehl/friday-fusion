@@ -41,6 +41,10 @@ type ConnectionContext = {
   lastSeenAt: number;
 };
 
+type LobbyConnectionMeta = {
+  lastSeenAt: number;
+};
+
 export type BuildAppOptions = {
   sessionService?: SessionService;
   serveStatic?: boolean;
@@ -69,6 +73,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
   }
 
   const connections = new Map<string, ConnectionContext[]>();
+  const lobbyConnections = new Map<WebSocket, LobbyConnectionMeta>();
   const lastConnectedAt = new Map<string, number>();
   const loadTriviaCategories = createTriviaCategoryLoader();
 
@@ -112,6 +117,29 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     broadcastState(sessionId);
   });
 
+  const broadcastActiveSessions = (): void => {
+    if (lobbyConnections.size === 0) {
+      return;
+    }
+    const payload: ServerEvent = {
+      type: "activeSessions:updated",
+      payload: { sessions: sessionService.listActiveSessions() }
+    };
+    const parsed = serverEventSchema.safeParse(payload);
+    if (!parsed.success) {
+      app.log.error({ err: parsed.error }, "broadcastActiveSessions: payload failed schema");
+      return;
+    }
+    const wire = JSON.stringify(parsed.data);
+    for (const lobbySocket of lobbyConnections.keys()) {
+      try {
+        lobbySocket.send(wire);
+      } catch (error) {
+        app.log.warn({ err: error }, "broadcastActiveSessions: send failed");
+      }
+    }
+  };
+
   const sendError = (socket: WebSocket, message: string): void => {
     sendEvent(socket, { type: "error", payload: { message } });
   };
@@ -151,6 +179,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       }
     });
     connections.delete(sessionId);
+    broadcastActiveSessions();
   };
 
   app.get("/api/health", async () => ({ ok: true }));
@@ -159,6 +188,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     const body = createSessionRequestSchema.parse(request.body);
     const created = await sessionService.createSession(body.displayName.trim(), body.sessionName?.trim());
     const state = sessionService.getState(created.sessionId);
+    broadcastActiveSessions();
     return reply.send({
       ...created,
       state
@@ -173,6 +203,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     const joined = await sessionService.joinSession(body.joinCode, body.displayName.trim());
     const state = sessionService.getState(joined.sessionId);
     broadcastState(joined.sessionId);
+    broadcastActiveSessions();
     return reply.send({
       ...joined,
       state
@@ -357,7 +388,32 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       const event = parseResult.data;
 
       try {
+        if (event.type === "lobby:subscribe") {
+          if (context) {
+            sendError(socket, "Leave your current session before using the lobby feed.");
+            return;
+          }
+          lobbyConnections.set(socket, { lastSeenAt: Date.now() });
+          const snapshot: ServerEvent = {
+            type: "activeSessions:updated",
+            payload: { sessions: sessionService.listActiveSessions() }
+          };
+          const snapshotParsed = serverEventSchema.safeParse(snapshot);
+          if (!snapshotParsed.success) {
+            app.log.error({ err: snapshotParsed.error }, "lobby:subscribe: payload failed schema");
+            sendError(socket, "Unable to load session list.");
+            return;
+          }
+          try {
+            socket.send(JSON.stringify(snapshotParsed.data));
+          } catch (error) {
+            app.log.warn({ err: error }, "lobby:subscribe: send failed");
+          }
+          return;
+        }
+
         if (event.type === "session:hello") {
+          lobbyConnections.delete(socket);
           const { sessionId, participantId } = event.payload;
           try {
             sessionService.getState(sessionId);
@@ -387,6 +443,10 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           if (context) {
             context.lastSeenAt = Date.now();
           }
+          const lobbyMeta = lobbyConnections.get(socket);
+          if (lobbyMeta) {
+            lobbyMeta.lastSeenAt = Date.now();
+          }
           sendEvent(socket, { type: "pong", payload: { ts: event.payload.ts } });
           return;
         }
@@ -412,6 +472,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             broadcastSessionClosed(sessionId, "empty");
           } else {
             broadcastState(sessionId);
+            broadcastActiveSessions();
           }
           return;
         }
@@ -509,6 +570,22 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.totalQuestions
           );
+        } else if (event.type === "icebreaker:beginPromptGathering") {
+          await sessionService.beginIcebreakerPromptGathering(
+            context.sessionId,
+            context.participantId,
+            event.payload.promptsPerParticipant
+          );
+        } else if (event.type === "icebreaker:submitPrompts") {
+          await sessionService.submitIcebreakerPrompts(
+            context.sessionId,
+            context.participantId,
+            event.payload.texts
+          );
+        } else if (event.type === "icebreaker:startCustomRound") {
+          await sessionService.startIcebreakerCustomRound(context.sessionId, context.participantId);
+        } else if (event.type === "icebreaker:returnToSetup") {
+          await sessionService.resetIcebreakerToIdle(context.sessionId, context.participantId);
         } else if (event.type === "icebreaker:submit") {
           await sessionService.submitIcebreakerAnswer(context.sessionId, context.participantId, event.payload);
         } else if (event.type === "icebreaker:beginReveals") {
@@ -575,6 +652,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     });
 
     socket.on("close", () => {
+      lobbyConnections.delete(socket);
       if (!context) {
         return;
       }
@@ -624,6 +702,17 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       }
     }
 
+    for (const [lobbySocket, meta] of [...lobbyConnections.entries()]) {
+      if (now - meta.lastSeenAt > DEAD_CONNECTION_MS) {
+        try {
+          lobbySocket.terminate();
+        } catch {
+          // ignore
+        }
+        lobbyConnections.delete(lobbySocket);
+      }
+    }
+
     for (const [sessionId, disconnectedAt] of lastConnectedAt.entries()) {
       if (connections.get(sessionId)?.length) {
         continue;
@@ -637,6 +726,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
         .then((existed) => {
           if (existed) {
             app.log.info({ sessionId }, "closing abandoned session");
+            broadcastActiveSessions();
           }
         })
         .catch((error) => {

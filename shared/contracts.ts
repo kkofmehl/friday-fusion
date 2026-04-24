@@ -127,15 +127,37 @@ export const icebreakerRevealedEntrySchema = z.object({
 });
 export type IcebreakerRevealedEntry = z.infer<typeof icebreakerRevealedEntrySchema>;
 
-export const icebreakerStateSchema = z.object({
+/** Max length per line when players submit custom icebreaker questions. */
+export const ICEBREAKER_PROMPT_MAX_CHARS = 400;
+
+const icebreakerScaffoldSchema = z.object({
   questionIndex: z.number().int().nonnegative(),
   totalQuestions: z.number().int().positive(),
   activeQuestion: icebreakerQuestionSchema.nullable(),
   submittedParticipantIds: z.array(z.string()),
   revealed: z.array(icebreakerRevealedEntrySchema),
-  usedQuestionIds: z.array(z.string()),
-  status: z.enum(["idle", "collecting", "revealing", "finished"])
+  usedQuestionIds: z.array(z.string())
 });
+
+export const icebreakerStateSchema = z.discriminatedUnion("status", [
+  icebreakerScaffoldSchema.extend({
+    status: z.literal("idle")
+  }),
+  icebreakerScaffoldSchema.extend({
+    status: z.literal("gatheringPrompts"),
+    promptsPerParticipant: z.number().int().min(1).max(5),
+    submittedPromptParticipantIds: z.array(z.string())
+  }),
+  icebreakerScaffoldSchema.extend({
+    status: z.literal("collecting")
+  }),
+  icebreakerScaffoldSchema.extend({
+    status: z.literal("revealing")
+  }),
+  icebreakerScaffoldSchema.extend({
+    status: z.literal("finished")
+  })
+]);
 export type IcebreakerState = z.infer<typeof icebreakerStateSchema>;
 
 export const icebreakerRoundConfigSchema = z.object({
@@ -245,11 +267,24 @@ export const sessionStateSchema = z.object({
 });
 export type SessionState = z.infer<typeof sessionStateSchema>;
 
+/** Row returned by `GET /api/active-sessions` and `activeSessions:updated` websocket payloads. */
+export const activeSessionSummarySchema = z.object({
+  sessionId: z.string(),
+  sessionName: z.string(),
+  joinCode: z.string(),
+  participantCount: z.number().int()
+});
+export type ActiveSessionSummary = z.infer<typeof activeSessionSummarySchema>;
+
 export const serverEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:state"), payload: sessionStateSchema }),
   z.object({
     type: z.literal("session:closed"),
     payload: z.object({ sessionId: z.string(), reason: z.enum(["host_closed", "empty"]) })
+  }),
+  z.object({
+    type: z.literal("activeSessions:updated"),
+    payload: z.object({ sessions: z.array(activeSessionSummarySchema) })
   }),
   z.object({ type: z.literal("error"), payload: z.object({ message: z.string() }) }),
   z.object({ type: z.literal("game:message"), payload: z.object({ message: z.string() }) }),
@@ -269,6 +304,7 @@ export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
 export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:hello"), payload: z.object({ sessionId: z.string(), participantId: z.string() }) }),
+  z.object({ type: z.literal("lobby:subscribe"), payload: z.object({}) }),
   z.object({ type: z.literal("session:leave"), payload: z.object({}) }),
   z.object({ type: z.literal("session:close"), payload: z.object({}) }),
   z.object({ type: z.literal("game:end"), payload: z.object({}) }),
@@ -302,6 +338,16 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("trivia:closeQuestion"), payload: z.object({}) }),
   z.object({ type: z.literal("trivia:nextQuestion"), payload: z.object({}) }),
   z.object({ type: z.literal("icebreaker:startRound"), payload: icebreakerRoundConfigSchema }),
+  z.object({
+    type: z.literal("icebreaker:beginPromptGathering"),
+    payload: z.object({ promptsPerParticipant: z.number().int().min(1).max(5) })
+  }),
+  z.object({
+    type: z.literal("icebreaker:submitPrompts"),
+    payload: z.object({ texts: z.array(z.string()) })
+  }),
+  z.object({ type: z.literal("icebreaker:startCustomRound"), payload: z.object({}) }),
+  z.object({ type: z.literal("icebreaker:returnToSetup"), payload: z.object({}) }),
   z.object({
     type: z.literal("icebreaker:submit"),
     payload: z.object({

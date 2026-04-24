@@ -1659,6 +1659,37 @@ label {
   max-width: 22rem;
 }
 
+.icebreaker-idle-wizard .icebreaker-mode-prompt {
+  margin: 0;
+}
+
+.icebreaker-mode-row {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.icebreaker-back-setup {
+  align-self: flex-start;
+}
+
+.icebreaker-gather-intro {
+  margin: 0 0 1rem;
+  color: var(--slate-600);
+}
+
+.icebreaker-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
+.icebreaker-prompt-field label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
 .icebreaker-question {
   margin-top: 0.5rem;
 }

@@ -157,4 +157,35 @@ describe("WebSocket integration", () => {
     expect(typeof payload[0]?.id).toBe("number");
     expect(typeof payload[0]?.name).toBe("string");
   });
+
+  it("pushes activeSessions:updated to lobby subscribers when a new session is created", async () => {
+    if (!context) throw new Error("no context");
+    const lobby = new WebSocket(`ws://127.0.0.1:${context.port}/ws`);
+    await new Promise<void>((resolve, reject) => {
+      lobby.once("open", () => resolve());
+      lobby.once("error", reject);
+    });
+    lobby.send(JSON.stringify({ type: "lobby:subscribe", payload: {} }));
+    const first = await nextServerEvent(lobby, (event) => event.type === "activeSessions:updated");
+    expect(first.payload.sessions.some((s: { sessionId: string }) => s.sessionId === context!.sessionId)).toBe(
+      true
+    );
+
+    const createResponse = await context.app.inject({
+      method: "POST",
+      url: "/api/sessions",
+      payload: { displayName: "Other", sessionName: "Second Room" }
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const created = createResponse.json() as { sessionId: string };
+
+    const second = await nextServerEvent(
+      lobby,
+      (event) =>
+        event.type === "activeSessions:updated" &&
+        event.payload.sessions.some((s: { sessionId: string }) => s.sessionId === created.sessionId)
+    );
+    expect(second.payload.sessions.length).toBeGreaterThanOrEqual(2);
+    lobby.close();
+  });
 });
