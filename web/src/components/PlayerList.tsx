@@ -1,0 +1,73 @@
+import type { Participant, SessionState } from "../../../shared/contracts";
+
+type TurnTag = { label: string; tone: "creator" | "guesser" | "presenter" | "voter" | "answerer" | "submitting" };
+
+const resolveTurnTag = (session: SessionState, participantId: string): TurnTag | null => {
+  if (!session.gameState) return null;
+  if (session.gameState.type === "hangman") {
+    const state = session.gameState.state;
+    if (state.puzzleCreatorId === participantId) {
+      return { label: "Puzzle creator", tone: "creator" };
+    }
+    if (state.status === "inProgress") {
+      return { label: "Guessing", tone: "guesser" };
+    }
+    return null;
+  }
+  if (session.gameState.type === "twoTruthsLie") {
+    const state = session.gameState.state;
+    if (state.status === "collecting") {
+      return state.submissions[participantId] ? null : { label: "Submitting", tone: "submitting" };
+    }
+    if (state.currentPresenterId === participantId) {
+      return { label: "Presenter", tone: "presenter" };
+    }
+    if (state.status === "voting") {
+      return { label: "Voting", tone: "voter" };
+    }
+    return null;
+  }
+  if (session.gameState.type === "trivia") {
+    if (session.gameState.state.status === "questionOpen") {
+      return { label: "Answering", tone: "answerer" };
+    }
+  }
+  return null;
+};
+
+export function PlayerList({
+  session,
+  currentParticipantId
+}: {
+  session: SessionState;
+  currentParticipantId: string;
+}): JSX.Element {
+  const ranked = [...session.participants].sort((a, b) => b.score - a.score);
+  const topScore = ranked[0]?.score ?? 0;
+
+  return (
+    <ul className="players-list">
+      {ranked.map((participant: Participant) => {
+        const turnTag = resolveTurnTag(session, participant.id);
+        const isYou = participant.id === currentParticipantId;
+        const isLeader = topScore > 0 && participant.score === topScore;
+        return (
+          <li key={participant.id} className={`player-row${isYou ? " player-row-you" : ""}`}>
+            <div className="player-identity">
+              <span className="player-name">
+                {participant.displayName}
+                {isYou && <span className="player-you-tag">you</span>}
+              </span>
+              <div className="player-tags">
+                {participant.isHost && <span className="tag tag-host">Host</span>}
+                {turnTag && <span className={`tag tag-turn tag-${turnTag.tone}`}>{turnTag.label}</span>}
+                {isLeader && <span className="tag tag-leader">Leader</span>}
+              </div>
+            </div>
+            <span className="player-score">{participant.score}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

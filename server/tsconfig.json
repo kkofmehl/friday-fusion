@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": ["src/**/*.ts", "../shared/contracts.ts"]
+}

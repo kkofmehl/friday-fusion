@@ -1,0 +1,26 @@
+{
+  "name": "friday-fusion",
+  "version": "0.1.0",
+  "description": "Friday Fusion realtime team activities app",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w server && npm run build -w web",
+    "test": "npm run test -w server && npm run test -w web",
+    "lint": "npm run lint -w server && npm run lint -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "keywords": [
+    "realtime",
+    "games",
+    "team-building"
+  ],
+  "author": "",
+  "license": "MIT"
+}
