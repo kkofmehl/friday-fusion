@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../shared/contracts";
 import { SessionService } from "./sessionService";
 import { FileStore } from "./storage/fileStore";
@@ -765,5 +765,378 @@ describe("SessionService", () => {
     await expect(setup.service.startIcebreakerRound(host.sessionId, guest.participantId, 3)).rejects.toThrow(
       "Only host can start the icebreaker round."
     );
+  });
+
+  it("shuffles guess-the-image options and scores fastest correct 3 / other correct 1", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const fast = await setup.service.joinSession(host.joinCode, "Fast");
+    const slow = await setup.service.joinSession(host.joinCode, "Slow");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "x.png",
+      descriptions: ["Right", "W1", "W2", "W3"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+
+    const playing = setup.service.getState(host.sessionId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing guessTheImage");
+    }
+    const sorted = [...playing.gameState.state.options].sort();
+    expect(sorted).toEqual(["Right", "W1", "W2", "W3"].sort());
+    const correctSlot = playing.gameState.state.options.indexOf("Right");
+
+    t = 1_000_050;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, fast.participantId, correctSlot);
+    t = 1_000_200;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, slow.participantId, correctSlot);
+    spy.mockRestore();
+
+    const final = setup.service.getState(host.sessionId);
+    if (final.gameState?.type !== "guessTheImage" || final.gameState.state.status !== "finished") {
+      throw new Error("expected finished guessTheImage");
+    }
+    expect(final.gameState.state.imageUrl).toBeNull();
+    expect(final.gameState.state.correctDisplayIndex).toBe(correctSlot);
+    expect(final.participants.find((p) => p.id === fast.participantId)?.score).toBe(3);
+    expect(final.participants.find((p) => p.id === slow.participantId)?.score).toBe(1);
+    expect(final.participants.find((p) => p.id === host.participantId)?.score).toBe(0);
+  });
+
+  it("rejects setup player lock for guess the image", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    await expect(setup.service.lockGuessTheImageAnswer(host.sessionId, host.participantId, 0)).rejects.toThrow(
+      "The setup player does not submit guesses."
+    );
+  });
+
+  it("allows host to guess when the guest ran setup", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", {
+      guessImageSetupParticipantId: guest.participantId
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, guest.participantId);
+    const playing = setup.service.getState(host.sessionId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const idx = playing.gameState.state.options.indexOf("A");
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, host.participantId, idx);
+    const after = setup.service.getState(host.sessionId);
+    if (after.gameState?.type !== "guessTheImage") throw new Error("expected guessTheImage");
+    expect(after.gameState.state.status).toBe("finished");
+  });
+
+  it("host can reassign setup player before configure", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.setGuessTheImageSetupParticipant(host.sessionId, host.participantId, guest.participantId);
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "guessTheImage") throw new Error("expected guessTheImage");
+    expect(state.gameState.state.status).toBe("setup");
+    expect(state.gameState.state.setupParticipantId).toBe(guest.participantId);
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await expect(
+      setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+        imageFileId: "b.png",
+        descriptions: ["X", "Y", "Z", "W"],
+        correctIndex: 0,
+        revealDurationMs: 60_000
+      })
+    ).rejects.toThrow("Only the designated setup player");
+    await setup.service.startGuessTheImageRound(host.sessionId, guest.participantId);
+    state = setup.service.getState(host.sessionId);
+    expect(state.gameState?.type).toBe("guessTheImage");
+    if (state.gameState?.type === "guessTheImage") {
+      expect(state.gameState.state.status).toBe("playing");
+    }
+  });
+
+  it("rejects start round from non-setup player", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", {
+      guessImageSetupParticipantId: guest.participantId
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await expect(setup.service.startGuessTheImageRound(host.sessionId, host.participantId)).rejects.toThrow(
+      "Only the designated setup player can start this round."
+    );
+    await setup.service.startGuessTheImageRound(host.sessionId, guest.participantId);
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "guessTheImage") throw new Error("expected guessTheImage");
+    expect(state.gameState.state.status).toBe("playing");
+  });
+
+  it("rejects setGuessTheImageSetupParticipant from a non-host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await expect(
+      setup.service.setGuessTheImageSetupParticipant(host.sessionId, guest.participantId, guest.participantId)
+    ).rejects.toThrow("Only the host can choose who sets up the round.");
+  });
+
+  it("returns guess the image to setup after finished and clears configured state", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "G");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["Right", "W1", "W2", "W3"],
+      correctIndex: 0,
+      revealDurationMs: 30_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const idx = playing.gameState.state.options.indexOf("Right");
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, guest.participantId, idx);
+    spy.mockRestore();
+
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "guessTheImage") throw new Error("expected guessTheImage");
+    expect(state.gameState.state.status).toBe("finished");
+
+    await setup.service.returnGuessTheImageToSetup(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "guessTheImage") throw new Error("expected guessTheImage");
+    if (state.gameState.state.status !== "setup") throw new Error("expected setup");
+    expect(state.gameState.state.setupParticipantId).toBe(host.participantId);
+    expect(state.gameState.state.configured).toBe(false);
+    expect(state.gameState.state.imageUrl).toBeNull();
+    expect(state.gameState.state.revealDurationMs).toBe(30_000);
+  });
+
+  it("rejects return guess the image to setup while a round is playing", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "G");
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    await expect(setup.service.returnGuessTheImageToSetup(host.sessionId, host.participantId)).rejects.toThrow(
+      "Return to setup is only available after a round ends."
+    );
+  });
+
+  it("everyone mode: host cannot pick presenter until all have saved", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h.png",
+      descriptions: ["H1", "H2", "H3", "H4"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await expect(
+      setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, guest.participantId)
+    ).rejects.toThrow("Wait until every participant has saved their setup.");
+  });
+
+  it("everyone mode: each saves, host picks presenter, host starts round", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h.png",
+      descriptions: ["H1", "H2", "H3", "H4"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "g.png",
+      descriptions: ["G1", "G2", "G3", "G4"],
+      correctIndex: 1,
+      revealDurationMs: 50_000
+    });
+    await setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId, host.participantId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    expect(playing.gameState.state.setupParticipantId).toBe(guest.participantId);
+    const opts = playing.gameState.state.options;
+    expect(opts.sort()).toEqual(["G1", "G2", "G3", "G4"].sort());
+  });
+
+  it("everyone mode: after a round, begin-next keeps other setups; host can start another without full re-save", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h.png",
+      descriptions: ["H1", "H2", "H3", "H4"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "g.png",
+      descriptions: ["G1", "G2", "G3", "G4"],
+      correctIndex: 0,
+      revealDurationMs: 50_000
+    });
+    await setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId, host.participantId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const correctIdx = playing.gameState.state.options.indexOf("G1");
+    t += 1000;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, host.participantId, correctIdx);
+    spy.mockRestore();
+
+    const fin = setup.service.getState(host.sessionId, host.participantId);
+    if (fin.gameState?.type !== "guessTheImage" || fin.gameState.state.status !== "finished") {
+      throw new Error("expected finished");
+    }
+    expect(fin.gameState.state.setupMode).toBe("everyone");
+
+    await setup.service.beginGuessTheImageNextRoundSelection(host.sessionId, host.participantId);
+    const hostAfter = setup.service.getState(host.sessionId, host.participantId);
+    if (hostAfter.gameState?.type !== "guessTheImage" || hostAfter.gameState.state.status !== "setup") {
+      throw new Error("expected setup");
+    }
+    expect(hostAfter.gameState.state.everyoneBetweenRounds).toBe(true);
+    expect(hostAfter.gameState.state.everyoneAllConfigured).toBe(false);
+    expect(hostAfter.gameState.state.everyoneMySetup?.configured).toBe(true);
+
+    const guestAfter = setup.service.getState(host.sessionId, guest.participantId);
+    if (guestAfter.gameState?.type !== "guessTheImage" || guestAfter.gameState.state.status !== "setup") {
+      throw new Error("guest expected setup");
+    }
+    expect(guestAfter.gameState.state.everyoneMySetup?.configured).toBe(false);
+
+    await setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, host.participantId);
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const play2 = setup.service.getState(host.sessionId, host.participantId);
+    if (play2.gameState?.type !== "guessTheImage" || play2.gameState.state.status !== "playing") {
+      throw new Error("expected playing round 2");
+    }
+    expect(play2.gameState.state.setupParticipantId).toBe(host.participantId);
+  });
+
+  it("rejects begin next round selection before a round has finished", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await expect(
+      setup.service.beginGuessTheImageNextRoundSelection(host.sessionId, host.participantId)
+    ).rejects.toThrow("Choose the next image only after a round has finished.");
+  });
+
+  it("rejects begin next round selection from a non-host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h.png",
+      descriptions: ["H1", "H2", "H3", "H4"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "g.png",
+      descriptions: ["G1", "G2", "G3", "G4"],
+      correctIndex: 0,
+      revealDurationMs: 50_000
+    });
+    await setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId, guest.participantId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const idx = playing.gameState.state.options.indexOf("G1");
+    t += 500;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, host.participantId, idx);
+    spy.mockRestore();
+
+    await expect(
+      setup.service.beginGuessTheImageNextRoundSelection(host.sessionId, guest.participantId)
+    ).rejects.toThrow("Only the host can continue to the next image.");
+  });
+
+  it("rejects setGuessTheImageSetupParticipant in everyone mode", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await expect(
+      setup.service.setGuessTheImageSetupParticipant(host.sessionId, host.participantId, guest.participantId)
+    ).rejects.toThrow("single-preparer mode");
   });
 });

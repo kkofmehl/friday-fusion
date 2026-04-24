@@ -4,6 +4,7 @@ import { HangmanGame } from "../games/HangmanGame";
 import { IcebreakerGame } from "../games/IcebreakerGame";
 import { TwoTruthsGame } from "../games/TwoTruthsGame";
 import { TriviaGame } from "../games/TriviaGame";
+import { GuessTheImageGame } from "../games/GuessTheImageGame";
 
 export function GameScreen({
   session,
@@ -64,6 +65,17 @@ export function GameScreen({
     if (session.gameState?.type === "icebreaker") {
       return (
         <IcebreakerGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "guessTheImage") {
+      return (
+        <GuessTheImageGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

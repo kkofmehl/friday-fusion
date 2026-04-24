@@ -1,28 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import type { ClipboardEvent } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
-
-const ALLOWED_PASTE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-
-const imageFileFromClipboard = (event: React.ClipboardEvent): File | null => {
-  const items = event.clipboardData?.items;
-  if (!items?.length) {
-    return null;
-  }
-  for (let i = 0; i < items.length; i += 1) {
-    const item = items[i];
-    if (!item || item.kind !== "file") {
-      continue;
-    }
-    if (!item.type || !ALLOWED_PASTE_IMAGE_TYPES.has(item.type)) {
-      continue;
-    }
-    const file = item.getAsFile();
-    if (file) {
-      return file;
-    }
-  }
-  return null;
-};
+import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 
 const clampQuestionCount = (value: number): number => {
   if (!Number.isFinite(value)) return 1;
@@ -73,7 +52,7 @@ export function IcebreakerGame({
   }, [state?.questionIndex, state?.status]);
 
   const handlePasteImage = useCallback(
-    (event: React.ClipboardEvent) => {
+    (event: ClipboardEvent) => {
       if (mySubmitted || state?.status !== "collecting" || submitBusy) {
         return;
       }

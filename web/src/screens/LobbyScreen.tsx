@@ -7,6 +7,8 @@ import type {
 } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
 
+const GUESS_IMAGE_LOBBY_EVERYONE = "everyone";
+
 type GameOption = {
   id: GameType;
   title: string;
@@ -38,6 +40,12 @@ const GAMES: GameOption[] = [
     title: "Icebreaker Questions",
     description: "Fun prompts—share answers (and optional photos), then reveal together.",
     emoji: "I"
+  },
+  {
+    id: "guessTheImage",
+    title: "Guess the image",
+    description: "Image fades in; pick the right caption as fast as you can.",
+    emoji: "G"
   }
 ];
 
@@ -54,6 +62,10 @@ export function LobbyScreen({
 }): JSX.Element {
   const [hangmanMode, setHangmanMode] = useState<HangmanMode>("team");
   const [hangmanCreatorId, setHangmanCreatorId] = useState(currentParticipantId);
+  const [guessImagePreparer, setGuessImagePreparer] = useState(() => {
+    const host = session.participants.find((p) => p.isHost);
+    return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
+  });
 
   useEffect(() => {
     if (session.participants.some((participant) => participant.id === hangmanCreatorId)) {
@@ -62,9 +74,35 @@ export function LobbyScreen({
     setHangmanCreatorId(session.participants[0]?.id ?? currentParticipantId);
   }, [currentParticipantId, hangmanCreatorId, session.participants]);
 
+  useEffect(() => {
+    if (guessImagePreparer === GUESS_IMAGE_LOBBY_EVERYONE) {
+      return;
+    }
+    if (session.participants.some((p) => p.id === guessImagePreparer)) {
+      return;
+    }
+    setGuessImagePreparer(
+      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+    );
+  }, [currentParticipantId, guessImagePreparer, session.participants]);
+
   const startGame = (game: GameType) => {
     if (game === "hangman") {
       send({ type: "game:start", payload: { game, options: { hangmanMode, hangmanCreatorId } } });
+      return;
+    }
+    if (game === "guessTheImage") {
+      if (guessImagePreparer === GUESS_IMAGE_LOBBY_EVERYONE) {
+        send({
+          type: "game:start",
+          payload: { game, options: { guessImageSetupMode: "everyone" } }
+        });
+      } else {
+        send({
+          type: "game:start",
+          payload: { game, options: { guessImageSetupParticipantId: guessImagePreparer } }
+        });
+      }
       return;
     }
     send({ type: "game:start", payload: { game } });
@@ -129,6 +167,29 @@ export function LobbyScreen({
                     {session.participants.map((participant) => (
                       <option key={participant.id} value={participant.id}>
                         {participant.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </fieldset>
+              )}
+              {game.id === "guessTheImage" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">First-round setup</legend>
+                  <label className="mode-picker-label" htmlFor="guess-image-lobby-setup-select">
+                    Who prepares the image?
+                  </label>
+                  <select
+                    id="guess-image-lobby-setup-select"
+                    value={guessImagePreparer}
+                    onChange={(event) => setGuessImagePreparer(event.target.value)}
+                  >
+                    <option value={GUESS_IMAGE_LOBBY_EVERYONE}>
+                      Everyone — each prepares; host picks whose image to guess
+                    </option>
+                    {session.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                        {participant.isHost ? " (host)" : ""}
                       </option>
                     ))}
                   </select>

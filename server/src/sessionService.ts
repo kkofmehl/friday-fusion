@@ -10,6 +10,10 @@ import {
 } from "../../shared/contracts";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
+import {
+  deleteGuessTheImageStoredFile,
+  purgeAllGuessTheImageSessionUploads
+} from "./guessTheImageUploads";
 import { FileStore } from "./storage/fileStore";
 import {
   createTriviaQuestionLoader,
@@ -81,7 +85,52 @@ type IcebreakerGameInternal = {
   status: "idle" | "collecting" | "revealing" | "finished";
 };
 
-type GameInternal = HangmanGameInternal | TwoTruthsGameInternal | TriviaGameInternal | IcebreakerGameInternal;
+type GuessTheImageResultInternal = {
+  participantId: string;
+  choiceDisplayIndex: number | null;
+  correct: boolean;
+  elapsedMs: number | null;
+  pointsAwarded: number;
+};
+
+type GuessImageParticipantSlotInternal = {
+  imageFileId: string | null;
+  canonicalDescriptions: [string, string, string, string];
+  canonicalCorrectIndex: number;
+  revealDurationMs: number;
+  configured: boolean;
+};
+
+type GuessTheImageGameInternal = {
+  id: string;
+  type: "guessTheImage";
+  status: "setup" | "playing" | "finished";
+  /** `single`: only setupParticipantId may prepare. `everyone`: each slot in participantSetups; host picks selectedRoundParticipantId to play. */
+  setupMode: "single" | "everyone";
+  /** Participant who may upload/configure in single mode; during play, who prepared (sits out guessing). */
+  setupParticipantId: string;
+  /** Everyone mode setup: whose saved setup becomes this round (set by host). */
+  selectedRoundParticipantId: string | null;
+  participantSetups: Record<string, GuessImageParticipantSlotInternal>;
+  imageFileId: string | null;
+  canonicalDescriptions: [string, string, string, string];
+  canonicalCorrectIndex: number;
+  revealDurationMs: number;
+  configured: boolean;
+  displayPerm: [number, number, number, number] | null;
+  roundStartedAt: number | null;
+  locks: Record<string, { choiceIndex: number; lockedAt: number }>;
+  results: GuessTheImageResultInternal[] | null;
+  /** Everyone mode: after a finished round, host uses begin-next-selection instead of full reset. */
+  everyoneBetweenRounds: boolean;
+};
+
+type GameInternal =
+  | HangmanGameInternal
+  | TwoTruthsGameInternal
+  | TriviaGameInternal
+  | IcebreakerGameInternal
+  | GuessTheImageGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -229,8 +278,93 @@ const ensureGameShape = (
       usedQuestionIds: game.usedQuestionIds ?? []
     };
   }
+  if (game.type === "guessTheImage") {
+    const desc = game.canonicalDescriptions ?? ["", "", "", ""];
+    const setupMode: "single" | "everyone" = game.setupMode === "everyone" ? "everyone" : "single";
+    const rawSlots = (game as GuessTheImageGameInternal).participantSetups;
+    const participantSetups: Record<string, GuessImageParticipantSlotInternal> =
+      rawSlots && typeof rawSlots === "object"
+        ? Object.fromEntries(
+            Object.entries(rawSlots).map(([id, slot]) => {
+              const s = slot as GuessImageParticipantSlotInternal | undefined;
+              const d0 = s?.canonicalDescriptions ?? ["", "", "", ""];
+              return [
+                id,
+                {
+                  imageFileId: s?.imageFileId ?? null,
+                  canonicalDescriptions: [d0[0] ?? "", d0[1] ?? "", d0[2] ?? "", d0[3] ?? ""] as [
+                    string,
+                    string,
+                    string,
+                    string
+                  ],
+                  canonicalCorrectIndex: s?.canonicalCorrectIndex ?? 0,
+                  revealDurationMs: s?.revealDurationMs ?? 60_000,
+                  configured: s?.configured ?? false
+                }
+              ];
+            })
+          )
+        : {};
+    return {
+      ...game,
+      id: game.id ?? nanoid(6),
+      setupMode,
+      selectedRoundParticipantId:
+        (game as GuessTheImageGameInternal).selectedRoundParticipantId === undefined
+          ? null
+          : (game as GuessTheImageGameInternal).selectedRoundParticipantId,
+      participantSetups,
+      canonicalDescriptions: [desc[0] ?? "", desc[1] ?? "", desc[2] ?? "", desc[3] ?? ""] as [
+        string,
+        string,
+        string,
+        string
+      ],
+      canonicalCorrectIndex: game.canonicalCorrectIndex ?? 0,
+      revealDurationMs: game.revealDurationMs ?? 60_000,
+      configured: game.configured ?? false,
+      displayPerm: game.displayPerm ?? null,
+      roundStartedAt: game.roundStartedAt ?? null,
+      locks: game.locks ?? {},
+      results: game.results ?? null,
+      setupParticipantId: game.setupParticipantId ?? "",
+      everyoneBetweenRounds: (game as GuessTheImageGameInternal).everyoneBetweenRounds === true
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
+
+const shuffleDisplayPerm = (): [number, number, number, number] => {
+  const indices = [0, 1, 2, 3];
+  for (let i = indices.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = indices[i]!;
+    indices[i] = indices[j]!;
+    indices[j] = tmp;
+  }
+  return [indices[0]!, indices[1]!, indices[2]!, indices[3]!];
+};
+
+const freshGuessImageParticipantSlot = (): GuessImageParticipantSlotInternal => ({
+  imageFileId: null,
+  canonicalDescriptions: ["", "", "", ""],
+  canonicalCorrectIndex: 0,
+  revealDurationMs: 60_000,
+  configured: false
+});
+
+const buildGuessImageParticipantSetups = (
+  session: SessionInternal
+): Record<string, GuessImageParticipantSlotInternal> =>
+  Object.fromEntries(session.participants.map((p) => [p.id, freshGuessImageParticipantSlot()]));
+
+const guessImageEveryoneAllConfigured = (
+  session: SessionInternal,
+  game: GuessTheImageGameInternal
+): boolean =>
+  session.participants.length > 0 &&
+  session.participants.every((p) => Boolean(game.participantSetups[p.id]?.configured));
 
 export class SessionService {
   private sessions = new Map<string, SessionInternal>();
@@ -238,6 +372,7 @@ export class SessionService {
   private readonly triviaQuestionLoader: TriviaQuestionLoader;
   private readonly dataDirectory: string;
   private onSessionUpdated?: (sessionId: string) => void;
+  private readonly guessImageResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -263,6 +398,29 @@ export class SessionService {
       throw new Error("Participant is not in this session.");
     }
     return { questionIndex: game.questionIndex };
+  }
+
+  public assertGuessTheImageUploadAllowed(sessionId: string, participantId: string): void {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage") {
+      throw new Error("Guess the image is not active.");
+    }
+    if (game.status === "playing") {
+      throw new Error("Cannot replace the image while a round is in progress.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    if (game.setupMode === "everyone") {
+      if (game.status !== "setup") {
+        throw new Error("Cannot upload outside setup.");
+      }
+      return;
+    }
+    if (participantId !== game.setupParticipantId) {
+      throw new Error("Only the designated setup player can upload for this round.");
+    }
   }
 
   public setStateUpdateListener(listener: ((sessionId: string) => void) | undefined): void {
@@ -298,6 +456,28 @@ export class SessionService {
         return [session.sessionId, migrated] as const;
       })
     );
+    let repairedGuessImageSetup = false;
+    for (const s of this.sessions.values()) {
+      const g = s.games[0];
+      if (g?.type === "guessTheImage") {
+        const hostId = s.participants.find((p) => p.isHost)?.id ?? s.participants[0]?.id;
+        if (hostId && (!g.setupParticipantId || !s.participants.some((p) => p.id === g.setupParticipantId))) {
+          g.setupParticipantId = hostId;
+          repairedGuessImageSetup = true;
+        }
+        if (g.setupMode === "everyone" && g.status === "setup") {
+          for (const p of s.participants) {
+            if (!g.participantSetups[p.id]) {
+              g.participantSetups[p.id] = freshGuessImageParticipantSlot();
+              repairedGuessImageSetup = true;
+            }
+          }
+        }
+      }
+    }
+    if (repairedGuessImageSetup) {
+      await this.persist();
+    }
   }
 
   private async persist(): Promise<void> {
@@ -368,6 +548,15 @@ export class SessionService {
       });
       session.updatedAt = Date.now();
 
+      const guessJoin = session.games[0];
+      if (
+        guessJoin?.type === "guessTheImage"
+        && guessJoin.status === "setup"
+        && guessJoin.setupMode === "everyone"
+      ) {
+        guessJoin.participantSetups[participantId] = freshGuessImageParticipantSlot();
+      }
+
       // If a turns-mode hangman round is already in progress but has no
       // assigned guesser (because the host set the word before anyone joined),
       // the first guesser to arrive takes the first turn. Without this the
@@ -399,9 +588,9 @@ export class SessionService {
       }));
   }
 
-  public getState(sessionId: string): SessionState {
+  public getState(sessionId: string, viewerParticipantId?: string): SessionState {
     const session = this.getSessionOrThrow(sessionId);
-    return this.toPublicState(session);
+    return this.toPublicState(session, viewerParticipantId);
   }
 
   public isHost(sessionId: string, participantId: string): boolean {
@@ -415,6 +604,11 @@ export class SessionService {
     options: GameStartOptions = {}
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    const previousGame = session.games[0];
+    if (previousGame?.type === "guessTheImage") {
+      this.clearGuessImageTimer(sessionId);
+      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
     let next: GameInternal;
@@ -470,7 +664,7 @@ export class SessionService {
         loading: null,
         status: "idle"
       };
-    } else {
+    } else if (game === "icebreaker") {
       const previousIcebreaker = session.games.find((entry): entry is IcebreakerGameInternal => entry.type === "icebreaker");
       next = {
         id: nanoid(6),
@@ -484,6 +678,36 @@ export class SessionService {
         usedQuestionIds: previousIcebreaker?.usedQuestionIds ?? [],
         status: "idle"
       };
+    } else if (game === "guessTheImage") {
+      const hostId = session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id;
+      if (!hostId) {
+        throw new Error("No participants in session.");
+      }
+      const requestedSetup = options.guessImageSetupParticipantId;
+      const setupParticipantId =
+        requestedSetup && session.participants.some((p) => p.id === requestedSetup) ? requestedSetup : hostId;
+      const setupMode = options.guessImageSetupMode === "everyone" ? "everyone" : "single";
+      next = {
+        id: nanoid(6),
+        type: "guessTheImage",
+        status: "setup",
+        setupMode,
+        setupParticipantId,
+        selectedRoundParticipantId: null,
+        participantSetups: setupMode === "everyone" ? buildGuessImageParticipantSetups(session) : {},
+        imageFileId: null,
+        canonicalDescriptions: ["", "", "", ""],
+        canonicalCorrectIndex: 0,
+        revealDurationMs: 60_000,
+        configured: false,
+        displayPerm: null,
+        roundStartedAt: null,
+        locks: {},
+        results: null,
+        everyoneBetweenRounds: false
+      };
+    } else {
+      throw new Error(`Unknown game type: ${String(game)}`);
     }
     session.games = [next];
     await this.persist();
@@ -499,6 +723,10 @@ export class SessionService {
     if (active?.type === "icebreaker") {
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     }
+    if (active?.type === "guessTheImage") {
+      this.clearGuessImageTimer(sessionId);
+      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -510,7 +738,9 @@ export class SessionService {
     if (!isHost) {
       throw new Error("Only the host can close the session.");
     }
+    this.clearGuessImageTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
   }
@@ -519,7 +749,9 @@ export class SessionService {
     if (!this.sessions.has(sessionId)) {
       return false;
     }
+    this.clearGuessImageTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
     return true;
@@ -542,7 +774,9 @@ export class SessionService {
     session.updatedAt = Date.now();
 
     if (session.participants.length === 0) {
+      this.clearGuessImageTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
       this.sessions.delete(sessionId);
       await this.persist();
       return { sessionDeleted: true };
@@ -572,6 +806,19 @@ export class SessionService {
     if (activeIcebreaker?.type === "icebreaker") {
       delete activeIcebreaker.privateSubmissions[participantId];
       activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
+    }
+
+    const activeGuess = session.games[0];
+    if (activeGuess?.type === "guessTheImage") {
+      delete activeGuess.locks[participantId];
+      delete activeGuess.participantSetups[participantId];
+      if (activeGuess.selectedRoundParticipantId === participantId) {
+        activeGuess.selectedRoundParticipantId = null;
+      }
+      if (activeGuess.setupMode === "single" && activeGuess.setupParticipantId === participantId) {
+        activeGuess.setupParticipantId =
+          session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id;
+      }
     }
 
     await this.persist();
@@ -1218,7 +1465,464 @@ export class SessionService {
     await this.persist();
   }
 
-  private toPublicState(session: SessionInternal): SessionState {
+  private clearGuessImageTimer(sessionId: string): void {
+    const existing = this.guessImageResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.guessImageResolveTimers.delete(sessionId);
+    }
+  }
+
+  private guessTheImageOptionsFrom(game: GuessTheImageGameInternal): [string, string, string, string] {
+    const perm = game.displayPerm;
+    const d = game.canonicalDescriptions;
+    if (!perm) {
+      return d;
+    }
+    return [d[perm[0]]!, d[perm[1]]!, d[perm[2]]!, d[perm[3]]!];
+  }
+
+  private guessTheImageCorrectDisplayIndex(game: GuessTheImageGameInternal): number {
+    const perm = game.displayPerm!;
+    return perm.findIndex((canonicalSlot) => canonicalSlot === game.canonicalCorrectIndex);
+  }
+
+  public async configureGuessTheImage(
+    sessionId: string,
+    participantId: string,
+    payload: {
+      imageFileId: string;
+      descriptions: [string, string, string, string];
+      correctIndex: number;
+      revealDurationMs: number;
+    }
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage") {
+      throw new Error("Guess the image is not active.");
+    }
+    if (game.status !== "setup") {
+      throw new Error("Configure is only available during setup.");
+    }
+    if (game.setupMode === "everyone") {
+      const slot = game.participantSetups[participantId];
+      if (!slot) {
+        throw new Error("You are not in this session.");
+      }
+      this.clearGuessImageTimer(sessionId);
+      slot.imageFileId = payload.imageFileId.trim();
+      slot.canonicalDescriptions = payload.descriptions.map((line) => line.trim()) as [
+        string,
+        string,
+        string,
+        string
+      ];
+      slot.canonicalCorrectIndex = payload.correctIndex;
+      slot.revealDurationMs = payload.revealDurationMs;
+      slot.configured = true;
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    if (participantId !== game.setupParticipantId) {
+      throw new Error("Only the designated setup player can configure this round.");
+    }
+    this.clearGuessImageTimer(sessionId);
+    game.status = "setup";
+    game.imageFileId = payload.imageFileId.trim();
+    game.canonicalDescriptions = payload.descriptions.map((line) => line.trim()) as [
+      string,
+      string,
+      string,
+      string
+    ];
+    game.canonicalCorrectIndex = payload.correctIndex;
+    game.revealDurationMs = payload.revealDurationMs;
+    game.configured = true;
+    game.displayPerm = null;
+    game.roundStartedAt = null;
+    game.locks = {};
+    game.results = null;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async startGuessTheImageRound(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage") {
+      throw new Error("Guess the image is not active.");
+    }
+    if (game.status === "playing") {
+      throw new Error("A round is already in progress.");
+    }
+
+    if (game.setupMode === "everyone") {
+      if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+        throw new Error("Only the host can start the round when everyone prepares setups.");
+      }
+      if (!game.everyoneBetweenRounds && !guessImageEveryoneAllConfigured(session, game)) {
+        throw new Error("Wait until every participant has saved their setup.");
+      }
+      const presenterId = game.selectedRoundParticipantId;
+      if (!presenterId || !session.participants.some((p) => p.id === presenterId)) {
+        throw new Error("The host must choose whose image to use before starting.");
+      }
+      const slot = game.participantSetups[presenterId];
+      if (!slot?.configured || !slot.imageFileId) {
+        throw new Error("The selected participant does not have a completed setup.");
+      }
+      this.clearGuessImageTimer(sessionId);
+      game.imageFileId = slot.imageFileId;
+      game.canonicalDescriptions = [...slot.canonicalDescriptions];
+      game.canonicalCorrectIndex = slot.canonicalCorrectIndex;
+      game.revealDurationMs = slot.revealDurationMs;
+      game.setupParticipantId = presenterId;
+      game.configured = true;
+      game.displayPerm = shuffleDisplayPerm();
+      game.roundStartedAt = Date.now();
+      game.locks = {};
+      game.results = null;
+      game.status = "playing";
+      game.everyoneBetweenRounds = false;
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.scheduleGuessImageDeadline(sessionId);
+      return;
+    }
+
+    if (participantId !== game.setupParticipantId) {
+      throw new Error("Only the designated setup player can start this round.");
+    }
+    if (!game.configured || !game.imageFileId) {
+      throw new Error("Configure the image and descriptions before starting.");
+    }
+    this.clearGuessImageTimer(sessionId);
+    game.displayPerm = shuffleDisplayPerm();
+    game.roundStartedAt = Date.now();
+    game.locks = {};
+    game.results = null;
+    game.status = "playing";
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleGuessImageDeadline(sessionId);
+  }
+
+  public async returnGuessTheImageToSetup(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can return to setup.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage") {
+      throw new Error("Guess the image is not active.");
+    }
+    if (game.status !== "finished") {
+      throw new Error("Return to setup is only available after a round ends.");
+    }
+    this.clearGuessImageTimer(sessionId);
+    await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    const revealMs = game.revealDurationMs;
+    game.status = "setup";
+    game.imageFileId = null;
+    game.canonicalDescriptions = ["", "", "", ""];
+    game.canonicalCorrectIndex = 0;
+    game.revealDurationMs = revealMs;
+    game.configured = false;
+    game.displayPerm = null;
+    game.roundStartedAt = null;
+    game.locks = {};
+    game.results = null;
+    game.setupParticipantId =
+      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id;
+    if (game.setupMode === "everyone") {
+      game.participantSetups = buildGuessImageParticipantSetups(session);
+      game.selectedRoundParticipantId = null;
+      game.everyoneBetweenRounds = false;
+    } else {
+      game.participantSetups = {};
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async beginGuessTheImageNextRoundSelection(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can continue to the next image.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage") {
+      throw new Error("Guess the image is not active.");
+    }
+    if (game.setupMode !== "everyone") {
+      throw new Error("That action is only for everyone-preparer mode.");
+    }
+    if (game.status !== "finished") {
+      throw new Error("Choose the next image only after a round has finished.");
+    }
+    this.clearGuessImageTimer(sessionId);
+    game.status = "setup";
+    game.everyoneBetweenRounds = true;
+    game.imageFileId = null;
+    game.displayPerm = null;
+    game.roundStartedAt = null;
+    game.locks = {};
+    game.results = null;
+    game.configured = false;
+    game.canonicalDescriptions = ["", "", "", ""];
+    game.canonicalCorrectIndex = 0;
+    game.selectedRoundParticipantId = null;
+    game.setupParticipantId =
+      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async setGuessTheImageSetupParticipant(
+    sessionId: string,
+    hostParticipantId: string,
+    targetParticipantId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can choose who sets up the round.");
+    }
+    if (!session.participants.some((p) => p.id === targetParticipantId)) {
+      throw new Error("That participant is not in this session.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage" || game.status !== "setup") {
+      throw new Error("Setup player can only be changed while the game is in setup.");
+    }
+    if (game.setupMode === "everyone") {
+      throw new Error("That action is only for single-preparer mode.");
+    }
+    if (game.setupParticipantId === targetParticipantId) {
+      return;
+    }
+    if (game.configured) {
+      this.clearGuessImageTimer(sessionId);
+      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+      game.imageFileId = null;
+      game.canonicalDescriptions = ["", "", "", ""];
+      game.canonicalCorrectIndex = 0;
+      game.configured = false;
+      game.displayPerm = null;
+      game.roundStartedAt = null;
+      game.locks = {};
+      game.results = null;
+    }
+    game.setupParticipantId = targetParticipantId;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async setGuessTheImageRoundPresenter(
+    sessionId: string,
+    hostParticipantId: string,
+    targetParticipantId: string | null
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can choose whose image to use.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage" || game.status !== "setup" || game.setupMode !== "everyone") {
+      throw new Error("Round image selection is only available during everyone setup.");
+    }
+    if (!game.everyoneBetweenRounds && !guessImageEveryoneAllConfigured(session, game)) {
+      throw new Error("Wait until every participant has saved their setup.");
+    }
+    if (targetParticipantId === null) {
+      game.selectedRoundParticipantId = null;
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    if (!session.participants.some((p) => p.id === targetParticipantId)) {
+      throw new Error("That participant is not in this session.");
+    }
+    const slot = game.participantSetups[targetParticipantId];
+    if (!slot?.configured) {
+      throw new Error("That participant has not saved a setup yet.");
+    }
+    game.selectedRoundParticipantId = targetParticipantId;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  private scheduleGuessImageDeadline(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (game?.type !== "guessTheImage" || game.status !== "playing" || game.roundStartedAt === null) {
+      return;
+    }
+    this.clearGuessImageTimer(sessionId);
+    const deadline = game.roundStartedAt + game.revealDurationMs;
+    const delay = Math.max(0, deadline - Date.now());
+    const timer = setTimeout(() => {
+      void this.finalizeGuessTheImageRound(sessionId).catch(() => {});
+    }, delay);
+    this.guessImageResolveTimers.set(sessionId, timer);
+  }
+
+  private guessTheImageGuesserIds(session: SessionInternal, game: GuessTheImageGameInternal): string[] {
+    return session.participants.filter((p) => p.id !== game.setupParticipantId).map((p) => p.id);
+  }
+
+  private allGuessTheImageGuessersLocked(session: SessionInternal, game: GuessTheImageGameInternal): boolean {
+    const guesserIds = this.guessTheImageGuesserIds(session, game);
+    if (guesserIds.length === 0) {
+      return true;
+    }
+    return guesserIds.every((id) => typeof game.locks[id] !== "undefined");
+  }
+
+  public async lockGuessTheImageAnswer(
+    sessionId: string,
+    participantId: string,
+    choiceIndex: number
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant) {
+      throw new Error("Participant is not in this session.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage" || game.status !== "playing") {
+      throw new Error("No Guess the image round is open.");
+    }
+    if (participantId === game.setupParticipantId) {
+      throw new Error("The setup player does not submit guesses.");
+    }
+    if (game.locks[participantId]) {
+      throw new Error("You already submitted.");
+    }
+    const now = Date.now();
+    const deadline = (game.roundStartedAt ?? 0) + game.revealDurationMs;
+    if (now > deadline) {
+      throw new Error("Time is up for this round.");
+    }
+    if (choiceIndex < 0 || choiceIndex > 3) {
+      throw new Error("Invalid choice.");
+    }
+    game.locks[participantId] = { choiceIndex, lockedAt: now };
+    session.updatedAt = Date.now();
+    await this.persist();
+    if (this.allGuessTheImageGuessersLocked(session, game)) {
+      await this.finalizeGuessTheImageRound(sessionId);
+    }
+  }
+
+  private async finalizeGuessTheImageRound(sessionId: string): Promise<void> {
+    this.clearGuessImageTimer(sessionId);
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessTheImage" || game.status !== "playing") {
+      return;
+    }
+    if (game.roundStartedAt === null || !game.displayPerm) {
+      return;
+    }
+    const roundStartedAt = game.roundStartedAt;
+    const deadline = roundStartedAt + game.revealDurationMs;
+    const perm = game.displayPerm;
+    const guesserIds = this.guessTheImageGuesserIds(session, game);
+    const correctDisplayIndex = this.guessTheImageCorrectDisplayIndex(game);
+
+    type Row = {
+      participantId: string;
+      choiceDisplayIndex: number | null;
+      correct: boolean;
+      elapsedMs: number | null;
+      lockedAt: number | null;
+    };
+
+    const rows: Row[] = guesserIds.map((id) => {
+      const lock = game.locks[id];
+      if (!lock) {
+        return {
+          participantId: id,
+          choiceDisplayIndex: null,
+          correct: false,
+          elapsedMs: null,
+          lockedAt: null
+        };
+      }
+      const inTime = lock.lockedAt <= deadline;
+      const canonicalChosen = perm[lock.choiceIndex];
+      const correct = inTime && canonicalChosen === game.canonicalCorrectIndex;
+      const elapsedMs = inTime ? lock.lockedAt - roundStartedAt : null;
+      return {
+        participantId: id,
+        choiceDisplayIndex: lock.choiceIndex,
+        correct,
+        elapsedMs,
+        lockedAt: lock.lockedAt
+      };
+    });
+
+    const correctInTime = rows.filter((r) => r.correct && r.elapsedMs !== null);
+    correctInTime.sort((a, b) => {
+      const da = a.elapsedMs ?? 0;
+      const db = b.elapsedMs ?? 0;
+      if (da !== db) {
+        return da - db;
+      }
+      return (a.lockedAt ?? 0) - (b.lockedAt ?? 0);
+    });
+    const fastestId = correctInTime[0]?.participantId ?? null;
+
+    const results: GuessTheImageResultInternal[] = rows.map((r) => {
+      let pointsAwarded = 0;
+      if (r.correct) {
+        pointsAwarded = r.participantId === fastestId ? 3 : 1;
+        const p = session.participants.find((x) => x.id === r.participantId);
+        if (p) {
+          p.score += pointsAwarded;
+        }
+      }
+      return {
+        participantId: r.participantId,
+        choiceDisplayIndex: r.choiceDisplayIndex,
+        correct: r.correct,
+        elapsedMs: r.elapsedMs,
+        pointsAwarded
+      };
+    });
+
+    const everyone = game.setupMode === "everyone";
+    const playedFileId = game.imageFileId;
+    const presenterId = game.setupParticipantId;
+
+    game.status = "finished";
+    game.results = results;
+    game.imageFileId = null;
+
+    if (everyone) {
+      game.selectedRoundParticipantId = null;
+      if (playedFileId) {
+        await deleteGuessTheImageStoredFile(this.dataDirectory, sessionId, playedFileId);
+      }
+      if (presenterId && game.participantSetups[presenterId]) {
+        game.participantSetups[presenterId] = freshGuessImageParticipantSlot();
+      }
+    }
+
+    session.updatedAt = Date.now();
+    await this.persist();
+    if (!everyone) {
+      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    }
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  private toPublicState(session: SessionInternal, viewerParticipantId?: string): SessionState {
     const game = session.games[0];
     const base = {
       sessionId: session.sessionId,
@@ -1321,6 +2025,136 @@ export class SessionService {
             revealed,
             usedQuestionIds: game.usedQuestionIds,
             status: game.status
+          }
+        }
+      };
+    }
+
+    if (game.type === "guessTheImage") {
+      const imageUrl =
+        game.imageFileId
+          ? `/api/sessions/${session.sessionId}/guess-the-image/file/${encodeURIComponent(game.imageFileId)}`
+          : null;
+      if (game.status === "setup") {
+        const everyonePeers = session.participants.map((p) => ({
+          participantId: p.id,
+          configured: Boolean(game.participantSetups[p.id]?.configured)
+        }));
+        const everyoneAllConfigured = guessImageEveryoneAllConfigured(session, game);
+        let everyoneMySetup: {
+          imageUrl: string | null;
+          descriptions: [string, string, string, string];
+          correctIndex: number;
+          revealDurationMs: number;
+          configured: boolean;
+        } | null = null;
+        if (
+          viewerParticipantId
+          && session.participants.some((participant) => participant.id === viewerParticipantId)
+        ) {
+          const mine =
+            game.participantSetups[viewerParticipantId] ?? freshGuessImageParticipantSlot();
+          everyoneMySetup = {
+            imageUrl: mine.imageFileId
+              ? `/api/sessions/${session.sessionId}/guess-the-image/file/${encodeURIComponent(mine.imageFileId)}`
+              : null,
+            descriptions: [...mine.canonicalDescriptions],
+            correctIndex: mine.canonicalCorrectIndex,
+            revealDurationMs: mine.revealDurationMs,
+            configured: mine.configured
+          };
+        }
+        if (game.setupMode === "everyone") {
+          return {
+            ...base,
+            activeGame: "guessTheImage",
+            gameState: {
+              type: "guessTheImage",
+              state: {
+                status: "setup",
+                setupMode: "everyone",
+                setupParticipantId: game.setupParticipantId,
+                selectedRoundParticipantId: game.selectedRoundParticipantId,
+                everyoneBetweenRounds: game.everyoneBetweenRounds === true,
+                everyonePeers,
+                everyoneMySetup,
+                everyoneAllConfigured,
+                imageUrl: null,
+                descriptions: ["", "", "", ""] as [string, string, string, string],
+                correctIndex: 0,
+                revealDurationMs: game.revealDurationMs,
+                configured: false
+              }
+            }
+          };
+        }
+        return {
+          ...base,
+          activeGame: "guessTheImage",
+          gameState: {
+            type: "guessTheImage",
+            state: {
+              status: "setup",
+              setupMode: "single",
+              setupParticipantId: game.setupParticipantId,
+              selectedRoundParticipantId: null,
+              everyoneBetweenRounds: false,
+              everyonePeers: [],
+              everyoneMySetup: null,
+              everyoneAllConfigured: false,
+              imageUrl,
+              descriptions: [...game.canonicalDescriptions],
+              correctIndex: game.canonicalCorrectIndex,
+              revealDurationMs: game.revealDurationMs,
+              configured: game.configured
+            }
+          }
+        };
+      }
+      if (game.status === "playing") {
+        const options = this.guessTheImageOptionsFrom(game);
+        const guesserIds = this.guessTheImageGuesserIds(session, game);
+        const submittedParticipantIds = Object.keys(game.locks).filter((id) => guesserIds.includes(id));
+        return {
+          ...base,
+          activeGame: "guessTheImage",
+          gameState: {
+            type: "guessTheImage",
+            state: {
+              status: "playing",
+              setupParticipantId: game.setupParticipantId,
+              imageUrl: imageUrl ?? "",
+              options: [...options],
+              roundStartedAt: game.roundStartedAt ?? 0,
+              revealDurationMs: game.revealDurationMs,
+              submittedParticipantIds
+            }
+          }
+        };
+      }
+      const options = this.guessTheImageOptionsFrom(game);
+      const correctDisplayIndex = this.guessTheImageCorrectDisplayIndex(game);
+      return {
+        ...base,
+        activeGame: "guessTheImage",
+        gameState: {
+          type: "guessTheImage",
+          state: {
+            status: "finished",
+            setupMode: game.setupMode === "everyone" ? "everyone" : "single",
+            setupParticipantId: game.setupParticipantId,
+            imageUrl,
+            options: [...options],
+            correctDisplayIndex,
+            results: (game.results ?? []).map((r) => ({
+              participantId: r.participantId,
+              choiceDisplayIndex: r.choiceDisplayIndex,
+              correct: r.correct,
+              elapsedMs: r.elapsedMs,
+              pointsAwarded: r.pointsAwarded
+            })),
+            revealDurationMs: game.revealDurationMs,
+            roundStartedAt: game.roundStartedAt ?? 0
           }
         }
       };

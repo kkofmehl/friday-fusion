@@ -16,6 +16,7 @@ import {
   type ServerEvent
 } from "../../shared/contracts";
 import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
+import { guessTheImageSessionUploadDir, resolveGuessTheImageStoredFile } from "./guessTheImageUploads";
 import { SessionService, createSessionService } from "./sessionService";
 import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
 
@@ -84,23 +85,24 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     if (targets.length === 0) {
       return;
     }
-    let state;
     try {
-      state = sessionService.getState(sessionId);
+      sessionService.getState(sessionId);
     } catch (error) {
       app.log.warn({ err: error, sessionId }, "broadcastState: session missing");
       return;
     }
-    const payload: ServerEvent = { type: "session:state", payload: state };
-    const parsed = serverEventSchema.safeParse(payload);
-    if (!parsed.success) {
-      app.log.error({ err: parsed.error, sessionId }, "broadcastState: payload failed schema");
-      return;
-    }
-    const wire = JSON.stringify(payload);
     targets.forEach((target) => {
       try {
-        target.socket.send(wire);
+        const payload: ServerEvent = {
+          type: "session:state",
+          payload: sessionService.getState(sessionId, target.participantId)
+        };
+        const parsed = serverEventSchema.safeParse(payload);
+        if (!parsed.success) {
+          app.log.error({ err: parsed.error, sessionId }, "broadcastState: payload failed schema");
+          return;
+        }
+        target.socket.send(JSON.stringify(parsed.data));
       } catch (error) {
         app.log.warn({ err: error }, "broadcastState: failed to deliver to client");
       }
@@ -244,6 +246,79 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     const sessionId = (request.params as { sessionId: string }).sessionId;
     const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
     const abs = await resolveIcebreakerStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
+  });
+
+  app.post("/api/sessions/:sessionId/guess-the-image/upload", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    let participantId = "";
+    let fileBuffer: Buffer | null = null;
+    let mimeType = "";
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          if (part.fieldname !== "file") {
+            part.file.resume();
+            continue;
+          }
+          mimeType = part.mimetype;
+          fileBuffer = await part.toBuffer();
+        } else if (part.type === "field" && part.fieldname === "participantId") {
+          participantId = String(part.value ?? "").trim();
+        }
+      }
+    } catch (error) {
+      app.log.warn({ err: error }, "guess-the-image upload parse failed");
+      return reply.code(400).send({ message: "Invalid multipart body." });
+    }
+    if (!participantId || !fileBuffer?.length) {
+      return reply.code(400).send({ message: "participantId and file are required." });
+    }
+    if (fileBuffer.length > ICEBREAKER_MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ message: "File too large." });
+    }
+    const ext = ICEBREAKER_IMAGE_MIME[mimeType];
+    if (!ext) {
+      return reply.code(400).send({ message: "Only JPEG, PNG, GIF, or WebP images are allowed." });
+    }
+    let fileId: string;
+    try {
+      sessionService.assertGuessTheImageUploadAllowed(sessionId, participantId);
+      const dataDir = sessionService.getDataDirectory();
+      const dir = guessTheImageSessionUploadDir(dataDir, sessionId);
+      await mkdir(dir, { recursive: true });
+      fileId = `${nanoid(18)}${ext}`;
+      await writeFile(path.join(dir, fileId), fileBuffer);
+    } catch (error) {
+      if (error instanceof Error && error.message === "Session not found.") {
+        return reply.code(404).send({ message: "Session not found." });
+      }
+      const message = error instanceof Error ? error.message : "Upload rejected.";
+      return reply.code(400).send({ message });
+    }
+    return reply.send({ fileId });
+  });
+
+  app.get("/api/sessions/:sessionId/guess-the-image/file/:fileId", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
+    const abs = resolveGuessTheImageStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
     if (!abs) {
       return reply.code(404).send({ message: "Not found." });
     }
@@ -446,6 +521,50 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "icebreaker:nextQuestion") {
           await sessionService.nextIcebreakerQuestion(context.sessionId, context.participantId);
+        } else if (event.type === "guessImage:configure") {
+          const d = event.payload.descriptions;
+          await sessionService.configureGuessTheImage(context.sessionId, context.participantId, {
+            imageFileId: event.payload.imageFileId,
+            descriptions: [d[0]!, d[1]!, d[2]!, d[3]!],
+            correctIndex: event.payload.correctIndex,
+            revealDurationMs: event.payload.revealDurationMs
+          });
+        } else if (event.type === "guessImage:startRound") {
+          await sessionService.startGuessTheImageRound(context.sessionId, context.participantId);
+        } else if (event.type === "guessImage:setRoundPresenter") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can choose whose image to use.");
+          }
+          await sessionService.setGuessTheImageRoundPresenter(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId
+          );
+        } else if (event.type === "guessImage:setSetupParticipant") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can choose the setup player.");
+          }
+          await sessionService.setGuessTheImageSetupParticipant(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId
+          );
+        } else if (event.type === "guessImage:backToSetup") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can return to setup.");
+          }
+          await sessionService.returnGuessTheImageToSetup(context.sessionId, context.participantId);
+        } else if (event.type === "guessImage:beginNextRoundSelection") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can choose the next image.");
+          }
+          await sessionService.beginGuessTheImageNextRoundSelection(context.sessionId, context.participantId);
+        } else if (event.type === "guessImage:lock") {
+          await sessionService.lockGuessTheImageAnswer(
+            context.sessionId,
+            context.participantId,
+            event.payload.choiceIndex
+          );
         }
 
         broadcastState(context.sessionId);

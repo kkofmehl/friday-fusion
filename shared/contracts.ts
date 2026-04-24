@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const gameTypeSchema = z.enum(["hangman", "twoTruthsLie", "trivia", "icebreaker"]);
+export const gameTypeSchema = z.enum(["hangman", "twoTruthsLie", "trivia", "icebreaker", "guessTheImage"]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
 export const participantSchema = z.object({
@@ -143,6 +143,74 @@ export const icebreakerRoundConfigSchema = z.object({
 });
 export type IcebreakerRoundConfig = z.infer<typeof icebreakerRoundConfigSchema>;
 
+export const guessTheImageResultEntrySchema = z.object({
+  participantId: z.string(),
+  choiceDisplayIndex: z.number().int().min(0).max(3).nullable(),
+  correct: z.boolean(),
+  elapsedMs: z.number().int().nullable(),
+  pointsAwarded: z.number().int()
+});
+export type GuessTheImageResultEntry = z.infer<typeof guessTheImageResultEntrySchema>;
+
+const guessTheImageEveryonePeerSchema = z.object({
+  participantId: z.string(),
+  configured: z.boolean()
+});
+
+const guessTheImageEveryoneMySetupSchema = z.object({
+  imageUrl: z.string().nullable(),
+  descriptions: z.array(z.string()).length(4),
+  correctIndex: z.number().int().min(0).max(3),
+  revealDurationMs: z.number().int().positive(),
+  configured: z.boolean()
+});
+
+export const guessTheImageStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("setup"),
+    /** `single`: one designated player prepares. `everyone`: each player saves their own setup; host picks whose image to play. */
+    setupMode: z.enum(["single", "everyone"]),
+    setupParticipantId: z.string(),
+    /** Everyone mode: after a finished round, host chose "next image" — saved setups are reused without a full prep wave. */
+    everyoneBetweenRounds: z.boolean(),
+    /** Everyone mode: host chooses which saved setup becomes the round (required before start). */
+    selectedRoundParticipantId: z.string().nullable(),
+    everyonePeers: z.array(guessTheImageEveryonePeerSchema),
+    /** Per-viewer: only the socket recipient's own draft (null on HTTP snapshot). */
+    everyoneMySetup: guessTheImageEveryoneMySetupSchema.nullable(),
+    everyoneAllConfigured: z.boolean(),
+    /** Single mode: shared draft. In everyone mode, placeholders — use everyoneMySetup for your own. */
+    imageUrl: z.string().nullable(),
+    descriptions: z.array(z.string()).length(4),
+    correctIndex: z.number().int().min(0).max(3),
+    revealDurationMs: z.number().int().positive(),
+    configured: z.boolean()
+  }),
+  z.object({
+    status: z.literal("playing"),
+    setupParticipantId: z.string(),
+    imageUrl: z.string(),
+    options: z.array(z.string()).length(4),
+    roundStartedAt: z.number().int(),
+    revealDurationMs: z.number().int().positive(),
+    submittedParticipantIds: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("finished"),
+    /** Present for Guess the image finished state (distinguishes everyone vs single post-round actions). */
+    setupMode: z.enum(["single", "everyone"]),
+    setupParticipantId: z.string(),
+    /** Cleared after the round ends (image file is removed from server storage). */
+    imageUrl: z.string().nullable(),
+    options: z.array(z.string()).length(4),
+    correctDisplayIndex: z.number().int().min(0).max(3),
+    results: z.array(guessTheImageResultEntrySchema),
+    revealDurationMs: z.number().int().positive(),
+    roundStartedAt: z.number().int()
+  })
+]);
+export type GuessTheImageState = z.infer<typeof guessTheImageStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -159,6 +227,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("icebreaker"),
     state: icebreakerStateSchema
+  }),
+  z.object({
+    type: z.literal("guessTheImage"),
+    state: guessTheImageStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -187,7 +259,11 @@ export type ServerEvent = z.infer<typeof serverEventSchema>;
 
 export const gameStartOptionsSchema = z.object({
   hangmanMode: hangmanModeSchema.optional(),
-  hangmanCreatorId: z.string().optional()
+  hangmanCreatorId: z.string().optional(),
+  /** Guess the image: who uploads the image and enters descriptions for the first round (defaults to host). */
+  guessImageSetupParticipantId: z.string().optional(),
+  /** Guess the image: when `everyone`, each player prepares their own image; host then picks which one to play. */
+  guessImageSetupMode: z.enum(["single", "everyone"]).optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -235,7 +311,31 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("icebreaker:beginReveals"), payload: z.object({}) }),
   z.object({ type: z.literal("icebreaker:reveal"), payload: z.object({ participantId: z.string() }) }),
-  z.object({ type: z.literal("icebreaker:nextQuestion"), payload: z.object({}) })
+  z.object({ type: z.literal("icebreaker:nextQuestion"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("guessImage:configure"),
+    payload: z.object({
+      imageFileId: z.string().min(1),
+      descriptions: z.array(z.string().min(1)).length(4),
+      correctIndex: z.number().int().min(0).max(3),
+      revealDurationMs: z.number().int().min(10_000).max(120_000)
+    })
+  }),
+  z.object({ type: z.literal("guessImage:startRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("guessImage:setRoundPresenter"),
+    payload: z.object({ participantId: z.string().nullable() })
+  }),
+  z.object({
+    type: z.literal("guessImage:setSetupParticipant"),
+    payload: z.object({ participantId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("guessImage:backToSetup"), payload: z.object({}) }),
+  z.object({ type: z.literal("guessImage:beginNextRoundSelection"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("guessImage:lock"),
+    payload: z.object({ choiceIndex: z.number().int().min(0).max(3) })
+  })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 
