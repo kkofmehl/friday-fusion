@@ -91,3 +91,4 @@
 37. User approved adding Open Trivia DB rate-limit handling (`response_code = 5`) with retry/backoff behavior.
 38. User requested full implementation of host-configurable trivia loading: host-selected question count/category/difficulty, multiple-choice-only Open Trivia batching with 5-second API cadence, favor-easy remainder split, loading progress bar UI during build, and start only after questions are loaded.
 39. User reported `npm run build -w web` failure and asked for diagnosis/fix.
+40. User reported they were trying to deploy the app to Fly.io.

@@ -37,12 +37,12 @@ Stale sessions are cleaned up automatically after 24 hours.
 
 1. Create app and volume:
    ```bash
-   fly launch --no-deploy
-   fly volumes create fusion_data --size 1 --region ord
+   flyctl launch --no-deploy
+   flyctl volumes create fusion_data --size 1 --region ord
    ```
 2. Deploy:
    ```bash
-   fly deploy
+   flyctl deploy
    ```
 
 The app uses one running machine and a mounted `/data` volume for persistence.

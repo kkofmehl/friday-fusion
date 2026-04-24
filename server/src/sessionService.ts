@@ -885,7 +885,7 @@ export class SessionService {
       ? {
         totalQuestions: config,
         categoryMode: "all" as const,
-        difficulties: ["easy", "medium", "hard"] as const
+        difficulties: ["easy", "medium", "hard"] as Array<"easy" | "medium" | "hard">
       }
       : config;
 
