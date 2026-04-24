@@ -37,6 +37,7 @@ export function HangmanGame({
   const [solveOpen, setSolveOpen] = useState(false);
   const [solveGuess, setSolveGuess] = useState("");
   const [solveFeedback, setSolveFeedback] = useState<"awaiting" | "wrong" | null>(null);
+  const [nextCreatorId, setNextCreatorId] = useState<string | null>(null);
   const lastWrongCountRef = useRef<number | null>(null);
 
   if (session.gameState?.type !== "hangman") return null;
@@ -44,6 +45,7 @@ export function HangmanGame({
   const isCreator = state.puzzleCreatorId === currentParticipantId;
   const creator = session.participants.find((p) => p.id === state.puzzleCreatorId);
   const isTurnMode = state.mode === "turns";
+  const isTeamMode = !isTurnMode;
   // Mirrors the server safety net: if the turn pointer is unset, any non-creator
   // can claim the first turn (prevents the keyboard from being permanently
   // locked when the host set the word before any guessers joined).
@@ -53,6 +55,8 @@ export function HangmanGame({
     || state.currentTurnId === currentParticipantId
     || (turnUnassigned && !isCreator);
   const canGuess = state.status === "inProgress" && !isCreator && isMyTurn;
+  const solveLockedByOther = isTeamMode && state.activeSolverId !== null && state.activeSolverId !== currentParticipantId;
+  const canAct = canGuess && !solveLockedByOther;
   const currentGuesser = isTurnMode
     ? session.participants.find((p) => p.id === state.currentTurnId)
     : undefined;
@@ -83,7 +87,7 @@ export function HangmanGame({
 
   const submitSolve = (event: FormEvent) => {
     event.preventDefault();
-    if (!canGuess) return;
+    if (!canAct) return;
     const trimmed = solveGuess.trim();
     if (!trimmed) return;
     lastWrongCountRef.current = state.wrongGuessCount;
@@ -92,22 +96,83 @@ export function HangmanGame({
   };
 
   const cancelSolve = () => {
+    send({ type: "hangman:solveCancel", payload: {} });
     setSolveOpen(false);
     setSolveGuess("");
     setSolveFeedback(null);
   };
 
   const openSolve = () => {
-    if (!canGuess) return;
+    if (!canAct) return;
+    send({ type: "hangman:solveOpen", payload: {} });
     setSolveFeedback(null);
     setSolveOpen(true);
   };
 
   const guessLetter = (letter: string) => {
-    if (!canGuess) return;
+    if (!canAct) return;
     if (state.guessedLetters.includes(letter)) return;
     send({ type: "hangman:guessLetter", payload: { letter } });
   };
+
+  useEffect(() => {
+    if (state.activeSolverId !== currentParticipantId) {
+      setSolveOpen(false);
+      setSolveGuess("");
+      setSolveFeedback(null);
+    }
+  }, [currentParticipantId, state.activeSolverId]);
+
+  useEffect(() => {
+    if (state.status !== "inProgress") {
+      setSolveOpen(false);
+    }
+  }, [state.status]);
+
+  useEffect(() => {
+    if (state.status === "inProgress" || state.status === "waitingForWord") {
+      setNextCreatorId(null);
+    }
+  }, [state.status]);
+
+  const activityRows = state.activityLog.map((entry) => {
+    const actor = session.participants.find((participant) => participant.id === entry.participantId)?.displayName ?? "Someone";
+    if (entry.kind === "letterCorrect") {
+      return {
+        key: `${entry.createdAt}-${entry.participantId}-${entry.letter ?? "x"}`,
+        className: "hangman-activity-correct",
+        icon: "✓",
+        text: `${actor} guessed ${entry.letter} right`
+      };
+    }
+    if (entry.kind === "letterWrong") {
+      return {
+        key: `${entry.createdAt}-${entry.participantId}-${entry.letter ?? "x"}`,
+        className: "hangman-activity-wrong",
+        icon: "X",
+        text: `${actor} guessed ${entry.letter} wrong`
+      };
+    }
+    if (entry.kind === "solveCancelled") {
+      return {
+        key: `${entry.createdAt}-${entry.participantId}-cancel`,
+        className: "hangman-activity-neutral",
+        icon: "-",
+        text: `${actor} cancelled solve`
+      };
+    }
+    return {
+      key: `${entry.createdAt}-${entry.participantId}-solve`,
+      className: "hangman-activity-neutral",
+      icon: "...",
+      text: `${actor} is attempting to solve the puzzle`
+    };
+  });
+  const currentCreatorIndex = session.participants.findIndex((participant) => participant.id === state.puzzleCreatorId);
+  const rotatedCreatorId = currentCreatorIndex === -1 || session.participants.length === 0
+    ? state.puzzleCreatorId
+    : session.participants[(currentCreatorIndex + 1) % session.participants.length]?.id ?? state.puzzleCreatorId;
+  const effectiveNextCreatorId = nextCreatorId ?? rotatedCreatorId;
 
   const renderWord = (): JSX.Element => (
     <div className="hangman-word">
@@ -161,6 +226,24 @@ export function HangmanGame({
         />
       )}
 
+      {state.status !== "waitingForWord" && (
+        <div className="hangman-activity" aria-live="polite">
+          {activityRows.length > 0 ? (
+            activityRows.map((row) => (
+              <p key={row.key} className={`hangman-activity-row ${row.className}`}>
+                <span className="hangman-activity-icon" aria-hidden="true">{row.icon}</span>
+                <span>{row.text}</span>
+              </p>
+            ))
+          ) : (
+            <p className="hangman-activity-row hangman-activity-neutral">
+              <span className="hangman-activity-icon" aria-hidden="true">-</span>
+              <span>No guesses yet.</span>
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="hangman-layout">
         <div className="hangman-art">
           <Gallows wrongs={state.wrongGuessCount} max={state.maxWrongGuesses} />
@@ -207,7 +290,7 @@ export function HangmanGame({
                       type="button"
                       className={`key${guessed ? " key-used" : ""}${hit ? " key-hit" : ""}${miss ? " key-miss" : ""}`}
                       onClick={() => guessLetter(letter)}
-                      disabled={!canGuess || guessed}
+                      disabled={!canAct || guessed}
                     >
                       {letter}
                     </button>
@@ -231,14 +314,14 @@ export function HangmanGame({
                             if (solveFeedback === "wrong") setSolveFeedback(null);
                           }}
                           autoFocus
-                          disabled={!canGuess || solveFeedback === "awaiting"}
+                          disabled={!canAct || solveFeedback === "awaiting"}
                           maxLength={60}
-                          placeholder="e.g. George Washington"
+                          placeholder="Type guess here"
                         />
                         <button
                           type="submit"
                           className="btn btn-primary"
-                          disabled={!canGuess || !solveGuess.trim() || solveFeedback === "awaiting"}
+                          disabled={!canAct || !solveGuess.trim() || solveFeedback === "awaiting"}
                         >
                           {solveFeedback === "awaiting" ? "Checking..." : "Submit"}
                         </button>
@@ -257,8 +340,14 @@ export function HangmanGame({
                       type="button"
                       className="btn btn-primary hangman-solve-btn"
                       onClick={openSolve}
-                      disabled={!canGuess}
-                      title={isTurnMode && !isMyTurn ? "Wait for your turn" : "Guess the full word or phrase"}
+                      disabled={!canAct}
+                      title={
+                        solveLockedByOther
+                          ? "Someone else is solving"
+                          : isTurnMode && !isMyTurn
+                            ? "Wait for your turn"
+                            : "Guess the full word or phrase"
+                      }
                     >
                       Solve
                     </button>
@@ -272,13 +361,36 @@ export function HangmanGame({
                   </h3>
                   <p>The word was <strong>{state.revealedWord ?? state.maskedWord}</strong>.</p>
                   {isHost && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => send({ type: "game:start", payload: { game: "hangman" } })}
-                    >
-                      Play another round
-                    </button>
+                    <div className="hangman-next-round">
+                      <label htmlFor="hangman-next-creator">Next puzzle creator</label>
+                      <select
+                        id="hangman-next-creator"
+                        value={effectiveNextCreatorId}
+                        onChange={(event) => setNextCreatorId(event.target.value)}
+                      >
+                        {session.participants.map((participant) => (
+                          <option key={participant.id} value={participant.id}>
+                            {participant.displayName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => send({
+                          type: "game:start",
+                          payload: {
+                            game: "hangman",
+                            options: {
+                              hangmanMode: state.mode,
+                              hangmanCreatorId: effectiveNextCreatorId
+                            }
+                          }
+                        })}
+                      >
+                        Play another round
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

@@ -55,3 +55,31 @@
     - Server: `solveHangman` normalizes both sides via `/[^A-Z]/g` + uppercase, enforces active round + non-creator + turn pointer (with the same safety-net rescue). Correct solve in turns mode gives the solver +3; correct in team mode gives +1 to every non-creator guesser. Incorrect solve increments `wrongGuessCount` only (no letter added, no text broadcast); if that hit completes the hangman, the solver takes -5 in turns mode or the host earns +1 in team mode, otherwise the turn rotates in turns mode.
     - Client: `HangmanGame` gained a Solve button under the keyboard (only visible to non-creator guessers mid-round) that expands into an inline form. A local "awaiting -> wrong" state machine compares `wrongGuessCount` against a ref to show a private "Not correct" banner to the submitter without revealing the guess to anyone else.
     - Tests: five new server cases (correct turns solve with space-insensitive match, incorrect turns solve rotates without touching maskedWord, last wrong solve in turns mode applies -5, correct team solve pays +1 to all guessers, creator cannot solve) and two new web cases (active guesser's Solve button submits `hangman:solve` with the trimmed guess; non-active guesser's Solve button is disabled). Full suite: 28 server tests and 15 web tests green.
+27. User requested additional Hangman fixes and UX updates:
+    - Turns mode scoring: when the guessers lose on the final miss, keep `-5` on the acting guesser/solver and also award `+5` to the puzzle creator.
+    - Creator assignment: stop forcing host as creator; host can choose any participant as puzzle creator when starting Hangman (and restart preserves selected mode/creator).
+    - Solve input copy: replaced suggestion-like placeholder with neutral `Type guess here`.
+    - Team mode activity + lock UX: added shared action feed entries (`letterCorrect`, `letterWrong`, `solveAttempt`, `solveCancelled`) and a synchronized team-only solve lock (`activeSolverId`) so when one player opens Solve, everyone else is blocked until submit/cancel; wrong submit unlocks and continues, correct submit ends the round.
+    - Wiring and tests:
+      - Extended shared contracts with `hangmanCreatorId`, `hangman:solveOpen`, `hangman:solveCancel`, `activeSolverId`, and `activityLog`.
+      - Added server handlers/methods for solve open/cancel lock lifecycle and creator validation.
+      - Added/updated server tests for creator selection validation, creator +5 on turns-loss paths, and team-mode lock/activity behavior.
+      - Added/updated web tests for lobby creator payload, new solve placeholder, team lock rendering, and activity feed rendering.
+      - Full suite now green: 32 server tests and 18 web tests.
+28. User tested and reported follow-up issues: feedback log not visible during turns mode play and next-round flow still prompting host as creator after round end. Assistant re-audited plan vs implementation and adjusted:
+    - Expanded activity logging to apply to both modes for letter guesses (correct/wrong), and enabled solve-open/solve-cancel event logging in turns mode too.
+    - Tightened turns-mode solve-open server validation to require current turn and prevent non-active-solver takeover.
+    - Updated Hangman end-of-round host UI to show a `Next puzzle creator` selector with a rotated default (next participant after current creator), then uses that selection in the next `game:start` payload.
+    - Added regression tests: turns-mode solve-open validation/activity logging and next-round creator rotation default + payload assertion.
+    - Re-ran full tests: 33 server tests and 19 web tests green.
+29. User still did not see changes in manual testing. Assistant applied additional parity fixes with the plan intent:
+    - Activity feed visibility: always render the feed panel once a round starts (showing `No guesses yet.` until the first action) so the feature is visible immediately instead of appearing only after first logged action.
+    - Creator rotation reliability:
+      - Hangman end-of-round next-creator logic now uses a derived rotated default at render time (eliminates first-click race where the old creator could be sent before state initialization).
+      - Sidebar `Restart game` action now rotates creator by default in Hangman instead of reusing the current creator.
+    - Verified with full test run again: server 33 passed, web 19 passed.
+30. User still reported no visible frontend changes in browser despite server restart/hard refresh. Investigation of runtime logs showed traffic pointed at `localhost:3000` serving static built assets (`/assets/index-*.js`) rather than Vite dev output, so stale `web/dist` was being tested. Assistant:
+    - Fixed a TypeScript narrowing issue in `web/src/screens/GameScreen.tsx` encountered during `web` production build.
+    - Rebuilt frontend assets via `npm run build -w web`, producing fresh hashed bundles (`index-2cc442fe.js`, `index-271d451c.css`) now served by server on port 3000.
+    - Re-ran `npm run test -w web` (19 passing) to confirm no regressions.
+31. User reported a hang when an incorrect solve occurred on the final miss, with server log `broadcastState: payload failed schema` and Zod error `Too small: expected number to be >=0`. Root cause: `participantSchema.score` was constrained to nonnegative while turns-mode penalties intentionally produce negative scores (`-5`). Assistant fixed shared contract to allow signed integer scores (`z.number().int()`), then reran full test suite (server 33 passed, web 19 passed).

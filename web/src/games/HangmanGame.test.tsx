@@ -25,6 +25,8 @@ const buildSession = (overrides: Partial<SessionState["gameState"] & { type: "ha
       revealedWord: null,
       mode: "team",
       currentTurnId: null,
+      activeSolverId: null,
+      activityLog: [],
       ...overrides
     } as any
   }
@@ -91,6 +93,7 @@ describe("HangmanGame", () => {
     fireEvent.click(solveBtn);
 
     const input = screen.getByLabelText(/Type the full answer/);
+    expect((input as HTMLInputElement).getAttribute("placeholder")).toBe("Type guess here");
     fireEvent.change(input, { target: { value: "  george washington " } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     expect(send).toHaveBeenCalledWith({
@@ -120,5 +123,64 @@ describe("HangmanGame", () => {
     expect(letterA.disabled).toBe(false);
     fireEvent.click(letterA);
     expect(send).toHaveBeenCalledWith({ type: "hangman:guessLetter", payload: { letter: "A" } });
+  });
+
+  it("locks team mode input for non-solver while someone is attempting solve", () => {
+    const send = vi.fn();
+    const session = buildSession({ mode: "team", activeSolverId: "p3", currentTurnId: null } as any);
+    render(
+      <HangmanGame session={session} currentParticipantId="p2" isHost={false} send={send} />
+    );
+
+    const letterA = screen.getByRole("button", { name: "A" }) as HTMLButtonElement;
+    const solveBtn = screen.getByRole("button", { name: "Solve" }) as HTMLButtonElement;
+    expect(letterA.disabled).toBe(true);
+    expect(solveBtn.disabled).toBe(true);
+  });
+
+  it("renders activity feed entries for correct, wrong, and solve events", () => {
+    const session = buildSession({
+      mode: "team",
+      activityLog: [
+        { kind: "letterCorrect", participantId: "p2", letter: "A", createdAt: 1 },
+        { kind: "letterWrong", participantId: "p3", letter: "Z", createdAt: 2 },
+        { kind: "solveAttempt", participantId: "p2", letter: null, createdAt: 3 }
+      ]
+    } as any);
+    render(
+      <HangmanGame session={session} currentParticipantId="p2" isHost={false} send={vi.fn()} />
+    );
+
+    expect(screen.getByText("Bob guessed A right")).toBeDefined();
+    expect(screen.getByText("Carol guessed Z wrong")).toBeDefined();
+    expect(screen.getByText("Bob is attempting to solve the puzzle")).toBeDefined();
+  });
+
+  it("offers a rotated default creator for the next round when game is over", () => {
+    const send = vi.fn();
+    const session = buildSession({
+      status: "won",
+      revealedWord: "CAT",
+      mode: "turns",
+      puzzleCreatorId: "p1",
+      activityLog: []
+    } as any);
+    render(
+      <HangmanGame session={session} currentParticipantId="p1" isHost send={send} />
+    );
+
+    const nextCreator = screen.getByLabelText("Next puzzle creator") as HTMLSelectElement;
+    expect(nextCreator.value).toBe("p2");
+    fireEvent.click(screen.getByRole("button", { name: "Play another round" }));
+    expect(send).toHaveBeenCalledWith({
+      type: "game:start",
+      payload: {
+        game: "hangman",
+        options: {
+          hangmanMode: "turns",
+          hangmanCreatorId: "p2"
+        }
+      }
+    });
   });
 });

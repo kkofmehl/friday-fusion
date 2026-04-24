@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ClientEvent,
   GameType,
@@ -47,10 +47,18 @@ export function LobbyScreen({
   send: (event: ClientEvent) => void;
 }): JSX.Element {
   const [hangmanMode, setHangmanMode] = useState<HangmanMode>("team");
+  const [hangmanCreatorId, setHangmanCreatorId] = useState(currentParticipantId);
+
+  useEffect(() => {
+    if (session.participants.some((participant) => participant.id === hangmanCreatorId)) {
+      return;
+    }
+    setHangmanCreatorId(session.participants[0]?.id ?? currentParticipantId);
+  }, [currentParticipantId, hangmanCreatorId, session.participants]);
 
   const startGame = (game: GameType) => {
     if (game === "hangman") {
-      send({ type: "game:start", payload: { game, options: { hangmanMode } } });
+      send({ type: "game:start", payload: { game, options: { hangmanMode, hangmanCreatorId } } });
       return;
     }
     send({ type: "game:start", payload: { game } });
@@ -81,7 +89,7 @@ export function LobbyScreen({
               <p>{game.description}</p>
               {game.id === "hangman" && (
                 <fieldset className="mode-picker" disabled={!isHost}>
-                  <legend className="mode-picker-label">Mode</legend>
+                  <legend className="mode-picker-label">Mode & creator</legend>
                   <label className={`mode-option${hangmanMode === "team" ? " is-active" : ""}`}>
                     <input
                       type="radio"
@@ -104,6 +112,20 @@ export function LobbyScreen({
                     <span className="mode-option-title">Take turns</span>
                     <span className="mode-option-hint">+1 per correct letter, +3 to the solver, -5 for the final miss.</span>
                   </label>
+                  <label className="mode-picker-label" htmlFor="hangman-creator-select">
+                    Puzzle creator
+                  </label>
+                  <select
+                    id="hangman-creator-select"
+                    value={hangmanCreatorId}
+                    onChange={(event) => setHangmanCreatorId(event.target.value)}
+                  >
+                    {session.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                      </option>
+                    ))}
+                  </select>
                 </fieldset>
               )}
               <button

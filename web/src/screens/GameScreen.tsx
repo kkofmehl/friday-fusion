@@ -15,6 +15,31 @@ export function GameScreen({
   isHost: boolean;
   send: (event: ClientEvent) => void;
 }): JSX.Element {
+  const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
+  const rotatedCreatorId = hangmanState
+    ? (
+      session.participants.length > 0
+        ? session.participants[
+          (session.participants.findIndex((participant) => participant.id === hangmanState.puzzleCreatorId) + 1)
+          % session.participants.length
+        ]?.id ?? hangmanState.puzzleCreatorId
+        : hangmanState.puzzleCreatorId
+    )
+    : null;
+
+  const restartPayload: ClientEvent = session.gameState?.type === "hangman"
+    ? {
+      type: "game:start",
+      payload: {
+        game: "hangman",
+        options: {
+          hangmanMode: session.gameState.state.mode,
+          hangmanCreatorId: rotatedCreatorId ?? session.gameState.state.puzzleCreatorId
+        }
+      }
+    }
+    : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
+
   const renderGame = () => {
     if (session.gameState?.type === "hangman") {
       return <HangmanGame session={session} currentParticipantId={currentParticipantId} isHost={isHost} send={send} />;
@@ -41,7 +66,7 @@ export function GameScreen({
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={() => send({ type: "game:start", payload: { game: session.activeGame ?? "hangman" } })}
+              onClick={() => send(restartPayload)}
               title="Restart the current game"
             >
               Restart game

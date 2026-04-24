@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   type GameStartOptions,
   type GameType,
+  type HangmanActivity,
   type HangmanMode,
   type SessionState,
   type TriviaQuestion,
@@ -31,6 +32,8 @@ type HangmanGameInternal = {
   status: "waitingForWord" | "inProgress" | "won" | "lost";
   mode: HangmanMode;
   currentTurnId: string | null;
+  activeSolverId: string | null;
+  activityLog: HangmanActivity[];
 };
 
 type TwoTruthsGameInternal = {
@@ -157,13 +160,25 @@ const pickNextGuesser = (
   return guessers[(idx + 1) % guessers.length]!.id;
 };
 
+const appendHangmanActivity = (
+  game: HangmanGameInternal,
+  entry: Omit<HangmanActivity, "createdAt">
+): void => {
+  game.activityLog.push({ ...entry, createdAt: Date.now() });
+  if (game.activityLog.length > 30) {
+    game.activityLog = game.activityLog.slice(-30);
+  }
+};
+
 const ensureGameShape = (game: GameInternal & { mode?: HangmanMode }): GameInternal => {
   if (game.type === "hangman") {
     return {
       ...game,
       id: game.id ?? nanoid(6),
       mode: game.mode ?? "team",
-      currentTurnId: game.currentTurnId ?? null
+      currentTurnId: game.currentTurnId ?? null,
+      activeSolverId: game.activeSolverId ?? null,
+      activityLog: game.activityLog ?? []
     };
   }
   return { ...game, id: game.id ?? nanoid(6) };
@@ -326,7 +341,12 @@ export class SessionService {
     session.updatedAt = Date.now();
     let next: GameInternal;
     if (game === "hangman") {
-      const creatorId = session.participants.find((participant) => participant.isHost)?.id
+      const requestedCreatorId = options.hangmanCreatorId;
+      if (requestedCreatorId && !session.participants.some((participant) => participant.id === requestedCreatorId)) {
+        throw new Error("Puzzle creator must be in this session.");
+      }
+      const creatorId = requestedCreatorId
+        ?? session.participants.find((participant) => participant.isHost)?.id
         ?? session.participants[0]?.id;
       if (!creatorId) {
         throw new Error("No participants in session.");
@@ -346,7 +366,9 @@ export class SessionService {
         maxWrongGuesses: 6,
         status: "waitingForWord",
         mode,
-        currentTurnId: null
+        currentTurnId: null,
+        activeSolverId: null,
+        activityLog: []
       };
     } else if (game === "twoTruthsLie") {
       next = {
@@ -464,6 +486,65 @@ export class SessionService {
     game.maskedWord = maskWord(normalizedWord, []);
     game.status = "inProgress";
     game.currentTurnId = game.mode === "turns" ? firstGuesserId(session, game) : null;
+    game.activeSolverId = null;
+    game.activityLog = [];
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async openHangmanSolve(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "hangman") {
+      throw new Error("Hangman game is not active.");
+    }
+    if (game.status !== "inProgress" || !game.secretWord) {
+      throw new Error("Hangman round is not ready.");
+    }
+    if (game.puzzleCreatorId === participantId) {
+      throw new Error("Puzzle creator cannot guess.");
+    }
+    if (game.mode === "turns") {
+      if (game.currentTurnId === null) {
+        game.currentTurnId = participantId;
+      } else if (game.currentTurnId !== participantId) {
+        throw new Error("Not your turn.");
+      }
+      if (game.activeSolverId && game.activeSolverId !== participantId) {
+        throw new Error("Only the active solver can continue solving.");
+      }
+    }
+    if (game.mode === "team" && game.activeSolverId && game.activeSolverId !== participantId) {
+      throw new Error("Another player is attempting to solve.");
+    }
+    if (game.activeSolverId === participantId) {
+      return;
+    }
+    game.activeSolverId = participantId;
+    appendHangmanActivity(game, {
+      kind: "solveAttempt",
+      participantId,
+      letter: null
+    });
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async cancelHangmanSolve(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "hangman") {
+      throw new Error("Hangman game is not active.");
+    }
+    if (game.activeSolverId !== participantId) {
+      throw new Error("Only the active solver can cancel.");
+    }
+    game.activeSolverId = null;
+    appendHangmanActivity(game, {
+      kind: "solveCancelled",
+      participantId,
+      letter: null
+    });
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -479,6 +560,9 @@ export class SessionService {
     }
     if (game.puzzleCreatorId === participantId) {
       throw new Error("Puzzle creator cannot guess.");
+    }
+    if (game.mode === "team" && game.activeSolverId && game.activeSolverId !== participantId) {
+      throw new Error("Another player is attempting to solve.");
     }
     if (game.mode === "turns") {
       if (game.currentTurnId === null) {
@@ -505,6 +589,11 @@ export class SessionService {
     if (!wasCorrect) {
       game.wrongGuessCount += 1;
     }
+    appendHangmanActivity(game, {
+      kind: wasCorrect ? "letterCorrect" : "letterWrong",
+      participantId,
+      letter: normalizedLetter
+    });
 
     const guesser = session.participants.find((participant) => participant.id === participantId);
 
@@ -533,6 +622,10 @@ export class SessionService {
         if (guesser) {
           guesser.score -= 5;
         }
+        const creator = session.participants.find((p) => p.id === game.puzzleCreatorId);
+        if (creator) {
+          creator.score += 5;
+        }
       } else {
         const creator = session.participants.find((p) => p.id === game.puzzleCreatorId);
         if (creator) {
@@ -540,6 +633,7 @@ export class SessionService {
         }
       }
       game.currentTurnId = null;
+      game.activeSolverId = null;
     } else if (game.mode === "turns") {
       game.currentTurnId = pickNextGuesser(session, game, participantId);
     }
@@ -559,6 +653,14 @@ export class SessionService {
     }
     if (game.puzzleCreatorId === participantId) {
       throw new Error("Puzzle creator cannot guess.");
+    }
+    if (game.activeSolverId === null) {
+      game.activeSolverId = participantId;
+    } else if (game.activeSolverId !== participantId) {
+      if (game.mode === "team") {
+        throw new Error("Another player is attempting to solve.");
+      }
+      throw new Error("Only the active solver can submit.");
     }
     if (game.mode === "turns") {
       if (game.currentTurnId === null) {
@@ -601,6 +703,10 @@ export class SessionService {
           if (guesser) {
             guesser.score -= 5;
           }
+        const creator = session.participants.find((p) => p.id === game.puzzleCreatorId);
+        if (creator) {
+          creator.score += 5;
+        }
         } else {
           const creator = session.participants.find((p) => p.id === game.puzzleCreatorId);
           if (creator) {
@@ -612,6 +718,7 @@ export class SessionService {
         game.currentTurnId = pickNextGuesser(session, game, participantId);
       }
     }
+    game.activeSolverId = null;
 
     session.updatedAt = Date.now();
     await this.persist();
@@ -842,7 +949,9 @@ export class SessionService {
             status: game.status,
             revealedWord: game.status === "won" || game.status === "lost" ? game.secretWord : null,
             mode: game.mode,
-            currentTurnId: game.currentTurnId
+            currentTurnId: game.currentTurnId,
+            activeSolverId: game.activeSolverId,
+            activityLog: game.activityLog
           }
         }
       };

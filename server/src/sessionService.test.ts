@@ -84,6 +84,31 @@ describe("SessionService", () => {
     expect(state.gameState.state.wrongGuessCount).toBe(1);
   });
 
+  it("uses host-selected hangman creator when provided", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "hangman", {
+      hangmanMode: "team",
+      hangmanCreatorId: guest.participantId
+    });
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.puzzleCreatorId).toBe(guest.participantId);
+  });
+
+  it("rejects hangman creator ids that are not in the session", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(
+      setup.service.startGame(host.sessionId, "hangman", {
+        hangmanCreatorId: "missing-player"
+      })
+    ).rejects.toThrow("Puzzle creator must be in this session.");
+  });
+
   it("scores two truths and a lie", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;
@@ -339,6 +364,8 @@ describe("SessionService", () => {
     expect(lastWrong?.score).toBe(-5);
     const otherGuesser = state.participants.find((p) => p.id === guestOne.participantId);
     expect(otherGuesser?.score).toBe(0);
+    const creator = state.participants.find((p) => p.id === host.participantId);
+    expect(creator?.score).toBe(5);
   });
 
   it("awards +3 on a correct solve in turns mode and ignores spaces/punctuation", async () => {
@@ -410,6 +437,79 @@ describe("SessionService", () => {
     expect(loser?.score).toBe(-5);
     const other = state.participants.find((p) => p.id === guestOne.participantId);
     expect(other?.score).toBe(0);
+    const creator = state.participants.find((p) => p.id === host.participantId);
+    expect(creator?.score).toBe(5);
+  });
+
+  it("tracks team-mode solve lock lifecycle and activity feed", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guestOne = await setup.service.joinSession(host.joinCode, "Guest1");
+    const guestTwo = await setup.service.joinSession(host.joinCode, "Guest2");
+    await setup.service.startGame(host.sessionId, "hangman", { hangmanMode: "team" });
+    await setup.service.setHangmanWord(host.sessionId, host.participantId, "AB");
+
+    await setup.service.openHangmanSolve(host.sessionId, guestOne.participantId);
+    await expect(
+      setup.service.guessHangmanLetter(host.sessionId, guestTwo.participantId, "Z")
+    ).rejects.toThrow("Another player is attempting to solve.");
+
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.activeSolverId).toBe(guestOne.participantId);
+    expect(state.gameState.state.activityLog.at(-1)?.kind).toBe("solveAttempt");
+
+    await setup.service.cancelHangmanSolve(host.sessionId, guestOne.participantId);
+    await setup.service.guessHangmanLetter(host.sessionId, guestTwo.participantId, "Z");
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.activeSolverId).toBeNull();
+    expect(state.gameState.state.activityLog.at(-2)?.kind).toBe("solveCancelled");
+    expect(state.gameState.state.activityLog.at(-1)?.kind).toBe("letterWrong");
+  });
+
+  it("reopens team-mode board after a wrong solve submit", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guestOne = await setup.service.joinSession(host.joinCode, "Guest1");
+    const guestTwo = await setup.service.joinSession(host.joinCode, "Guest2");
+    await setup.service.startGame(host.sessionId, "hangman", { hangmanMode: "team" });
+    await setup.service.setHangmanWord(host.sessionId, host.participantId, "AB");
+
+    await setup.service.openHangmanSolve(host.sessionId, guestOne.participantId);
+    await setup.service.solveHangman(host.sessionId, guestOne.participantId, "NOPE");
+    let state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.status).toBe("inProgress");
+    expect(state.gameState.state.activeSolverId).toBeNull();
+
+    await setup.service.guessHangmanLetter(host.sessionId, guestTwo.participantId, "A");
+    state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.maskedWord).toBe("A_");
+    expect(state.gameState.state.activityLog.at(-1)?.kind).toBe("letterCorrect");
+  });
+
+  it("requires the current turn player to open solve in turns mode and logs the attempt", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guestOne = await setup.service.joinSession(host.joinCode, "Guest1");
+    const guestTwo = await setup.service.joinSession(host.joinCode, "Guest2");
+    await setup.service.startGame(host.sessionId, "hangman", { hangmanMode: "turns" });
+    await setup.service.setHangmanWord(host.sessionId, host.participantId, "AB");
+
+    await expect(
+      setup.service.openHangmanSolve(host.sessionId, guestTwo.participantId)
+    ).rejects.toThrow("Not your turn.");
+
+    await setup.service.openHangmanSolve(host.sessionId, guestOne.participantId);
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "hangman") throw new Error("expected hangman");
+    expect(state.gameState.state.activeSolverId).toBe(guestOne.participantId);
+    expect(state.gameState.state.activityLog.at(-1)?.kind).toBe("solveAttempt");
   });
 
   it("awards +1 to every guesser on a correct solve in team mode", async () => {

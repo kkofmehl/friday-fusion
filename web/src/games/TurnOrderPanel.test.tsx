@@ -24,7 +24,9 @@ const buildSession = (): SessionState => ({
       status: "inProgress",
       revealedWord: null,
       mode: "turns",
-      currentTurnId: "p2"
+      currentTurnId: "p2",
+      activeSolverId: null,
+      activityLog: []
     }
   }
 });

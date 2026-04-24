@@ -722,6 +722,17 @@ label {
   padding: 0 0.25rem;
 }
 
+.mode-picker select {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--slate-300, #cbd5e1);
+  border-radius: var(--radius-sm, 6px);
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--slate-700, #334155);
+  background: white;
+}
+
 .mode-option {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -767,6 +778,43 @@ label {
   background: var(--indigo-50, #eef2ff);
   color: var(--indigo-700, #4338ca);
   font-size: 0.92rem;
+}
+
+.hangman-activity {
+  margin: 0.25rem 0 0.9rem;
+  border: 1px solid var(--slate-200, #e2e8f0);
+  border-radius: 10px;
+  background: var(--slate-50, #f8fafc);
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hangman-activity-row {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.hangman-activity-icon {
+  min-width: 1.05rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.hangman-activity-correct {
+  color: var(--emerald-700, #047857);
+}
+
+.hangman-activity-wrong {
+  color: var(--rose-700, #be123c);
+}
+
+.hangman-activity-neutral {
+  color: var(--slate-600, #475569);
 }
 
 .turn-order {
@@ -1288,6 +1336,28 @@ label {
   background: var(--rose-100);
   border-color: #fecaca;
   color: var(--rose-600);
+}
+
+.hangman-next-round {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hangman-next-round label {
+  font-size: 0.85rem;
+  color: var(--slate-700, #334155);
+}
+
+.hangman-next-round select {
+  min-width: 180px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--slate-300, #cbd5e1);
+  border-radius: var(--radius-sm, 6px);
+  font-family: inherit;
+  background: white;
 }
 
 /* ============================================================

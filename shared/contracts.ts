@@ -6,13 +6,21 @@ export type GameType = z.infer<typeof gameTypeSchema>;
 export const participantSchema = z.object({
   id: z.string(),
   displayName: z.string().min(1),
-  score: z.number().int().nonnegative(),
+  score: z.number().int(),
   isHost: z.boolean()
 });
 export type Participant = z.infer<typeof participantSchema>;
 
 export const hangmanModeSchema = z.enum(["team", "turns"]);
 export type HangmanMode = z.infer<typeof hangmanModeSchema>;
+
+export const hangmanActivitySchema = z.object({
+  kind: z.enum(["letterCorrect", "letterWrong", "solveAttempt", "solveCancelled"]),
+  participantId: z.string(),
+  letter: z.string().length(1).nullable(),
+  createdAt: z.number().int()
+});
+export type HangmanActivity = z.infer<typeof hangmanActivitySchema>;
 
 export const hangmanStateSchema = z.object({
   puzzleCreatorId: z.string(),
@@ -23,7 +31,9 @@ export const hangmanStateSchema = z.object({
   status: z.enum(["waitingForWord", "inProgress", "won", "lost"]),
   revealedWord: z.string().nullable().optional(),
   mode: hangmanModeSchema,
-  currentTurnId: z.string().nullable()
+  currentTurnId: z.string().nullable(),
+  activeSolverId: z.string().nullable(),
+  activityLog: z.array(hangmanActivitySchema)
 });
 export type HangmanState = z.infer<typeof hangmanStateSchema>;
 
@@ -105,7 +115,8 @@ export const serverEventSchema = z.discriminatedUnion("type", [
 export type ServerEvent = z.infer<typeof serverEventSchema>;
 
 export const gameStartOptionsSchema = z.object({
-  hangmanMode: hangmanModeSchema.optional()
+  hangmanMode: hangmanModeSchema.optional(),
+  hangmanCreatorId: z.string().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -121,6 +132,8 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("hangman:setWord"), payload: z.object({ word: z.string().min(1) }) }),
   z.object({ type: z.literal("hangman:guessLetter"), payload: z.object({ letter: z.string().length(1) }) }),
+  z.object({ type: z.literal("hangman:solveOpen"), payload: z.object({}) }),
+  z.object({ type: z.literal("hangman:solveCancel"), payload: z.object({}) }),
   z.object({ type: z.literal("hangman:solve"), payload: z.object({ guess: z.string().min(1) }) }),
   z.object({ type: z.literal("hangman:setTurn"), payload: z.object({ participantId: z.string() }) }),
   z.object({

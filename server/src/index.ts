@@ -282,6 +282,10 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.setHangmanWord(context.sessionId, context.participantId, event.payload.word);
         } else if (event.type === "hangman:guessLetter") {
           await sessionService.guessHangmanLetter(context.sessionId, context.participantId, event.payload.letter);
+        } else if (event.type === "hangman:solveOpen") {
+          await sessionService.openHangmanSolve(context.sessionId, context.participantId);
+        } else if (event.type === "hangman:solveCancel") {
+          await sessionService.cancelHangmanSolve(context.sessionId, context.participantId);
         } else if (event.type === "hangman:solve") {
           await sessionService.solveHangman(context.sessionId, context.participantId, event.payload.guess);
         } else if (event.type === "hangman:setTurn") {
