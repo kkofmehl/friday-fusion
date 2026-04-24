@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { SessionState } from "../../shared/contracts";
 import { SessionService } from "./sessionService";
 import { FileStore } from "./storage/fileStore";
 
@@ -140,10 +141,102 @@ describe("SessionService", () => {
       player.participantId,
       state.gameState.state.activeQuestion.correctAnswer
     );
+    await setup.service.submitTriviaAnswer(
+      host.sessionId,
+      host.participantId,
+      state.gameState.state.activeQuestion.options[0]!
+    );
     await setup.service.closeTriviaQuestion(host.sessionId);
     const scored = setup.service.getState(host.sessionId);
     const participant = scored.participants.find((item) => item.id === player.participantId);
     expect(participant?.score).toBe(1);
+  });
+
+  it("requires all participants to answer before checking trivia answers", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const player = await setup.service.joinSession(host.joinCode, "Player");
+    await setup.service.startGame(host.sessionId, "trivia");
+    await setup.service.startTrivia(host.sessionId, 1);
+    const state = setup.service.getState(host.sessionId);
+    if (!state.gameState || state.gameState.type !== "trivia" || !state.gameState.state.activeQuestion) {
+      throw new Error("Expected trivia state");
+    }
+    await setup.service.submitTriviaAnswer(
+      host.sessionId,
+      player.participantId,
+      state.gameState.state.activeQuestion.correctAnswer
+    );
+    await expect(setup.service.closeTriviaQuestion(host.sessionId)).rejects.toThrow(
+      "Not all participants have answered."
+    );
+  });
+
+  it("loads trivia with filter options and exposes loading progress updates", async () => {
+    const localTempDir = await mkdtemp(path.join(os.tmpdir(), "fusion-test-"));
+    tempDir = localTempDir;
+    const store = new FileStore<{ sessions: any[] }>(path.join(localTempDir, "sessions.json"));
+    let seenConfig: unknown;
+    const snapshots: SessionState[] = [];
+    const service = new SessionService(
+      store,
+      async (config, _excludedQuestionIds, onProgress) => {
+        seenConfig = config;
+        await onProgress?.({
+          totalCalls: 3,
+          completedCalls: 1,
+          message: "Loaded batch 1 of 3."
+        });
+        return [
+          {
+            id: "q-test",
+            category: "Science & Nature",
+            difficulty: "easy",
+            question: "What is H2O?",
+            options: ["Water", "Rock", "Air", "Fire"],
+            correctAnswer: "Water"
+          }
+        ];
+      }
+    );
+    await service.load();
+    service.setStateUpdateListener((sessionId) => {
+      snapshots.push(service.getState(sessionId));
+    });
+
+    const host = await service.createSession("Host");
+    await service.startGame(host.sessionId, "trivia");
+    await service.startTrivia(host.sessionId, {
+      totalQuestions: 10,
+      categoryMode: "single",
+      categoryId: 17,
+      difficulties: ["easy", "hard"]
+    });
+
+    expect(seenConfig).toEqual({
+      totalQuestions: 10,
+      categoryMode: "single",
+      categoryId: 17,
+      difficulties: ["easy", "hard"]
+    });
+    const loadingSnapshot = snapshots.find(
+      (state) =>
+        state.gameState?.type === "trivia"
+        && state.gameState.state.status === "loading"
+        && state.gameState.state.loading?.completedCalls === 1
+    );
+    expect(loadingSnapshot?.gameState?.type).toBe("trivia");
+    if (loadingSnapshot?.gameState?.type !== "trivia") {
+      throw new Error("expected trivia loading snapshot");
+    }
+    expect(loadingSnapshot.gameState.state.loading?.completedCalls).toBe(1);
+
+    const finalState = service.getState(host.sessionId);
+    if (finalState.gameState?.type !== "trivia") throw new Error("expected trivia");
+    expect(finalState.gameState.state.status).toBe("questionOpen");
+    expect(finalState.gameState.state.totalQuestions).toBe(10);
+    expect(finalState.gameState.state.loading).toBeNull();
   });
 
   it("removes participant and deletes session when last participant leaves", async () => {
@@ -558,8 +651,42 @@ describe("SessionService", () => {
       }
       expect(seen.has(state.gameState.state.activeQuestion.id)).toBe(false);
       seen.add(state.gameState.state.activeQuestion.id);
+      await setup.service.submitTriviaAnswer(
+        host.sessionId,
+        host.participantId,
+        state.gameState.state.activeQuestion.options[0]!
+      );
       await setup.service.closeTriviaQuestion(host.sessionId);
       await setup.service.nextTriviaQuestion(host.sessionId);
     }
+  });
+
+  it("tracks used trivia questions across trivia rounds in a session", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.startGame(host.sessionId, "trivia");
+    await setup.service.startTrivia(host.sessionId, 4);
+    const seen = new Set<string>();
+    for (let i = 0; i < 4; i += 1) {
+      const state = setup.service.getState(host.sessionId);
+      if (!state.gameState || state.gameState.type !== "trivia" || !state.gameState.state.activeQuestion) {
+        break;
+      }
+      const question = state.gameState.state.activeQuestion;
+      seen.add(question.id);
+      const hostAnswer = state.gameState.state.activeQuestion.options[0]!;
+      await setup.service.submitTriviaAnswer(host.sessionId, host.participantId, hostAnswer);
+      await setup.service.closeTriviaQuestion(host.sessionId);
+      await setup.service.nextTriviaQuestion(host.sessionId);
+    }
+
+    await setup.service.startGame(host.sessionId, "trivia");
+    await setup.service.startTrivia(host.sessionId, 4);
+    const nextState = setup.service.getState(host.sessionId);
+    if (!nextState.gameState || nextState.gameState.type !== "trivia" || !nextState.gameState.state.activeQuestion) {
+      throw new Error("Expected trivia state");
+    }
+    expect(seen.has(nextState.gameState.state.activeQuestion.id)).toBe(false);
   });
 });

@@ -1525,6 +1525,54 @@ label {
   max-width: 280px;
 }
 
+.trivia-setup-note {
+  font-size: 0.82rem;
+  color: var(--slate-600);
+}
+
+.trivia-difficulty-picker {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.trivia-difficulty-picker legend {
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+  color: var(--slate-700);
+}
+
+.trivia-difficulty-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  text-transform: capitalize;
+  color: var(--slate-800);
+  font-size: 0.9rem;
+}
+
+.trivia-loading {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.trivia-loading progress {
+  width: 100%;
+  height: 0.95rem;
+}
+
+.trivia-loading-progress {
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.9rem;
+}
+
 .trivia-meta {
   display: flex;
   gap: 0.4rem;

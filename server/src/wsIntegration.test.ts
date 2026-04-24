@@ -144,4 +144,17 @@ describe("WebSocket integration", () => {
     first.close();
     second.close();
   });
+
+  it("returns trivia categories from REST endpoint", async () => {
+    if (!context) throw new Error("no context");
+    const response = await context.app.inject({
+      method: "GET",
+      url: "/api/trivia/categories"
+    });
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as Array<{ id: number; name: string }>;
+    expect(payload.length).toBeGreaterThan(0);
+    expect(typeof payload[0]?.id).toBe("number");
+    expect(typeof payload[0]?.name).toBe("string");
+  });
 });

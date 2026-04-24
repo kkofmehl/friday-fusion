@@ -104,7 +104,13 @@ export function App(): JSX.Element {
       />
       <main className="app-main">
         {inGame ? (
-          <GameScreen session={session} currentParticipantId={auth.participantId} isHost={isHost} send={sendEvent} />
+          <GameScreen
+            session={session}
+            currentParticipantId={auth.participantId}
+            isHost={isHost}
+            send={sendEvent}
+            apiBase={apiBase}
+          />
         ) : (
           <LobbyScreen
             session={session}

@@ -67,12 +67,50 @@ export const triviaQuestionSchema = z.object({
 });
 export type TriviaQuestion = z.infer<typeof triviaQuestionSchema>;
 
+export const triviaDifficultySchema = z.enum(["easy", "medium", "hard"]);
+export type TriviaDifficulty = z.infer<typeof triviaDifficultySchema>;
+
+export const triviaCategoryModeSchema = z.enum(["all", "single"]);
+export type TriviaCategoryMode = z.infer<typeof triviaCategoryModeSchema>;
+
+export const triviaRoundConfigSchema = z
+  .object({
+    totalQuestions: z.number().int().positive(),
+    categoryMode: triviaCategoryModeSchema,
+    categoryId: z.number().int().positive().optional(),
+    difficulties: z.array(triviaDifficultySchema).min(1)
+  })
+  .superRefine((value, ctx) => {
+    if (value.categoryMode === "single" && typeof value.categoryId !== "number") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["categoryId"],
+        message: "categoryId is required when categoryMode is single."
+      });
+    }
+  });
+export type TriviaRoundConfig = z.infer<typeof triviaRoundConfigSchema>;
+
+export const triviaLoadingSchema = z.object({
+  totalCalls: z.number().int().positive(),
+  completedCalls: z.number().int().nonnegative(),
+  message: z.string()
+});
+export type TriviaLoadingState = z.infer<typeof triviaLoadingSchema>;
+
+export const triviaCategorySchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string()
+});
+export type TriviaCategory = z.infer<typeof triviaCategorySchema>;
+
 export const triviaStateSchema = z.object({
   questionIndex: z.number().int().nonnegative(),
   totalQuestions: z.number().int().positive(),
   activeQuestion: triviaQuestionSchema.nullable(),
   answers: z.record(z.string(), z.string()),
-  status: z.enum(["idle", "questionOpen", "questionClosed", "finished"])
+  loading: triviaLoadingSchema.nullable(),
+  status: z.enum(["idle", "loading", "questionOpen", "questionClosed", "finished"])
 });
 export type TriviaState = z.infer<typeof triviaStateSchema>;
 
@@ -150,7 +188,7 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("truths:beginVoting"), payload: z.object({ presenterId: z.string() }) }),
   z.object({ type: z.literal("truths:vote"), payload: z.object({ lieIndex: z.number().int().min(0).max(2) }) }),
   z.object({ type: z.literal("truths:reveal"), payload: z.object({}) }),
-  z.object({ type: z.literal("trivia:start"), payload: z.object({ totalQuestions: z.number().int().positive() }) }),
+  z.object({ type: z.literal("trivia:start"), payload: triviaRoundConfigSchema }),
   z.object({ type: z.literal("trivia:answer"), payload: z.object({ answer: z.string() }) }),
   z.object({ type: z.literal("trivia:closeQuestion"), payload: z.object({}) }),
   z.object({ type: z.literal("trivia:nextQuestion"), payload: z.object({}) })

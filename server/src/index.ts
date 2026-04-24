@@ -14,6 +14,7 @@ import {
   type ServerEvent
 } from "../../shared/contracts";
 import { SessionService, createSessionService } from "./sessionService";
+import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const DEAD_CONNECTION_MS = 45_000;
@@ -55,6 +56,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
 
   const connections = new Map<string, ConnectionContext[]>();
   const lastConnectedAt = new Map<string, number>();
+  const loadTriviaCategories = createTriviaCategoryLoader();
 
   const sendEvent = (socket: WebSocket, event: ServerEvent): void => {
     try {
@@ -91,6 +93,9 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       }
     });
   };
+  sessionService.setStateUpdateListener((sessionId) => {
+    broadcastState(sessionId);
+  });
 
   const sendError = (socket: WebSocket, message: string): void => {
     sendEvent(socket, { type: "error", payload: { message } });
@@ -146,6 +151,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
   });
 
   app.get("/api/active-sessions", async () => sessionService.listActiveSessions());
+  app.get("/api/trivia/categories", async () => loadTriviaCategories());
 
   app.post("/api/sessions/join", async (request, reply) => {
     const body = joinSessionRequestSchema.parse(request.body);
@@ -323,7 +329,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only host can start trivia.");
           }
-          await sessionService.startTrivia(context.sessionId, event.payload.totalQuestions);
+          await sessionService.startTrivia(context.sessionId, event.payload);
         } else if (event.type === "trivia:answer") {
           await sessionService.submitTriviaAnswer(context.sessionId, context.participantId, event.payload.answer);
         } else if (event.type === "trivia:closeQuestion") {

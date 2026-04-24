@@ -8,12 +8,14 @@ export function GameScreen({
   session,
   currentParticipantId,
   isHost,
-  send
+  send,
+  apiBase
 }: {
   session: SessionState;
   currentParticipantId: string;
   isHost: boolean;
   send: (event: ClientEvent) => void;
+  apiBase: string;
 }): JSX.Element {
   const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
   const rotatedCreatorId = hangmanState
@@ -48,7 +50,15 @@ export function GameScreen({
       return <TwoTruthsGame session={session} currentParticipantId={currentParticipantId} isHost={isHost} send={send} />;
     }
     if (session.gameState?.type === "trivia") {
-      return <TriviaGame session={session} currentParticipantId={currentParticipantId} isHost={isHost} send={send} />;
+      return (
+        <TriviaGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          apiBase={apiBase}
+        />
+      );
     }
     return null;
   };

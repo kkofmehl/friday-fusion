@@ -83,3 +83,11 @@
     - Rebuilt frontend assets via `npm run build -w web`, producing fresh hashed bundles (`index-2cc442fe.js`, `index-271d451c.css`) now served by server on port 3000.
     - Re-ran `npm run test -w web` (19 passing) to confirm no regressions.
 31. User reported a hang when an incorrect solve occurred on the final miss, with server log `broadcastState: payload failed schema` and Zod error `Too small: expected number to be >=0`. Root cause: `participantSchema.score` was constrained to nonnegative while turns-mode penalties intentionally produce negative scores (`-5`). Assistant fixed shared contract to allow signed integer scores (`z.number().int()`), then reran full test suite (server 33 passed, web 19 passed).
+32. User requested Two Truths and a Lie UX updates: neutral statement input hint copy ("Place your truth or lie here") and reveal-phase attribution showing who voted for each statement; asked to implement the approved plan as-is without editing the plan file and to complete all to-dos.
+33. User requested follow-up Two Truths UX flow fixes: show clear post-vote feedback (disable/gray voting controls after casting) and replace reveal-stage "new round" behavior with host-driven selection of the next presenter so existing submissions are reused.
+34. User requested a 500-question trivia library, no repeats once questions are used, and trivia host UX that only reveals the `Check answers` action after all participants have submitted, with explicit feedback when everyone has answered.
+35. User asked whether Friday Fusion can use Open Trivia DB (`https://opentdb.com/api_config.php`) to source trivia questions instead of the static JSON file.
+36. User shared local Open Trivia DB reference notes in `trivia_api_docs.txt` and offered them for API integration verification.
+37. User approved adding Open Trivia DB rate-limit handling (`response_code = 5`) with retry/backoff behavior.
+38. User requested full implementation of host-configurable trivia loading: host-selected question count/category/difficulty, multiple-choice-only Open Trivia batching with 5-second API cadence, favor-easy remainder split, loading progress bar UI during build, and start only after questions are loaded.
+39. User reported `npm run build -w web` failure and asked for diagnosis/fix.

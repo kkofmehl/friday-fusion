@@ -5,13 +5,15 @@ import {
   type HangmanActivity,
   type HangmanMode,
   type SessionState,
-  type TriviaQuestion,
-  triviaQuestionSchema
+  type TriviaLoadingState,
+  type TriviaQuestion
 } from "../../shared/contracts";
-import questions from "./data/triviaQuestions.json";
 import { FileStore } from "./storage/fileStore";
-
-const triviaQuestions: TriviaQuestion[] = triviaQuestionSchema.array().parse(questions);
+import {
+  createTriviaQuestionLoader,
+  type TriviaQuestionLoadProgress,
+  type TriviaQuestionLoader
+} from "./triviaQuestionLoader";
 
 type ParticipantInternal = {
   id: string;
@@ -49,10 +51,13 @@ type TriviaGameInternal = {
   id: string;
   type: "trivia";
   questions: TriviaQuestion[];
+  totalQuestions: number;
   questionIndex: number;
   activeQuestion: TriviaQuestion | null;
   answers: Record<string, string>;
-  status: "idle" | "questionOpen" | "questionClosed" | "finished";
+  usedQuestionIds: string[];
+  loading: TriviaLoadingState | null;
+  status: "idle" | "loading" | "questionOpen" | "questionClosed" | "finished";
 };
 
 type GameInternal = HangmanGameInternal | TwoTruthsGameInternal | TriviaGameInternal;
@@ -128,15 +133,6 @@ const maskWord = (word: string, guessedLetters: string[]): string => {
     .join("");
 };
 
-const shuffle = <T>(input: T[]): T[] => {
-  const copy = [...input];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-};
-
 const nonCreatorGuessers = (
   session: SessionInternal,
   game: HangmanGameInternal
@@ -170,7 +166,9 @@ const appendHangmanActivity = (
   }
 };
 
-const ensureGameShape = (game: GameInternal & { mode?: HangmanMode }): GameInternal => {
+const ensureGameShape = (
+  game: GameInternal & { mode?: HangmanMode; usedQuestionIds?: string[]; loading?: TriviaLoadingState | null; totalQuestions?: number }
+): GameInternal => {
   if (game.type === "hangman") {
     return {
       ...game,
@@ -181,15 +179,34 @@ const ensureGameShape = (game: GameInternal & { mode?: HangmanMode }): GameInter
       activityLog: game.activityLog ?? []
     };
   }
+  if (game.type === "trivia") {
+    return {
+      ...game,
+      id: game.id ?? nanoid(6),
+      usedQuestionIds: game.usedQuestionIds ?? [],
+      loading: game.loading ?? null,
+      totalQuestions: game.totalQuestions ?? (game.questions.length || 1)
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
 export class SessionService {
   private sessions = new Map<string, SessionInternal>();
   private readonly store: FileStore<PersistedState>;
+  private readonly triviaQuestionLoader: TriviaQuestionLoader;
+  private onSessionUpdated?: (sessionId: string) => void;
 
-  public constructor(store: FileStore<PersistedState>) {
+  public constructor(
+    store: FileStore<PersistedState>,
+    triviaQuestionLoader: TriviaQuestionLoader = createTriviaQuestionLoader()
+  ) {
     this.store = store;
+    this.triviaQuestionLoader = triviaQuestionLoader;
+  }
+
+  public setStateUpdateListener(listener: ((sessionId: string) => void) | undefined): void {
+    this.onSessionUpdated = listener;
   }
 
   public async load(): Promise<void> {
@@ -338,6 +355,7 @@ export class SessionService {
     options: GameStartOptions = {}
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
     let next: GameInternal;
     if (game === "hangman") {
@@ -384,9 +402,12 @@ export class SessionService {
         id: nanoid(6),
         type: "trivia",
         questions: [],
+        totalQuestions: 1,
         questionIndex: 0,
         activeQuestion: null,
         answers: {},
+        usedQuestionIds: previousTrivia?.usedQuestionIds ?? [],
+        loading: null,
         status: "idle"
       };
     }
@@ -844,20 +865,66 @@ export class SessionService {
     await this.persist();
   }
 
-  public async startTrivia(sessionId: string, totalQuestions: number): Promise<void> {
+  public async startTrivia(
+    sessionId: string,
+    config:
+      | number
+      | {
+        totalQuestions: number;
+        categoryMode: "all" | "single";
+        categoryId?: number;
+        difficulties: Array<"easy" | "medium" | "hard">;
+      }
+  ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
     const game = session.games[0];
     if (game?.type !== "trivia") {
       throw new Error("Trivia game is not active.");
     }
-    const picked = shuffle(triviaQuestions).slice(0, Math.max(1, Math.min(totalQuestions, triviaQuestions.length)));
+    const roundConfig = typeof config === "number"
+      ? {
+        totalQuestions: config,
+        categoryMode: "all" as const,
+        difficulties: ["easy", "medium", "hard"] as const
+      }
+      : config;
+
+    game.totalQuestions = roundConfig.totalQuestions;
+    game.questions = [];
+    game.questionIndex = 0;
+    game.activeQuestion = null;
+    game.answers = {};
+    game.loading = {
+      totalCalls: 1,
+      completedCalls: 0,
+      message: "Building trivia round..."
+    };
+    game.status = "loading";
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+
+    const usedQuestionIds = new Set(game.usedQuestionIds);
+    const updateProgress = async (progress: TriviaQuestionLoadProgress): Promise<void> => {
+      game.loading = progress;
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+    };
+    const picked = await this.triviaQuestionLoader(roundConfig, usedQuestionIds, updateProgress);
     game.questions = picked;
     game.questionIndex = 0;
     game.activeQuestion = picked[0] ?? null;
+    if (picked[0]) {
+      usedQuestionIds.add(picked[0].id);
+      game.usedQuestionIds = [...usedQuestionIds];
+    }
     game.answers = {};
+    game.loading = null;
     game.status = picked[0] ? "questionOpen" : "finished";
     session.updatedAt = Date.now();
     await this.persist();
+    this.onSessionUpdated?.(sessionId);
   }
 
   public async submitTriviaAnswer(sessionId: string, participantId: string, answer: string): Promise<void> {
@@ -876,6 +943,12 @@ export class SessionService {
     const game = session.games[0];
     if (game?.type !== "trivia" || game.status !== "questionOpen" || !game.activeQuestion) {
       throw new Error("No trivia question is open.");
+    }
+    const allParticipantsAnswered = session.participants.every(
+      (participant) => typeof game.answers[participant.id] === "string"
+    );
+    if (!allParticipantsAnswered) {
+      throw new Error("Not all participants have answered.");
     }
     const correctAnswer = game.activeQuestion.correctAnswer;
     Object.entries(game.answers).forEach(([participantId, answer]) => {
@@ -899,6 +972,11 @@ export class SessionService {
     }
     const nextIndex = game.questionIndex + 1;
     const nextQuestion = game.questions[nextIndex];
+    if (nextQuestion) {
+      const usedQuestionIds = new Set(game.usedQuestionIds);
+      usedQuestionIds.add(nextQuestion.id);
+      game.usedQuestionIds = [...usedQuestionIds];
+    }
     game.questionIndex = nextIndex;
     game.activeQuestion = nextQuestion ?? null;
     game.answers = {};
@@ -980,9 +1058,10 @@ export class SessionService {
         type: "trivia",
         state: {
           questionIndex: game.questionIndex,
-          totalQuestions: game.questions.length || 1,
+          totalQuestions: game.totalQuestions,
           activeQuestion: game.activeQuestion,
           answers: game.answers,
+          loading: game.loading,
           status: game.status
         }
       }

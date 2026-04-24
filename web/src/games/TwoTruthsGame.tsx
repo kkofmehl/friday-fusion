@@ -27,14 +27,26 @@ export function TwoTruthsGame({
   const presenterSubmission = truthState?.currentPresenterId
     ? truthState.submissions[truthState.currentPresenterId]
     : null;
+  const participantNameById = useMemo(
+    () => new Map(session.participants.map((participant) => [participant.id, participant.displayName])),
+    [session.participants]
+  );
+  const availablePresenterIds = useMemo(() => {
+    if (!truthState) return [];
+    const submittedIds = Object.keys(truthState.submissions);
+    if (truthState.status === "revealed" && truthState.currentPresenterId) {
+      return submittedIds.filter((participantId) => participantId !== truthState.currentPresenterId);
+    }
+    return submittedIds;
+  }, [truthState]);
 
   useEffect(() => {
     if (!truthState) return;
-    if (!selectedPresenter) {
-      const first = Object.keys(truthState.submissions)[0];
-      if (first) setSelectedPresenter(first);
+    if (!selectedPresenter || !availablePresenterIds.includes(selectedPresenter)) {
+      const first = availablePresenterIds[0] ?? "";
+      setSelectedPresenter(first);
     }
-  }, [truthState, selectedPresenter]);
+  }, [availablePresenterIds, selectedPresenter, truthState]);
 
   useEffect(() => {
     if (truthState?.status !== "voting") {
@@ -46,6 +58,15 @@ export function TwoTruthsGame({
 
   const mySubmission = truthState.submissions[currentParticipantId];
   const isPresenter = truthState.currentPresenterId === currentParticipantId;
+  const myVote = truthState.votes[currentParticipantId];
+  const hasVoted = truthState.status === "voting" && myVote !== undefined;
+
+  useEffect(() => {
+    if (truthState?.status !== "voting") return;
+    if (myVote !== undefined) {
+      setVoteIndex(myVote);
+    }
+  }, [myVote, truthState?.status]);
 
   const submitStatements = (event: FormEvent) => {
     event.preventDefault();
@@ -66,6 +87,10 @@ export function TwoTruthsGame({
 
   const tallyForStatement = (index: number): number =>
     Object.values(truthState.votes).filter((v) => v === index).length;
+  const votersForStatement = (index: number): string[] =>
+    Object.entries(truthState.votes)
+      .filter(([, vote]) => vote === index)
+      .map(([voterId]) => participantNameById.get(voterId) ?? voterId);
 
   const statusLabel =
     truthState.status === "collecting"
@@ -115,7 +140,7 @@ export function TwoTruthsGame({
                       next[index] = event.target.value;
                       setStatements(next);
                     }}
-                    placeholder={`Something ${index === 0 ? "true" : index === 1 ? "true" : "false"} about you`}
+                    placeholder="Place your truth or lie here"
                     required
                   />
                 </label>
@@ -188,7 +213,7 @@ export function TwoTruthsGame({
                   type="button"
                   className={`truths-option${voteIndex === index ? " is-selected" : ""}`}
                   onClick={() => setVoteIndex(index)}
-                  disabled={isPresenter}
+                  disabled={isPresenter || hasVoted}
                 >
                   <span className="truths-option-index">{index + 1}</span>
                   <span>{statement}</span>
@@ -199,10 +224,10 @@ export function TwoTruthsGame({
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={voteIndex === null}
+                disabled={voteIndex === null || hasVoted}
                 onClick={castVote}
               >
-                Cast vote
+                {hasVoted ? "Vote cast" : "Cast vote"}
               </button>
             )}
             {isHost && (
@@ -228,6 +253,7 @@ export function TwoTruthsGame({
               {presenterSubmission.statements.map((statement, index) => {
                 const isLie = index === presenterSubmission.lieIndex;
                 const count = tallyForStatement(index);
+                const voterNames = votersForStatement(index);
                 return (
                   <li key={index} className={isLie ? "is-lie" : "is-truth"}>
                     <div className="truths-reveal-row">
@@ -240,18 +266,39 @@ export function TwoTruthsGame({
                     <div className="truths-tally">
                       {count} {count === 1 ? "vote" : "votes"}
                     </div>
+                    <div className="truths-tally">
+                      Voted by: {voterNames.length > 0 ? voterNames.join(", ") : "No one"}
+                    </div>
                   </li>
                 );
               })}
             </ol>
             {isHost && (
               <div className="row">
+                <label className="truths-field">
+                  <span>Pick next presenter</span>
+                  <select
+                    value={selectedPresenter}
+                    onChange={(event) => setSelectedPresenter(event.target.value)}
+                  >
+                    <option value="">Select...</option>
+                    {availablePresenterIds.map((participantId) => {
+                      const participant = session.participants.find((p) => p.id === participantId);
+                      return (
+                        <option key={participantId} value={participantId}>
+                          {participant?.displayName ?? participantId}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => send({ type: "game:start", payload: { game: "twoTruthsLie" } })}
+                  disabled={!selectedPresenter}
+                  onClick={() => send({ type: "truths:beginVoting", payload: { presenterId: selectedPresenter } })}
                 >
-                  Play another round
+                  Start next presenter
                 </button>
               </div>
             )}
