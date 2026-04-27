@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 import {
   ICEBREAKER_PROMPT_MAX_CHARS,
+  TWENTY_QUESTIONS_ITEM_MAX_CHARS,
+  TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
   type GameStartOptions,
   type GameType,
   type HangmanActivity,
@@ -129,12 +131,36 @@ type GuessTheImageGameInternal = {
   everyoneBetweenRounds: boolean;
 };
 
+type TwentyQuestionsLogEntryInternal = {
+  id: string;
+  participantId: string;
+  text: string;
+  askedAt: number;
+  answer: "yes" | "no" | null;
+};
+
+type TwentyQuestionsGameInternal = {
+  id: string;
+  type: "twentyQuestions";
+  status: "waitingForItem" | "playing" | "finished";
+  itemSelectorId: string;
+  maxQuestions: number;
+  secretItem: string | null;
+  questionsUsed: number;
+  currentAskerId: string | null;
+  questionLog: TwentyQuestionsLogEntryInternal[];
+  questionDraft: { participantId: string; text: string } | null;
+  outcome: "team" | "selector" | null;
+  scoresApplied: boolean;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
   | TriviaGameInternal
   | IcebreakerGameInternal
-  | GuessTheImageGameInternal;
+  | GuessTheImageGameInternal
+  | TwentyQuestionsGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -339,7 +365,52 @@ const ensureGameShape = (
       everyoneBetweenRounds: (game as GuessTheImageGameInternal).everyoneBetweenRounds === true
     };
   }
+  if (game.type === "twentyQuestions") {
+    const g = game as TwentyQuestionsGameInternal;
+    const maxQ = Math.min(50, Math.max(1, Number(g.maxQuestions) || 20));
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      maxQuestions: maxQ,
+      secretItem: g.secretItem ?? null,
+      questionsUsed: g.questionsUsed ?? 0,
+      currentAskerId: g.currentAskerId === undefined ? null : g.currentAskerId,
+      questionLog: Array.isArray(g.questionLog) ? g.questionLog : [],
+      questionDraft: g.questionDraft ?? null,
+      outcome: g.outcome ?? null,
+      scoresApplied: g.scoresApplied === true
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
+};
+
+const twentyQuestionsGuesserIds = (session: SessionInternal, game: TwentyQuestionsGameInternal): string[] =>
+  session.participants.filter((p) => p.id !== game.itemSelectorId).map((p) => p.id);
+
+const twentyQuestionsHasPendingQuestion = (game: TwentyQuestionsGameInternal): boolean =>
+  game.questionLog.some((entry) => entry.answer === null);
+
+const twentyQuestionsFirstAskerId = (
+  session: SessionInternal,
+  game: TwentyQuestionsGameInternal
+): string | null => {
+  const ids = twentyQuestionsGuesserIds(session, game);
+  return ids[0] ?? null;
+};
+
+const twentyQuestionsAdvanceAsker = (session: SessionInternal, game: TwentyQuestionsGameInternal): void => {
+  const guessers = twentyQuestionsGuesserIds(session, game);
+  if (guessers.length === 0) {
+    game.currentAskerId = null;
+    return;
+  }
+  if (!game.currentAskerId) {
+    game.currentAskerId = guessers[0]!;
+    return;
+  }
+  const idx = guessers.indexOf(game.currentAskerId);
+  const base = idx === -1 ? 0 : idx;
+  game.currentAskerId = guessers[(base + 1) % guessers.length]!;
 };
 
 const shuffleDisplayPerm = (): [number, number, number, number] => {
@@ -715,6 +786,35 @@ export class SessionService {
         results: null,
         everyoneBetweenRounds: false
       };
+    } else if (game === "twentyQuestions") {
+      if (session.participants.length < 2) {
+        throw new Error("20 Questions needs at least two players.");
+      }
+      const requestedSelector = options.twentyQuestionsItemSelectorId;
+      const itemSelectorId =
+        requestedSelector && session.participants.some((p) => p.id === requestedSelector)
+          ? requestedSelector
+          : (session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id);
+      const guessers = session.participants.filter((p) => p.id !== itemSelectorId);
+      if (guessers.length === 0) {
+        throw new Error("20 Questions needs at least one person who is not the item selector.");
+      }
+      const rawMax = options.twentyQuestionsMaxQuestions ?? 20;
+      const maxQuestions = Math.min(50, Math.max(1, Math.floor(Number(rawMax)) || 20));
+      next = {
+        id: nanoid(6),
+        type: "twentyQuestions",
+        status: "waitingForItem",
+        itemSelectorId,
+        maxQuestions,
+        secretItem: null,
+        questionsUsed: 0,
+        currentAskerId: null,
+        questionLog: [],
+        questionDraft: null,
+        outcome: null,
+        scoresApplied: false
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -828,6 +928,21 @@ export class SessionService {
       if (activeGuess.setupMode === "single" && activeGuess.setupParticipantId === participantId) {
         activeGuess.setupParticipantId =
           session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id;
+      }
+    }
+
+    const active20q = session.games[0];
+    if (active20q?.type === "twentyQuestions") {
+      if (active20q.itemSelectorId === participantId) {
+        session.games = [];
+      } else if (active20q.status === "playing") {
+        const guessersAfter = twentyQuestionsGuesserIds(session, active20q);
+        if (guessersAfter.length === 0) {
+          session.games = [];
+        } else if (active20q.currentAskerId === participantId) {
+          active20q.currentAskerId = guessersAfter[0] ?? null;
+          active20q.questionDraft = null;
+        }
       }
     }
 
@@ -2056,6 +2171,164 @@ export class SessionService {
     this.onSessionUpdated?.(sessionId);
   }
 
+  private applyTwentyQuestionsScores(session: SessionInternal, game: TwentyQuestionsGameInternal): void {
+    if (game.scoresApplied) {
+      return;
+    }
+    game.scoresApplied = true;
+    if (game.outcome === "team") {
+      for (const p of session.participants) {
+        if (p.id !== game.itemSelectorId) {
+          p.score += 1;
+        }
+      }
+    } else if (game.outcome === "selector") {
+      const guesserCount = session.participants.filter((p) => p.id !== game.itemSelectorId).length;
+      const sel = session.participants.find((p) => p.id === game.itemSelectorId);
+      if (sel && guesserCount > 0) {
+        sel.score += guesserCount;
+      }
+    }
+  }
+
+  private finishTwentyQuestions(session: SessionInternal, game: TwentyQuestionsGameInternal): void {
+    if (game.secretItem === null) {
+      return;
+    }
+    game.status = "finished";
+    if (!game.outcome) {
+      game.outcome = "selector";
+    }
+    this.applyTwentyQuestionsScores(session, game);
+  }
+
+  public async setTwentyQuestionsItem(sessionId: string, participantId: string, text: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "twentyQuestions" || game.status !== "waitingForItem") {
+      throw new Error("Cannot set the item right now.");
+    }
+    if (participantId !== game.itemSelectorId) {
+      throw new Error("Only the item selector can set the secret.");
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.length > TWENTY_QUESTIONS_ITEM_MAX_CHARS) {
+      throw new Error("Invalid item text.");
+    }
+    game.secretItem = trimmed;
+    game.status = "playing";
+    game.currentAskerId = twentyQuestionsFirstAskerId(session, game);
+    game.questionsUsed = 0;
+    game.questionLog = [];
+    game.questionDraft = null;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async setTwentyQuestionsQuestionDraft(
+    sessionId: string,
+    participantId: string,
+    text: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "twentyQuestions" || game.status !== "playing") {
+      throw new Error("Cannot update a question draft right now.");
+    }
+    if (!game.currentAskerId || participantId !== game.currentAskerId) {
+      throw new Error("Only the current asker can draft a question.");
+    }
+    if (twentyQuestionsHasPendingQuestion(game)) {
+      throw new Error("Answer the pending question first.");
+    }
+    const t = text.slice(0, TWENTY_QUESTIONS_QUESTION_MAX_CHARS);
+    game.questionDraft = { participantId, text: t };
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async submitTwentyQuestionsQuestion(
+    sessionId: string,
+    participantId: string,
+    text: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "twentyQuestions" || game.status !== "playing") {
+      throw new Error("Cannot submit a question right now.");
+    }
+    if (!game.currentAskerId || participantId !== game.currentAskerId) {
+      throw new Error("Not your turn to ask.");
+    }
+    if (twentyQuestionsHasPendingQuestion(game)) {
+      throw new Error("There is already a question waiting for an answer.");
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.length > TWENTY_QUESTIONS_QUESTION_MAX_CHARS) {
+      throw new Error("Invalid question.");
+    }
+    game.questionLog.push({
+      id: nanoid(8),
+      participantId,
+      text: trimmed,
+      askedAt: Date.now(),
+      answer: null
+    });
+    game.questionDraft = null;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async answerTwentyQuestions(
+    sessionId: string,
+    participantId: string,
+    questionId: string,
+    answer: "yes" | "no"
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "twentyQuestions" || game.status !== "playing") {
+      throw new Error("Cannot answer right now.");
+    }
+    if (participantId !== game.itemSelectorId) {
+      throw new Error("Only the item selector can answer.");
+    }
+    const entry = game.questionLog.find((e) => e.id === questionId && e.answer === null);
+    if (!entry) {
+      throw new Error("No matching open question.");
+    }
+    entry.answer = answer;
+    game.questionsUsed += 1;
+    game.questionDraft = null;
+    if (game.questionsUsed >= game.maxQuestions) {
+      game.outcome = "selector";
+      this.finishTwentyQuestions(session, game);
+      await this.persist();
+      return;
+    }
+    twentyQuestionsAdvanceAsker(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async twentyQuestionsTeamSolved(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "twentyQuestions" || game.status !== "playing") {
+      throw new Error("Cannot mark solved right now.");
+    }
+    if (participantId !== game.itemSelectorId) {
+      throw new Error("Only the item selector can confirm the team solved it.");
+    }
+    if (twentyQuestionsHasPendingQuestion(game)) {
+      throw new Error("Answer the current question before marking the round solved.");
+    }
+    game.outcome = "team";
+    this.finishTwentyQuestions(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private toPublicState(session: SessionInternal, viewerParticipantId?: string): SessionState {
     const game = session.games[0];
     const base = {
@@ -2333,6 +2606,70 @@ export class SessionService {
             })),
             revealDurationMs: game.revealDurationMs,
             roundStartedAt: game.roundStartedAt ?? 0
+          }
+        }
+      };
+    }
+
+    if (game.type === "twentyQuestions") {
+      if (game.status === "waitingForItem") {
+        return {
+          ...base,
+          activeGame: "twentyQuestions",
+          gameState: {
+            type: "twentyQuestions",
+            state: {
+              status: "waitingForItem",
+              itemSelectorId: game.itemSelectorId,
+              maxQuestions: game.maxQuestions
+            }
+          }
+        };
+      }
+      if (game.status === "playing") {
+        return {
+          ...base,
+          activeGame: "twentyQuestions",
+          gameState: {
+            type: "twentyQuestions",
+            state: {
+              status: "playing",
+              itemSelectorId: game.itemSelectorId,
+              maxQuestions: game.maxQuestions,
+              questionsUsed: game.questionsUsed,
+              currentAskerId: game.currentAskerId ?? "",
+              questionLog: game.questionLog.map((e) => ({
+                id: e.id,
+                participantId: e.participantId,
+                text: e.text,
+                askedAt: e.askedAt,
+                answer: e.answer
+              })),
+              questionDraft: game.questionDraft
+            }
+          }
+        };
+      }
+      const revealedItem = game.secretItem ?? "";
+      return {
+        ...base,
+        activeGame: "twentyQuestions",
+        gameState: {
+          type: "twentyQuestions",
+          state: {
+            status: "finished",
+            itemSelectorId: game.itemSelectorId,
+            maxQuestions: game.maxQuestions,
+            questionsUsed: game.questionsUsed,
+            outcome: game.outcome ?? "selector",
+            revealedItem,
+            questionLog: game.questionLog.map((e) => ({
+              id: e.id,
+              participantId: e.participantId,
+              text: e.text,
+              askedAt: e.askedAt,
+              answer: e.answer === "yes" || e.answer === "no" ? e.answer : "no"
+            }))
           }
         }
       };

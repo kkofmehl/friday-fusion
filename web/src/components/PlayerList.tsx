@@ -41,6 +41,20 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Submitting", tone: "submitting" };
     }
   }
+  if (session.gameState.type === "twentyQuestions") {
+    const st = session.gameState.state;
+    if (st.status === "waitingForItem" && st.itemSelectorId === participantId) {
+      return { label: "Choosing item", tone: "creator" };
+    }
+    if (st.status === "playing") {
+      if (st.itemSelectorId === participantId) {
+        return { label: "Oracle", tone: "presenter" };
+      }
+      if (st.currentAskerId === participantId) {
+        return { label: "Asking", tone: "answerer" };
+      }
+    }
+  }
   return null;
 };
 

@@ -32,4 +32,25 @@ describe("LobbyScreen", () => {
       payload: { game: "hangman", options: { hangmanMode: "turns", hangmanCreatorId: "p3" } }
     });
   });
+
+  it("sends item selector and max questions when starting 20 Questions", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />
+    );
+
+    const twentyCard = screen.getByRole("heading", { name: "20 Questions" }).closest("article");
+    if (!twentyCard) throw new Error("expected 20 Questions card");
+    fireEvent.change(twentyCard.querySelector("#twenty-q-selector-select")!, { target: { value: "p2" } });
+    fireEvent.change(twentyCard.querySelector("#twenty-q-max-questions")!, { target: { value: "15" } });
+    fireEvent.click(twentyCard.querySelector(".btn-primary")!);
+
+    expect(send).toHaveBeenCalledWith({
+      type: "game:start",
+      payload: {
+        game: "twentyQuestions",
+        options: { twentyQuestionsItemSelectorId: "p2", twentyQuestionsMaxQuestions: 15 }
+      }
+    });
+  });
 });

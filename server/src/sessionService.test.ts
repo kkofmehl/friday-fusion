@@ -1247,4 +1247,103 @@ describe("SessionService", () => {
       setup.service.setGuessTheImageSetupParticipant(host.sessionId, host.participantId, guest.participantId)
     ).rejects.toThrow("single-preparer mode");
   });
+
+  it("starts 20 Questions with host-selected item selector and max questions", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "twentyQuestions", {
+      twentyQuestionsItemSelectorId: guest.participantId,
+      twentyQuestionsMaxQuestions: 12
+    });
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "twentyQuestions") throw new Error("expected twentyQuestions");
+    expect(state.gameState.state.status).toBe("waitingForItem");
+    expect(state.gameState.state.itemSelectorId).toBe(guest.participantId);
+    expect(state.gameState.state.maxQuestions).toBe(12);
+  });
+
+  it("20 Questions: one question cycle and team solved scoring", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Alice");
+    const g2 = await setup.service.joinSession(host.joinCode, "Bob");
+    await setup.service.startGame(host.sessionId, "twentyQuestions", {
+      twentyQuestionsItemSelectorId: host.participantId,
+      twentyQuestionsMaxQuestions: 20
+    });
+    await setup.service.setTwentyQuestionsItem(host.sessionId, host.participantId, "Moon");
+    const playing = setup.service.getState(host.sessionId);
+    if (playing.gameState?.type !== "twentyQuestions" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const askerId = playing.gameState.state.currentAskerId;
+    await setup.service.submitTwentyQuestionsQuestion(host.sessionId, askerId, "Is it in outer space?");
+    const mid = setup.service.getState(host.sessionId);
+    if (mid.gameState?.type !== "twentyQuestions") throw new Error("expected twentyQuestions");
+    const qid = mid.gameState.state.questionLog[0]?.id;
+    if (!qid) throw new Error("expected question id");
+    await setup.service.answerTwentyQuestions(host.sessionId, host.participantId, qid, "yes");
+    await setup.service.twentyQuestionsTeamSolved(host.sessionId, host.participantId);
+    const fin = setup.service.getState(host.sessionId);
+    if (fin.gameState?.type !== "twentyQuestions" || fin.gameState.state.status !== "finished") {
+      throw new Error("expected finished");
+    }
+    expect(fin.gameState.state.outcome).toBe("team");
+    expect(fin.gameState.state.revealedItem).toBe("Moon");
+    const scores = Object.fromEntries(fin.participants.map((p) => [p.displayName, p.score]));
+    expect(scores.Alice).toBe(1);
+    expect(scores.Bob).toBe(1);
+    expect(scores.Host).toBe(0);
+  });
+
+  it("20 Questions: selector wins when question budget is exhausted", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "A");
+    const g2 = await setup.service.joinSession(host.joinCode, "B");
+    const g3 = await setup.service.joinSession(host.joinCode, "C");
+    await setup.service.startGame(host.sessionId, "twentyQuestions", {
+      twentyQuestionsItemSelectorId: host.participantId,
+      twentyQuestionsMaxQuestions: 3
+    });
+    await setup.service.setTwentyQuestionsItem(host.sessionId, host.participantId, "Secret");
+    for (let i = 0; i < 3; i += 1) {
+      const s = setup.service.getState(host.sessionId);
+      if (s.gameState?.type !== "twentyQuestions" || s.gameState.state.status !== "playing") {
+        throw new Error("expected playing");
+      }
+      const asker = s.gameState.state.currentAskerId;
+      await setup.service.submitTwentyQuestionsQuestion(host.sessionId, asker, `Q${i + 1}?`);
+      const afterQ = setup.service.getState(host.sessionId);
+      if (afterQ.gameState?.type !== "twentyQuestions") throw new Error("expected twentyQuestions");
+      const pending = afterQ.gameState.state.questionLog.find((e) => e.answer === null);
+      if (!pending) throw new Error("expected pending");
+      await setup.service.answerTwentyQuestions(host.sessionId, host.participantId, pending.id, "no");
+    }
+    const fin = setup.service.getState(host.sessionId);
+    if (fin.gameState?.type !== "twentyQuestions" || fin.gameState.state.status !== "finished") {
+      throw new Error("expected finished");
+    }
+    expect(fin.gameState.state.outcome).toBe("selector");
+    const hostP = fin.participants.find((p) => p.displayName === "Host");
+    expect(hostP?.score).toBe(3);
+  });
+
+  it("clears 20 Questions when the item selector leaves", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "twentyQuestions", {
+      twentyQuestionsItemSelectorId: guest.participantId
+    });
+    await setup.service.removeParticipant(host.sessionId, guest.participantId);
+    const state = setup.service.getState(host.sessionId);
+    expect(state.gameState).toBeNull();
+    expect(state.activeGame).toBeNull();
+  });
 });

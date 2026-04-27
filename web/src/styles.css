@@ -1963,6 +1963,68 @@ label {
 }
 
 /* ============================================================
+   20 Questions
+   ============================================================ */
+.twenty-questions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.twenty-questions-muted {
+  color: var(--slate-500);
+  font-size: 0.95rem;
+}
+
+.twenty-questions-hint {
+  font-size: 0.85rem;
+}
+
+.twenty-questions-draft {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  font-size: 0.95rem;
+}
+
+.twenty-questions-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.twenty-questions-pending {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 1px solid var(--slate-200);
+  margin: 0.5rem 0;
+}
+
+.twenty-questions-log {
+  margin-top: 1.25rem;
+}
+
+.twenty-questions-log h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.twenty-questions-log-list {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.twenty-questions-log-who {
+  font-weight: 600;
+}
+
+/* ============================================================
    Animations + reduced motion
    ============================================================ */
 @keyframes pulse {

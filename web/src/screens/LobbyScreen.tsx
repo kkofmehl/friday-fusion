@@ -46,6 +46,12 @@ const GAMES: GameOption[] = [
     title: "Guess the image",
     description: "Image fades in; pick the right caption as fast as you can.",
     emoji: "G"
+  },
+  {
+    id: "twentyQuestions",
+    title: "20 Questions",
+    description: "One person picks something; others ask yes/no questions until they guess or run out.",
+    emoji: "20"
   }
 ];
 
@@ -66,6 +72,11 @@ export function LobbyScreen({
     const host = session.participants.find((p) => p.isHost);
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
+  const [twentyQSelectorId, setTwentyQSelectorId] = useState(() => {
+    const host = session.participants.find((p) => p.isHost);
+    return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
+  });
+  const [twentyQMaxQuestions, setTwentyQMaxQuestions] = useState(20);
 
   useEffect(() => {
     if (session.participants.some((participant) => participant.id === hangmanCreatorId)) {
@@ -86,6 +97,15 @@ export function LobbyScreen({
     );
   }, [currentParticipantId, guessImagePreparer, session.participants]);
 
+  useEffect(() => {
+    if (session.participants.some((p) => p.id === twentyQSelectorId)) {
+      return;
+    }
+    setTwentyQSelectorId(
+      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+    );
+  }, [currentParticipantId, session.participants, twentyQSelectorId]);
+
   const startGame = (game: GameType) => {
     if (game === "hangman") {
       send({ type: "game:start", payload: { game, options: { hangmanMode, hangmanCreatorId } } });
@@ -103,6 +123,20 @@ export function LobbyScreen({
           payload: { game, options: { guessImageSetupParticipantId: guessImagePreparer } }
         });
       }
+      return;
+    }
+    if (game === "twentyQuestions") {
+      const maxQ = Math.min(50, Math.max(1, Math.floor(twentyQMaxQuestions) || 20));
+      send({
+        type: "game:start",
+        payload: {
+          game,
+          options: {
+            twentyQuestionsItemSelectorId: twentyQSelectorId,
+            twentyQuestionsMaxQuestions: maxQ
+          }
+        }
+      });
       return;
     }
     send({ type: "game:start", payload: { game } });
@@ -193,6 +227,38 @@ export function LobbyScreen({
                       </option>
                     ))}
                   </select>
+                </fieldset>
+              )}
+              {game.id === "twentyQuestions" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Round setup</legend>
+                  <label className="mode-picker-label" htmlFor="twenty-q-selector-select">
+                    Item selector (answers yes / no)
+                  </label>
+                  <select
+                    id="twenty-q-selector-select"
+                    value={twentyQSelectorId}
+                    onChange={(event) => setTwentyQSelectorId(event.target.value)}
+                  >
+                    {session.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                        {participant.isHost ? " (host)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="mode-picker-label" htmlFor="twenty-q-max-questions">
+                    Question budget
+                  </label>
+                  <input
+                    id="twenty-q-max-questions"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={twentyQMaxQuestions}
+                    onChange={(event) => setTwentyQMaxQuestions(Number(event.target.value))}
+                  />
+                  <p className="mode-option-hint">1–50 questions (default 20). Guessers take turns asking.</p>
                 </fieldset>
               )}
               <button

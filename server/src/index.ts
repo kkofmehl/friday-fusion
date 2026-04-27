@@ -642,6 +642,33 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.choiceIndex
           );
+        } else if (event.type === "twentyQuestions:setItem") {
+          await sessionService.setTwentyQuestionsItem(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "twentyQuestions:questionDraft") {
+          await sessionService.setTwentyQuestionsQuestionDraft(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "twentyQuestions:submitQuestion") {
+          await sessionService.submitTwentyQuestionsQuestion(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "twentyQuestions:answer") {
+          await sessionService.answerTwentyQuestions(
+            context.sessionId,
+            context.participantId,
+            event.payload.questionId,
+            event.payload.answer
+          );
+        } else if (event.type === "twentyQuestions:teamSolved") {
+          await sessionService.twentyQuestionsTeamSolved(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);

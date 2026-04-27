@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const gameTypeSchema = z.enum(["hangman", "twoTruthsLie", "trivia", "icebreaker", "guessTheImage"]);
+export const gameTypeSchema = z.enum([
+  "hangman",
+  "twoTruthsLie",
+  "trivia",
+  "icebreaker",
+  "guessTheImage",
+  "twentyQuestions"
+]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
 export const participantSchema = z.object({
@@ -233,6 +240,58 @@ export const guessTheImageStateSchema = z.discriminatedUnion("status", [
 ]);
 export type GuessTheImageState = z.infer<typeof guessTheImageStateSchema>;
 
+/** Max length for the secret person/place/thing. */
+export const TWENTY_QUESTIONS_ITEM_MAX_CHARS = 200;
+/** Max length for a submitted question line. */
+export const TWENTY_QUESTIONS_QUESTION_MAX_CHARS = 500;
+
+export const twentyQuestionsLogEntrySchema = z.object({
+  id: z.string(),
+  participantId: z.string(),
+  text: z.string(),
+  askedAt: z.number().int(),
+  /** `null` means the selector has not answered yet (only one such entry at a time). */
+  answer: z.enum(["yes", "no"]).nullable()
+});
+export type TwentyQuestionsLogEntry = z.infer<typeof twentyQuestionsLogEntrySchema>;
+
+export const twentyQuestionsFinishedLogEntrySchema = twentyQuestionsLogEntrySchema.extend({
+  answer: z.enum(["yes", "no"])
+});
+export type TwentyQuestionsFinishedLogEntry = z.infer<typeof twentyQuestionsFinishedLogEntrySchema>;
+
+export const twentyQuestionsStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("waitingForItem"),
+    itemSelectorId: z.string(),
+    maxQuestions: z.number().int().min(1).max(50)
+  }),
+  z.object({
+    status: z.literal("playing"),
+    itemSelectorId: z.string(),
+    maxQuestions: z.number().int().min(1).max(50),
+    questionsUsed: z.number().int().nonnegative(),
+    currentAskerId: z.string(),
+    questionLog: z.array(twentyQuestionsLogEntrySchema),
+    questionDraft: z
+      .object({
+        participantId: z.string(),
+        text: z.string()
+      })
+      .nullable()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    itemSelectorId: z.string(),
+    maxQuestions: z.number().int().min(1).max(50),
+    questionsUsed: z.number().int().nonnegative(),
+    outcome: z.enum(["team", "selector"]),
+    revealedItem: z.string(),
+    questionLog: z.array(twentyQuestionsFinishedLogEntrySchema)
+  })
+]);
+export type TwentyQuestionsState = z.infer<typeof twentyQuestionsStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -253,6 +312,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("guessTheImage"),
     state: guessTheImageStateSchema
+  }),
+  z.object({
+    type: z.literal("twentyQuestions"),
+    state: twentyQuestionsStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -298,7 +361,11 @@ export const gameStartOptionsSchema = z.object({
   /** Guess the image: who uploads the image and enters descriptions for the first round (defaults to host). */
   guessImageSetupParticipantId: z.string().optional(),
   /** Guess the image: when `everyone`, each player prepares their own image; host then picks which one to play. */
-  guessImageSetupMode: z.enum(["single", "everyone"]).optional()
+  guessImageSetupMode: z.enum(["single", "everyone"]).optional(),
+  /** 20 Questions: who picks the secret item and answers yes/no (defaults to host if omitted). */
+  twentyQuestionsItemSelectorId: z.string().optional(),
+  /** 20 Questions: question budget for the round (default 20, clamped server-side to 1–50). */
+  twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -381,7 +448,27 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("guessImage:lock"),
     payload: z.object({ choiceIndex: z.number().int().min(0).max(3) })
-  })
+  }),
+  z.object({
+    type: z.literal("twentyQuestions:setItem"),
+    payload: z.object({ text: z.string().min(1).max(TWENTY_QUESTIONS_ITEM_MAX_CHARS) })
+  }),
+  z.object({
+    type: z.literal("twentyQuestions:questionDraft"),
+    payload: z.object({ text: z.string().max(TWENTY_QUESTIONS_QUESTION_MAX_CHARS) })
+  }),
+  z.object({
+    type: z.literal("twentyQuestions:submitQuestion"),
+    payload: z.object({ text: z.string().min(1).max(TWENTY_QUESTIONS_QUESTION_MAX_CHARS) })
+  }),
+  z.object({
+    type: z.literal("twentyQuestions:answer"),
+    payload: z.object({
+      questionId: z.string().min(1),
+      answer: z.enum(["yes", "no"])
+    })
+  }),
+  z.object({ type: z.literal("twentyQuestions:teamSolved"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

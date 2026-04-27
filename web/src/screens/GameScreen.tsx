@@ -5,6 +5,7 @@ import { IcebreakerGame } from "../games/IcebreakerGame";
 import { TwoTruthsGame } from "../games/TwoTruthsGame";
 import { TriviaGame } from "../games/TriviaGame";
 import { GuessTheImageGame } from "../games/GuessTheImageGame";
+import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
 
 export function GameScreen({
   session,
@@ -42,6 +43,17 @@ export function GameScreen({
         }
       }
     }
+    : session.gameState?.type === "twentyQuestions"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "twentyQuestions",
+          options: {
+            twentyQuestionsItemSelectorId: session.gameState.state.itemSelectorId,
+            twentyQuestionsMaxQuestions: session.gameState.state.maxQuestions
+          }
+        }
+      }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
 
   const renderGame = () => {
@@ -81,6 +93,16 @@ export function GameScreen({
           isHost={isHost}
           send={send}
           apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "twentyQuestions") {
+      return (
+        <TwentyQuestionsGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
         />
       );
     }
