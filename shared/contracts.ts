@@ -5,6 +5,7 @@ export const gameTypeSchema = z.enum([
   "twoTruthsLie",
   "trivia",
   "icebreaker",
+  "guessWhoSaidIt",
   "guessTheImage",
   "twentyQuestions",
   "captionThis",
@@ -173,6 +174,102 @@ export const icebreakerRoundConfigSchema = z.object({
   totalQuestions: z.number().int().positive()
 });
 export type IcebreakerRoundConfig = z.infer<typeof icebreakerRoundConfigSchema>;
+
+/** Same shape as icebreaker: host picks how many stock prompts to play. */
+export const guessWhoSaidItRoundConfigSchema = icebreakerRoundConfigSchema;
+export type GuessWhoSaidItRoundConfig = z.infer<typeof guessWhoSaidItRoundConfigSchema>;
+
+export const guessWhoSaidItAnswerSlotSchema = z.object({
+  slotId: z.string(),
+  text: z.string(),
+  imageUrl: z.string().nullable()
+});
+export type GuessWhoSaidItAnswerSlot = z.infer<typeof guessWhoSaidItAnswerSlotSchema>;
+
+export const guessWhoSaidItVotingPromptSchema = z.object({
+  question: icebreakerQuestionSchema,
+  slots: z.array(guessWhoSaidItAnswerSlotSchema)
+});
+export type GuessWhoSaidItVotingPrompt = z.infer<typeof guessWhoSaidItVotingPromptSchema>;
+
+/** One voter's outcome row for a single answer slot (prompt reveal phase). */
+export const guessWhoSaidItRevealRowSchema = z.object({
+  slotId: z.string(),
+  guessedParticipantId: z.string(),
+  actualAuthorId: z.string(),
+  correct: z.boolean(),
+  pointsEarned: z.number().int().nonnegative()
+});
+export type GuessWhoSaidItRevealRow = z.infer<typeof guessWhoSaidItRevealRowSchema>;
+
+export const guessWhoSaidItPromptRevealSchema = z.object({
+  question: icebreakerQuestionSchema,
+  revealedAnswers: z.array(
+    z.object({
+      slotId: z.string(),
+      authorId: z.string(),
+      text: z.string(),
+      imageUrl: z.string().nullable()
+    })
+  ),
+  byVoter: z.array(
+    z.object({
+      voterId: z.string(),
+      rows: z.array(guessWhoSaidItRevealRowSchema),
+      pointsThisPrompt: z.number().int().nonnegative()
+    })
+  )
+});
+export type GuessWhoSaidItPromptReveal = z.infer<typeof guessWhoSaidItPromptRevealSchema>;
+
+const guessWhoSaidItRoundFieldsSchema = z.object({
+  questionIndex: z.number().int().nonnegative(),
+  totalQuestions: z.number().int().positive(),
+  activeQuestion: icebreakerQuestionSchema.nullable(),
+  submittedParticipantIds: z.array(z.string()),
+  usedQuestionIds: z.array(z.string())
+});
+
+export const guessWhoSaidItStateSchema = z.discriminatedUnion("status", [
+  guessWhoSaidItRoundFieldsSchema.extend({
+    status: z.literal("idle")
+  }),
+  guessWhoSaidItRoundFieldsSchema.extend({
+    status: z.literal("collecting")
+  }),
+  guessWhoSaidItRoundFieldsSchema.extend({
+    status: z.literal("votingReady")
+  }),
+  z.object({
+    status: z.literal("voting"),
+    usedQuestionIds: z.array(z.string()),
+    currentQuestionIndex: z.number().int().nonnegative(),
+    totalQuestions: z.number().int().positive(),
+    prompt: guessWhoSaidItVotingPromptSchema,
+    votedParticipantIds: z.array(z.string()),
+    allVotesIn: z.boolean(),
+    hasVoted: z.boolean()
+  }),
+  z.object({
+    status: z.literal("promptReveal"),
+    usedQuestionIds: z.array(z.string()),
+    currentQuestionIndex: z.number().int().nonnegative(),
+    totalQuestions: z.number().int().positive(),
+    reveal: guessWhoSaidItPromptRevealSchema
+  }),
+  z.object({
+    status: z.literal("roundSummary"),
+    usedQuestionIds: z.array(z.string()),
+    totalQuestions: z.number().int().positive(),
+    standings: z.array(
+      z.object({
+        participantId: z.string(),
+        correctGuesses: z.number().int().nonnegative()
+      })
+    )
+  })
+]);
+export type GuessWhoSaidItState = z.infer<typeof guessWhoSaidItStateSchema>;
 
 export const guessTheImageResultEntrySchema = z.object({
   participantId: z.string(),
@@ -454,6 +551,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("pictionary"),
     state: pictionaryStateSchema
+  }),
+  z.object({
+    type: z.literal("guessWhoSaidIt"),
+    state: guessWhoSaidItStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -573,6 +674,23 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("icebreaker:beginReveals"), payload: z.object({}) }),
   z.object({ type: z.literal("icebreaker:reveal"), payload: z.object({ participantId: z.string() }) }),
   z.object({ type: z.literal("icebreaker:nextQuestion"), payload: z.object({}) }),
+  z.object({ type: z.literal("guessWhoSaidIt:startRound"), payload: guessWhoSaidItRoundConfigSchema }),
+  z.object({
+    type: z.literal("guessWhoSaidIt:submitAnswer"),
+    payload: z.object({
+      text: z.string(),
+      imageFileId: z.string().nullable()
+    })
+  }),
+  z.object({ type: z.literal("guessWhoSaidIt:beginVoting"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("guessWhoSaidIt:setVotes"),
+    payload: z.object({
+      votes: z.record(z.string(), z.string())
+    })
+  }),
+  z.object({ type: z.literal("guessWhoSaidIt:advancePrompt"), payload: z.object({}) }),
+  z.object({ type: z.literal("guessWhoSaidIt:returnToSetup"), payload: z.object({}) }),
   z.object({
     type: z.literal("guessImage:configure"),
     payload: z.object({

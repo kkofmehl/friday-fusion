@@ -21,7 +21,12 @@ import {
 } from "../../shared/contracts";
 import { pickPictionaryClue } from "./pictionaryClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
+import { pickGuessWhoSaidItQuestions } from "./guessWhoSaidItQuestionLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
+import {
+  purgeAllGuessWhoSaidItSessionUploads,
+  purgeGuessWhoSaidItQuestionUploads
+} from "./guessWhoSaidItUploads";
 import {
   deleteCaptionThisStoredFile,
   purgeAllCaptionThisSessionUploads
@@ -102,6 +107,57 @@ type IcebreakerGameInternal = {
   /** Set while status is `gatheringPrompts`. */
   promptsPerParticipant: number | null;
   promptDraftsByParticipant: Record<string, string[]>;
+};
+
+type GuessWhoAnswerInternal = { text: string; imageFileId: string | null };
+
+type GuessWhoSlotInternal = {
+  slotId: string;
+  authorId: string;
+  text: string;
+  imageFileId: string | null;
+};
+
+type GuessWhoVotingPromptInternal = {
+  question: { id: string; text: string };
+  slots: GuessWhoSlotInternal[];
+};
+
+type GuessWhoRevealRowInternal = {
+  slotId: string;
+  guessedParticipantId: string;
+  actualAuthorId: string;
+  correct: boolean;
+  pointsEarned: number;
+};
+
+type GuessWhoPromptRevealSnapshotInternal = {
+  question: { id: string; text: string };
+  slots: GuessWhoSlotInternal[];
+  byVoter: Array<{
+    voterId: string;
+    rows: GuessWhoRevealRowInternal[];
+    pointsThisPrompt: number;
+  }>;
+};
+
+type GuessWhoSaidItGameInternal = {
+  id: string;
+  type: "guessWhoSaidIt";
+  questions: Array<{ id: string; text: string }>;
+  totalQuestions: number;
+  questionIndex: number;
+  activeQuestion: { id: string; text: string } | null;
+  privateSubmissions: Record<string, GuessWhoAnswerInternal>;
+  answersByQuestionIndex: Record<number, Record<string, GuessWhoAnswerInternal>>;
+  usedQuestionIds: string[];
+  status: "idle" | "collecting" | "votingReady" | "voting" | "promptReveal" | "roundSummary";
+  /** Which prompt (0-based) is active during voting / promptReveal */
+  votingQuestionIndex: number;
+  votingPrompt: GuessWhoVotingPromptInternal | null;
+  votes: Record<string, Record<string, string>>;
+  cumulativeCorrectByParticipant: Record<string, number>;
+  promptRevealSnapshot: GuessWhoPromptRevealSnapshotInternal | null;
 };
 
 type GuessTheImageResultInternal = {
@@ -222,6 +278,7 @@ type GameInternal =
   | TwoTruthsGameInternal
   | TriviaGameInternal
   | IcebreakerGameInternal
+  | GuessWhoSaidItGameInternal
   | GuessTheImageGameInternal
   | TwentyQuestionsGameInternal
   | CaptionThisGameInternal
@@ -392,6 +449,41 @@ const ensureGameShape = (
       promptDraftsByParticipant: raw.promptDraftsByParticipant ?? {}
     };
   }
+  if (game.type === "guessWhoSaidIt") {
+    const g = game as GuessWhoSaidItGameInternal & { votingPrompts?: GuessWhoVotingPromptInternal[] | null };
+    const legacyPrompts = Array.isArray(g.votingPrompts) ? g.votingPrompts : null;
+    const migratedPrompt =
+      g.votingPrompt ?? (legacyPrompts && legacyPrompts.length > 0 ? legacyPrompts[0]! : null);
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      questions: Array.isArray(g.questions) ? g.questions : [],
+      totalQuestions: Math.max(1, Number(g.totalQuestions) || 1),
+      questionIndex: Math.max(0, Number(g.questionIndex) || 0),
+      activeQuestion: g.activeQuestion ?? null,
+      privateSubmissions: g.privateSubmissions && typeof g.privateSubmissions === "object" ? g.privateSubmissions : {},
+      answersByQuestionIndex:
+        g.answersByQuestionIndex && typeof g.answersByQuestionIndex === "object" ? g.answersByQuestionIndex : {},
+      usedQuestionIds: Array.isArray(g.usedQuestionIds) ? g.usedQuestionIds : [],
+      votingQuestionIndex: Math.max(0, Number(g.votingQuestionIndex) || 0),
+      votingPrompt: migratedPrompt,
+      votes: g.votes && typeof g.votes === "object" ? g.votes : {},
+      cumulativeCorrectByParticipant:
+        g.cumulativeCorrectByParticipant && typeof g.cumulativeCorrectByParticipant === "object"
+          ? g.cumulativeCorrectByParticipant
+          : {},
+      promptRevealSnapshot: g.promptRevealSnapshot ?? null,
+      status:
+        g.status === "idle" ||
+        g.status === "collecting" ||
+        g.status === "votingReady" ||
+        g.status === "voting" ||
+        g.status === "promptReveal" ||
+        g.status === "roundSummary"
+          ? g.status
+          : "idle"
+    };
+  }
   if (game.type === "guessTheImage") {
     const desc = game.canonicalDescriptions ?? ["", "", "", ""];
     const setupMode: "single" | "everyone" = game.setupMode === "everyone" ? "everyone" : "single";
@@ -513,6 +605,15 @@ const shuffleEntryIds = (ids: string[]): string[] => {
     a[j] = t;
   }
   return a;
+};
+
+const shuffleGuessWhoSlotsInPlace = (slots: GuessWhoSlotInternal[]): void => {
+  for (let i = slots.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = slots[i]!;
+    slots[i] = slots[j]!;
+    slots[j] = t;
+  }
 };
 
 const twentyQuestionsGuesserIds = (session: SessionInternal, game: TwentyQuestionsGameInternal): string[] =>
@@ -647,6 +748,18 @@ export class SessionService {
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "collecting") {
       throw new Error("Icebreaker is not accepting uploads.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    return { questionIndex: game.questionIndex };
+  }
+
+  public assertGuessWhoSaidItUploadAllowed(sessionId: string, participantId: string): { questionIndex: number } {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "collecting") {
+      throw new Error("Guess Who Said It is not accepting uploads.");
     }
     if (!session.participants.some((p) => p.id === participantId)) {
       throw new Error("Participant is not in this session.");
@@ -985,6 +1098,30 @@ export class SessionService {
         promptsPerParticipant: null,
         promptDraftsByParticipant: {}
       };
+    } else if (game === "guessWhoSaidIt") {
+      if (session.participants.length < 2) {
+        throw new Error("Guess Who Said It needs at least two players.");
+      }
+      const previousGuessWho = session.games.find(
+        (entry): entry is GuessWhoSaidItGameInternal => entry.type === "guessWhoSaidIt"
+      );
+      next = {
+        id: nanoid(6),
+        type: "guessWhoSaidIt",
+        questions: [],
+        totalQuestions: 1,
+        questionIndex: 0,
+        activeQuestion: null,
+        privateSubmissions: {},
+        answersByQuestionIndex: {},
+        usedQuestionIds: previousGuessWho?.usedQuestionIds ?? [],
+        status: "idle",
+        votingQuestionIndex: 0,
+        votingPrompt: null,
+        votes: {},
+        cumulativeCorrectByParticipant: {},
+        promptRevealSnapshot: null
+      };
     } else if (game === "guessTheImage") {
       const hostId = session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id;
       if (!hostId) {
@@ -1111,6 +1248,9 @@ export class SessionService {
     if (active?.type === "icebreaker") {
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     }
+    if (active?.type === "guessWhoSaidIt") {
+      await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
+    }
     if (active?.type === "guessTheImage") {
       this.clearGuessImageTimer(sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -1135,6 +1275,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
@@ -1148,6 +1289,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
@@ -1177,6 +1319,7 @@ export class SessionService {
       this.clearGuessImageTimer(sessionId);
       this.clearPictionaryTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+      await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
       await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
       this.sessions.delete(sessionId);
@@ -1211,6 +1354,12 @@ export class SessionService {
       delete activeIcebreaker.privateSubmissions[participantId];
       activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
       delete activeIcebreaker.promptDraftsByParticipant[participantId];
+    }
+
+    const activeGuessWho = session.games[0];
+    if (activeGuessWho?.type === "guessWhoSaidIt" && activeGuessWho.status !== "idle") {
+      session.games = [];
+      await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     }
 
     const activeGuess = session.games[0];
@@ -2038,6 +2187,301 @@ export class SessionService {
     }
     session.updatedAt = Date.now();
     await this.persist();
+  }
+
+  private guessWhoAdvanceIfAllAnswered(session: SessionInternal, game: GuessWhoSaidItGameInternal): void {
+    if (game.status !== "collecting") {
+      return;
+    }
+    const valid = (s: GuessWhoAnswerInternal): boolean =>
+      s.text.trim().length > 0 || Boolean(s.imageFileId);
+    const allReady = session.participants.every((p) => {
+      const sub = game.privateSubmissions[p.id];
+      return sub && valid(sub);
+    });
+    if (!allReady) {
+      return;
+    }
+    game.answersByQuestionIndex[game.questionIndex] = { ...game.privateSubmissions };
+    game.privateSubmissions = {};
+    if (game.questionIndex < game.totalQuestions - 1) {
+      game.questionIndex += 1;
+      game.activeQuestion = game.questions[game.questionIndex] ?? null;
+    } else {
+      game.status = "votingReady";
+      game.activeQuestion = null;
+      game.questionIndex = game.totalQuestions;
+    }
+  }
+
+  public async startGuessWhoSaidItRound(
+    sessionId: string,
+    hostParticipantId: string,
+    totalQuestions: number
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can start the round.");
+    }
+    if (session.participants.length < 2) {
+      throw new Error("Guess Who Said It needs at least two players.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "idle") {
+      throw new Error("Guess Who Said It can only start from the lobby.");
+    }
+    const count = Math.max(1, Math.min(500, Math.floor(totalQuestions)));
+    const used = new Set(game.usedQuestionIds);
+    const picked = pickGuessWhoSaidItQuestions(used, count);
+    picked.forEach((q) => used.add(q.id));
+    game.usedQuestionIds = [...used];
+    game.questions = picked;
+    game.totalQuestions = picked.length;
+    game.questionIndex = 0;
+    game.activeQuestion = picked[0] ?? null;
+    game.privateSubmissions = {};
+    game.answersByQuestionIndex = {};
+    game.votingQuestionIndex = 0;
+    game.votingPrompt = null;
+    game.votes = {};
+    game.cumulativeCorrectByParticipant = {};
+    game.promptRevealSnapshot = null;
+    game.status = picked.length > 0 ? "collecting" : "idle";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async submitGuessWhoSaidItAnswer(
+    sessionId: string,
+    participantId: string,
+    payload: { text: string; imageFileId: string | null }
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "collecting") {
+      throw new Error("Guess Who Said It is not accepting answers.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const text = payload.text.trim();
+    const imageFileId = payload.imageFileId?.trim() || null;
+    if (text.length === 0 && !imageFileId) {
+      throw new Error("Enter an answer or attach an image.");
+    }
+    game.privateSubmissions[participantId] = { text, imageFileId };
+    this.guessWhoAdvanceIfAllAnswered(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async beginGuessWhoSaidItVoting(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can begin guessing.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "votingReady") {
+      throw new Error("Guess Who Said It is not ready for guessing.");
+    }
+    game.votingQuestionIndex = 0;
+    game.votingPrompt = this.guessWhoBuildPromptForQuestion(session, game, 0);
+    game.votes = {};
+    game.status = "voting";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async setGuessWhoSaidItVotes(
+    sessionId: string,
+    participantId: string,
+    votes: Record<string, string>
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "voting") {
+      throw new Error("Guess Who Said It is not in the guessing phase.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const prompt = game.votingPrompt;
+    if (!prompt) {
+      throw new Error("Voting is not configured.");
+    }
+    const expected = new Set(this.guessWhoExpectedSlotIdsForVoter(game, participantId));
+    const submitted = new Set(Object.keys(votes));
+    if (submitted.size !== expected.size || ![...expected].every((id) => submitted.has(id))) {
+      throw new Error("Submit one guess for every answer shown.");
+    }
+    const participantIds = new Set(session.participants.map((p) => p.id));
+    for (const slotId of expected) {
+      const gid = votes[slotId]!;
+      if (!participantIds.has(gid)) {
+        throw new Error("Invalid participant choice.");
+      }
+      if (gid === participantId) {
+        throw new Error("You cannot guess yourself.");
+      }
+    }
+    game.votes[participantId] = { ...votes };
+    if (this.guessWhoAllVotesIn(session, game)) {
+      this.guessWhoFinalizeCurrentPrompt(session, game);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async advanceGuessWhoPrompt(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can continue.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "promptReveal") {
+      throw new Error("Guess Who Said It is not ready to continue.");
+    }
+    const idx = game.votingQuestionIndex;
+    game.promptRevealSnapshot = null;
+    if (idx < game.totalQuestions - 1) {
+      game.votingQuestionIndex = idx + 1;
+      game.votingPrompt = this.guessWhoBuildPromptForQuestion(session, game, game.votingQuestionIndex);
+      game.votes = {};
+      game.status = "voting";
+    } else {
+      game.status = "roundSummary";
+      game.votingPrompt = null;
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async resetGuessWhoSaidItToIdle(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can return to setup.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "guessWhoSaidIt" || game.status !== "roundSummary") {
+      throw new Error("Guess Who Said It can only return to setup after the round summary.");
+    }
+    await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
+    game.questions = [];
+    game.totalQuestions = 1;
+    game.questionIndex = 0;
+    game.activeQuestion = null;
+    game.privateSubmissions = {};
+    game.answersByQuestionIndex = {};
+    game.votingQuestionIndex = 0;
+    game.votingPrompt = null;
+    game.votes = {};
+    game.cumulativeCorrectByParticipant = {};
+    game.promptRevealSnapshot = null;
+    game.status = "idle";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  private guessWhoBuildPromptForQuestion(
+    session: SessionInternal,
+    game: GuessWhoSaidItGameInternal,
+    questionIdx: number
+  ): GuessWhoVotingPromptInternal {
+    const q = game.questions[questionIdx];
+    const byParticipant = game.answersByQuestionIndex[questionIdx];
+    if (!q || !byParticipant) {
+      throw new Error("Missing answers for a prompt.");
+    }
+    const slots: GuessWhoSlotInternal[] = [];
+    for (const p of session.participants) {
+      const ans = byParticipant[p.id];
+      if (!ans || (!(ans.text.trim().length > 0) && !ans.imageFileId)) {
+        throw new Error("Missing answers for a prompt.");
+      }
+      slots.push({
+        slotId: nanoid(12),
+        authorId: p.id,
+        text: ans.text,
+        imageFileId: ans.imageFileId
+      });
+    }
+    shuffleGuessWhoSlotsInPlace(slots);
+    return { question: { id: q.id, text: q.text }, slots };
+  }
+
+  private guessWhoExpectedSlotIdsForVoter(game: GuessWhoSaidItGameInternal, voterId: string): string[] {
+    const prompt = game.votingPrompt;
+    if (!prompt) {
+      return [];
+    }
+    return prompt.slots.filter((sl) => sl.authorId !== voterId).map((sl) => sl.slotId);
+  }
+
+  private guessWhoAllVotesIn(session: SessionInternal, game: GuessWhoSaidItGameInternal): boolean {
+    if (!game.votingPrompt) {
+      return false;
+    }
+    for (const p of session.participants) {
+      const expected = new Set(this.guessWhoExpectedSlotIdsForVoter(game, p.id));
+      const vm = game.votes[p.id];
+      if (!vm) {
+        return false;
+      }
+      if (Object.keys(vm).length !== expected.size) {
+        return false;
+      }
+      for (const sid of expected) {
+        if (vm[sid] === undefined) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private guessWhoFinalizeCurrentPrompt(session: SessionInternal, game: GuessWhoSaidItGameInternal): void {
+    const prompt = game.votingPrompt;
+    if (!prompt) {
+      throw new Error("No voting prompt to finalize.");
+    }
+    const byVoter: GuessWhoPromptRevealSnapshotInternal["byVoter"] = [];
+    for (const voter of session.participants) {
+      const vm = game.votes[voter.id];
+      if (!vm) {
+        throw new Error("Missing votes.");
+      }
+      let pointsThisPrompt = 0;
+      const rows: GuessWhoRevealRowInternal[] = [];
+      for (const sl of prompt.slots) {
+        if (sl.authorId === voter.id) {
+          continue;
+        }
+        const guessedParticipantId = vm[sl.slotId] ?? "";
+        const correct = guessedParticipantId === sl.authorId;
+        const pointsEarned = correct ? 1 : 0;
+        if (correct) {
+          voter.score += 1;
+          pointsThisPrompt += 1;
+          game.cumulativeCorrectByParticipant[voter.id] =
+            (game.cumulativeCorrectByParticipant[voter.id] ?? 0) + 1;
+        }
+        rows.push({
+          slotId: sl.slotId,
+          guessedParticipantId,
+          actualAuthorId: sl.authorId,
+          correct,
+          pointsEarned
+        });
+      }
+      byVoter.push({ voterId: voter.id, rows, pointsThisPrompt });
+    }
+    game.promptRevealSnapshot = {
+      question: prompt.question,
+      slots: [...prompt.slots],
+      byVoter
+    };
+    game.votingPrompt = null;
+    game.status = "promptReveal";
   }
 
   private clearGuessImageTimer(sessionId: string): void {
@@ -3221,6 +3665,166 @@ export class SessionService {
           }
         }
       };
+    }
+
+    if (game.type === "guessWhoSaidIt") {
+      const gwsFile = (fileId: string | null): string | null =>
+        fileId
+          ? `/api/sessions/${session.sessionId}/guess-who-said-it/file/${encodeURIComponent(fileId)}`
+          : null;
+      const roundFields = {
+        questionIndex: game.questionIndex,
+        totalQuestions: game.totalQuestions,
+        activeQuestion: game.activeQuestion,
+        submittedParticipantIds:
+          game.status === "idle"
+            ? []
+            : session.participants
+                .filter((p) => {
+                  const s = game.privateSubmissions[p.id];
+                  return Boolean(s && (s.text.trim().length > 0 || s.imageFileId));
+                })
+                .map((p) => p.id),
+        usedQuestionIds: game.usedQuestionIds
+      };
+      if (game.status === "idle") {
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              ...roundFields,
+              status: "idle" as const
+            }
+          }
+        };
+      }
+      if (game.status === "collecting") {
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              ...roundFields,
+              status: "collecting" as const
+            }
+          }
+        };
+      }
+      if (game.status === "votingReady") {
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              ...roundFields,
+              status: "votingReady" as const
+            }
+          }
+        };
+      }
+      if (game.status === "voting" && game.votingPrompt) {
+        const votedParticipantIds = Object.keys(game.votes);
+        const allVotesIn = this.guessWhoAllVotesIn(session, game);
+        const hasVoted = Boolean(
+          viewerParticipantId && game.votes[viewerParticipantId] !== undefined
+        );
+        const filterViewer =
+          viewerParticipantId && session.participants.some((x) => x.id === viewerParticipantId)
+            ? viewerParticipantId
+            : null;
+        const pr = game.votingPrompt;
+        const visibleSlots =
+          filterViewer === null
+            ? []
+            : pr.slots.filter((sl) => sl.authorId !== filterViewer);
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              status: "voting" as const,
+              usedQuestionIds: game.usedQuestionIds,
+              currentQuestionIndex: game.votingQuestionIndex,
+              totalQuestions: game.totalQuestions,
+              prompt: {
+                question: pr.question,
+                slots: visibleSlots.map((sl) => ({
+                  slotId: sl.slotId,
+                  text: sl.text,
+                  imageUrl: gwsFile(sl.imageFileId)
+                }))
+              },
+              votedParticipantIds,
+              allVotesIn,
+              hasVoted
+            }
+          }
+        };
+      }
+      if (game.status === "promptReveal" && game.promptRevealSnapshot) {
+        const snap = game.promptRevealSnapshot;
+        const reveal = {
+          question: snap.question,
+          revealedAnswers: snap.slots.map((sl) => ({
+            slotId: sl.slotId,
+            authorId: sl.authorId,
+            text: sl.text,
+            imageUrl: gwsFile(sl.imageFileId)
+          })),
+          byVoter: snap.byVoter.map((bv) => ({
+            voterId: bv.voterId,
+            rows: bv.rows.map((r) => ({
+              slotId: r.slotId,
+              guessedParticipantId: r.guessedParticipantId,
+              actualAuthorId: r.actualAuthorId,
+              correct: r.correct,
+              pointsEarned: r.pointsEarned
+            })),
+            pointsThisPrompt: bv.pointsThisPrompt
+          }))
+        };
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              status: "promptReveal" as const,
+              usedQuestionIds: game.usedQuestionIds,
+              currentQuestionIndex: game.votingQuestionIndex,
+              totalQuestions: game.totalQuestions,
+              reveal
+            }
+          }
+        };
+      }
+      if (game.status === "roundSummary") {
+        const standings = session.participants
+          .map((p) => ({
+            participantId: p.id,
+            correctGuesses: game.cumulativeCorrectByParticipant[p.id] ?? 0
+          }))
+          .sort((a, b) => b.correctGuesses - a.correctGuesses || a.participantId.localeCompare(b.participantId));
+        return {
+          ...base,
+          activeGame: "guessWhoSaidIt",
+          gameState: {
+            type: "guessWhoSaidIt",
+            state: {
+              status: "roundSummary" as const,
+              usedQuestionIds: game.usedQuestionIds,
+              totalQuestions: game.totalQuestions,
+              standings
+            }
+          }
+        };
+      }
+      throw new Error(`Guess Who Said It could not be projected (status=${game.status}).`);
     }
 
     if (game.type === "guessTheImage") {

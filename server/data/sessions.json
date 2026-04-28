@@ -1,0 +1,26 @@
+{
+  "sessions": [
+    {
+      "sessionId": "eah0-lvz3-",
+      "sessionName": "Friday Crew",
+      "joinCode": "FRIDAY-CREW",
+      "participants": [
+        {
+          "id": "tOLf4dSa",
+          "displayName": "Karl",
+          "isHost": true,
+          "score": 3
+        },
+        {
+          "id": "3JfOonA2",
+          "displayName": "Kate",
+          "isHost": false,
+          "score": 3
+        }
+      ],
+      "games": [],
+      "updatedAt": 1777415664251,
+      "lobbyGamePreferences": {}
+    }
+  ]
+}

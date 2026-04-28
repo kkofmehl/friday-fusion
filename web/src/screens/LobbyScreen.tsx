@@ -45,6 +45,12 @@ const GAMES: GameOption[] = [
     emoji: "I"
   },
   {
+    id: "guessWhoSaidIt",
+    title: "Guess Who Said It?",
+    description: "Stock prompts, anonymous answers, then guess who said what—earn points for correct matches.",
+    emoji: "?"
+  },
+  {
     id: "guessTheImage",
     title: "Guess the image",
     description: "Image fades in; pick the right caption as fast as you can.",

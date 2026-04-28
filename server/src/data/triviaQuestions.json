@@ -1,0 +1,572 @@
+[
+  {
+    "id": "1",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What planet is known as the Red Planet?",
+    "options": ["Earth", "Mars", "Venus", "Jupiter"],
+    "correctAnswer": "Mars"
+  },
+  {
+    "id": "2",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "Who was the first President of the United States?",
+    "options": ["Abraham Lincoln", "George Washington", "Thomas Jefferson", "John Adams"],
+    "correctAnswer": "George Washington"
+  },
+  {
+    "id": "3",
+    "category": "geography",
+    "difficulty": "easy",
+    "question": "What is the largest ocean on Earth?",
+    "options": ["Atlantic Ocean", "Indian Ocean", "Pacific Ocean", "Arctic Ocean"],
+    "correctAnswer": "Pacific Ocean"
+  },
+  {
+    "id": "4",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What gas do plants absorb from the atmosphere?",
+    "options": ["Oxygen", "Nitrogen", "Carbon Dioxide", "Hydrogen"],
+    "correctAnswer": "Carbon Dioxide"
+  },
+  {
+    "id": "5",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "How many players are on a basketball team on the court?",
+    "options": ["4", "5", "6", "7"],
+    "correctAnswer": "5"
+  },
+  {
+    "id": "6",
+    "category": "entertainment",
+    "difficulty": "easy",
+    "question": "Who is Mickey Mouse’s creator?",
+    "options": ["Walt Disney", "Pixar", "DreamWorks", "Stan Lee"],
+    "correctAnswer": "Walt Disney"
+  },
+  {
+    "id": "7",
+    "category": "math",
+    "difficulty": "easy",
+    "question": "What is 7 x 8?",
+    "options": ["54", "56", "58", "60"],
+    "correctAnswer": "56"
+  },
+  {
+    "id": "8",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "In which year did World War II end?",
+    "options": ["1942", "1945", "1950", "1939"],
+    "correctAnswer": "1945"
+  },
+  {
+    "id": "9",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What is H2O commonly known as?",
+    "options": ["Oxygen", "Hydrogen", "Salt", "Water"],
+    "correctAnswer": "Water"
+  },
+  {
+    "id": "10",
+    "category": "geography",
+    "difficulty": "medium",
+    "question": "What is the capital of Australia?",
+    "options": ["Sydney", "Melbourne", "Canberra", "Perth"],
+    "correctAnswer": "Canberra"
+  },
+
+  {
+    "id": "11",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What part of the cell contains DNA?",
+    "options": ["Nucleus", "Cytoplasm", "Membrane", "Ribosome"],
+    "correctAnswer": "Nucleus"
+  },
+  {
+    "id": "12",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "What sport uses a puck?",
+    "options": ["Basketball", "Hockey", "Soccer", "Baseball"],
+    "correctAnswer": "Hockey"
+  },
+  {
+    "id": "13",
+    "category": "math",
+    "difficulty": "medium",
+    "question": "What is the square root of 144?",
+    "options": ["10", "11", "12", "13"],
+    "correctAnswer": "12"
+  },
+  {
+    "id": "14",
+    "category": "history",
+    "difficulty": "easy",
+    "question": "Who discovered America?",
+    "options": ["Columbus", "Magellan", "Cook", "Da Vinci"],
+    "correctAnswer": "Columbus"
+  },
+  {
+    "id": "15",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What force pulls objects toward Earth?",
+    "options": ["Magnetism", "Friction", "Gravity", "Energy"],
+    "correctAnswer": "Gravity"
+  },
+
+  {
+    "id": "16",
+    "category": "geography",
+    "difficulty": "easy",
+    "question": "What country is known as the Land of the Rising Sun?",
+    "options": ["China", "Japan", "Thailand", "Korea"],
+    "correctAnswer": "Japan"
+  },
+  {
+    "id": "17",
+    "category": "entertainment",
+    "difficulty": "medium",
+    "question": "What is the highest-grossing movie of all time (not adjusted for inflation)?",
+    "options": ["Titanic", "Avatar", "Endgame", "Star Wars"],
+    "correctAnswer": "Avatar"
+  },
+  {
+    "id": "18",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What is the chemical symbol for gold?",
+    "options": ["Ag", "Au", "Gd", "Go"],
+    "correctAnswer": "Au"
+  },
+  {
+    "id": "19",
+    "category": "math",
+    "difficulty": "easy",
+    "question": "What is 15 + 27?",
+    "options": ["40", "41", "42", "43"],
+    "correctAnswer": "42"
+  },
+  {
+    "id": "20",
+    "category": "sports",
+    "difficulty": "medium",
+    "question": "How long is an Olympic swimming pool?",
+    "options": ["25m", "50m", "75m", "100m"],
+    "correctAnswer": "50m"
+  },
+  {
+    "id": "21",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What planet is closest to the Sun?",
+    "options": ["Venus", "Earth", "Mercury", "Mars"],
+    "correctAnswer": "Mercury"
+  },
+  {
+    "id": "22",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "Who was the British Prime Minister during World War II?",
+    "options": ["Churchill", "Chamberlain", "Thatcher", "Blair"],
+    "correctAnswer": "Churchill"
+  },
+  {
+    "id": "23",
+    "category": "geography",
+    "difficulty": "easy",
+    "question": "Which continent is the Sahara Desert located in?",
+    "options": ["Asia", "Africa", "Australia", "South America"],
+    "correctAnswer": "Africa"
+  },
+  {
+    "id": "24",
+    "category": "math",
+    "difficulty": "medium",
+    "question": "What is 9 squared?",
+    "options": ["72", "81", "99", "90"],
+    "correctAnswer": "81"
+  },
+  {
+    "id": "25",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "What sport is known as 'the beautiful game'?",
+    "options": ["Basketball", "Soccer", "Tennis", "Cricket"],
+    "correctAnswer": "Soccer"
+  },
+  {
+    "id": "26",
+    "category": "entertainment",
+    "difficulty": "medium",
+    "question": "Who played Jack in Titanic?",
+    "options": ["Brad Pitt", "Leonardo DiCaprio", "Tom Cruise", "Matt Damon"],
+    "correctAnswer": "Leonardo DiCaprio"
+  },
+  {
+    "id": "27",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What is the hardest natural substance on Earth?",
+    "options": ["Gold", "Iron", "Diamond", "Quartz"],
+    "correctAnswer": "Diamond"
+  },
+  {
+    "id": "28",
+    "category": "history",
+    "difficulty": "easy",
+    "question": "What wall came down in 1989?",
+    "options": ["Great Wall", "Berlin Wall", "Hadrian's Wall", "Wailing Wall"],
+    "correctAnswer": "Berlin Wall"
+  },
+  {
+    "id": "29",
+    "category": "geography",
+    "difficulty": "medium",
+    "question": "What is the longest river in the world?",
+    "options": ["Amazon", "Nile", "Yangtze", "Mississippi"],
+    "correctAnswer": "Nile"
+  },
+  {
+    "id": "30",
+    "category": "math",
+    "difficulty": "easy",
+    "question": "What is 100 divided by 10?",
+    "options": ["5", "10", "20", "15"],
+    "correctAnswer": "10"
+  },
+
+  {
+    "id": "31",
+    "category": "sports",
+    "difficulty": "medium",
+    "question": "How many holes are played in a standard round of golf?",
+    "options": ["9", "12", "18", "24"],
+    "correctAnswer": "18"
+  },
+  {
+    "id": "32",
+    "category": "entertainment",
+    "difficulty": "easy",
+    "question": "What is the name of Harry Potter's owl?",
+    "options": ["Hedwig", "Errol", "Scabbers", "Crookshanks"],
+    "correctAnswer": "Hedwig"
+  },
+  {
+    "id": "33",
+    "category": "science",
+    "difficulty": "hard",
+    "question": "What particle carries a negative electric charge?",
+    "options": ["Proton", "Neutron", "Electron", "Photon"],
+    "correctAnswer": "Electron"
+  },
+  {
+    "id": "34",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "Who wrote the Declaration of Independence?",
+    "options": ["Washington", "Jefferson", "Franklin", "Adams"],
+    "correctAnswer": "Jefferson"
+  },
+  {
+    "id": "35",
+    "category": "geography",
+    "difficulty": "easy",
+    "question": "What is the capital of France?",
+    "options": ["Berlin", "Madrid", "Paris", "Rome"],
+    "correctAnswer": "Paris"
+  },
+
+  {
+    "id": "36",
+    "category": "math",
+    "difficulty": "medium",
+    "question": "What is 12 x 12?",
+    "options": ["124", "144", "132", "154"],
+    "correctAnswer": "144"
+  },
+  {
+    "id": "37",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "Which sport uses a bat and ball?",
+    "options": ["Soccer", "Baseball", "Hockey", "Tennis"],
+    "correctAnswer": "Baseball"
+  },
+  {
+    "id": "38",
+    "category": "entertainment",
+    "difficulty": "medium",
+    "question": "Which superhero is known as the Dark Knight?",
+    "options": ["Superman", "Batman", "Iron Man", "Spider-Man"],
+    "correctAnswer": "Batman"
+  },
+  {
+    "id": "39",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What gas do humans need to breathe?",
+    "options": ["Carbon Dioxide", "Oxygen", "Nitrogen", "Helium"],
+    "correctAnswer": "Oxygen"
+  },
+  {
+    "id": "40",
+    "category": "history",
+    "difficulty": "hard",
+    "question": "Which empire was ruled by Genghis Khan?",
+    "options": ["Roman", "Ottoman", "Mongol", "Persian"],
+    "correctAnswer": "Mongol"
+  },
+
+  {
+    "id": "41",
+    "category": "geography",
+    "difficulty": "medium",
+    "question": "Which U.S. state is known as the Sunshine State?",
+    "options": ["California", "Texas", "Florida", "Arizona"],
+    "correctAnswer": "Florida"
+  },
+  {
+    "id": "42",
+    "category": "math",
+    "difficulty": "easy",
+    "question": "What is 5 x 6?",
+    "options": ["30", "35", "25", "40"],
+    "correctAnswer": "30"
+  },
+  {
+    "id": "43",
+    "category": "sports",
+    "difficulty": "medium",
+    "question": "In what sport would you perform a slam dunk?",
+    "options": ["Soccer", "Basketball", "Volleyball", "Baseball"],
+    "correctAnswer": "Basketball"
+  },
+  {
+    "id": "44",
+    "category": "entertainment",
+    "difficulty": "easy",
+    "question": "What color is the Hulk?",
+    "options": ["Red", "Green", "Blue", "Yellow"],
+    "correctAnswer": "Green"
+  },
+  {
+    "id": "45",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What is the boiling point of water in Celsius?",
+    "options": ["90", "95", "100", "105"],
+    "correctAnswer": "100"
+  },
+
+  {
+    "id": "46",
+    "category": "history",
+    "difficulty": "easy",
+    "question": "Who was known as the Maid of Orléans?",
+    "options": ["Cleopatra", "Joan of Arc", "Marie Curie", "Queen Elizabeth"],
+    "correctAnswer": "Joan of Arc"
+  },
+  {
+    "id": "47",
+    "category": "geography",
+    "difficulty": "hard",
+    "question": "What is the smallest country in the world?",
+    "options": ["Monaco", "Vatican City", "San Marino", "Liechtenstein"],
+    "correctAnswer": "Vatican City"
+  },
+  {
+    "id": "48",
+    "category": "math",
+    "difficulty": "medium",
+    "question": "What is 45 divided by 9?",
+    "options": ["4", "5", "6", "7"],
+    "correctAnswer": "5"
+  },
+  {
+    "id": "49",
+    "category": "sports",
+    "difficulty": "hard",
+    "question": "How many players are on a baseball team roster (active MLB)?",
+    "options": ["25", "26", "27", "28"],
+    "correctAnswer": "26"
+  },
+  {
+    "id": "50",
+    "category": "entertainment",
+    "difficulty": "medium",
+    "question": "Who directed Jurassic Park?",
+    "options": ["James Cameron", "Steven Spielberg", "Ridley Scott", "George Lucas"],
+    "correctAnswer": "Steven Spielberg"
+  },
+
+  {
+    "id": "51",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "What is the center of our solar system?",
+    "options": ["Earth", "Moon", "Sun", "Mars"],
+    "correctAnswer": "Sun"
+  },
+  {
+    "id": "52",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "Which country gifted the Statue of Liberty to the USA?",
+    "options": ["Germany", "France", "Spain", "Italy"],
+    "correctAnswer": "France"
+  },
+  {
+    "id": "53",
+    "category": "geography",
+    "difficulty": "easy",
+    "question": "Which continent is Brazil in?",
+    "options": ["Africa", "Asia", "South America", "Europe"],
+    "correctAnswer": "South America"
+  },
+  {
+    "id": "54",
+    "category": "math",
+    "difficulty": "hard",
+    "question": "What is the value of pi rounded to two decimal places?",
+    "options": ["3.12", "3.14", "3.16", "3.18"],
+    "correctAnswer": "3.14"
+  },
+  {
+    "id": "55",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "What sport is played at Wimbledon?",
+    "options": ["Cricket", "Tennis", "Rugby", "Golf"],
+    "correctAnswer": "Tennis"
+  },
+
+  {
+    "id": "56",
+    "category": "entertainment",
+    "difficulty": "medium",
+    "question": "Who is Iron Man?",
+    "options": ["Steve Rogers", "Tony Stark", "Bruce Wayne", "Clark Kent"],
+    "correctAnswer": "Tony Stark"
+  },
+  {
+    "id": "57",
+    "category": "science",
+    "difficulty": "medium",
+    "question": "What organ pumps blood through the body?",
+    "options": ["Brain", "Lungs", "Heart", "Liver"],
+    "correctAnswer": "Heart"
+  },
+  {
+    "id": "58",
+    "category": "history",
+    "difficulty": "hard",
+    "question": "What year did the American Civil War begin?",
+    "options": ["1861", "1863", "1859", "1870"],
+    "correctAnswer": "1861"
+  },
+  {
+    "id": "59",
+    "category": "geography",
+    "difficulty": "medium",
+    "question": "What is the capital of Canada?",
+    "options": ["Toronto", "Vancouver", "Ottawa", "Montreal"],
+    "correctAnswer": "Ottawa"
+  },
+  {
+    "id": "60",
+    "category": "math",
+    "difficulty": "easy",
+    "question": "What is 8 + 7?",
+    "options": ["14", "15", "16", "13"],
+    "correctAnswer": "15"
+  },
+
+  {
+    "id": "61",
+    "category": "sports",
+    "difficulty": "medium",
+    "question": "How many points is a touchdown worth (before extra point)?",
+    "options": ["5", "6", "7", "8"],
+    "correctAnswer": "6"
+  },
+  {
+    "id": "62",
+    "category": "entertainment",
+    "difficulty": "easy",
+    "question": "What is the name of the toy cowboy in Toy Story?",
+    "options": ["Buzz", "Woody", "Jessie", "Andy"],
+    "correctAnswer": "Woody"
+  },
+  {
+    "id": "63",
+    "category": "science",
+    "difficulty": "hard",
+    "question": "What is the speed of light approximately?",
+    "options": ["300,000 km/s", "150,000 km/s", "1,000 km/s", "30,000 km/s"],
+    "correctAnswer": "300,000 km/s"
+  },
+  {
+    "id": "64",
+    "category": "history",
+    "difficulty": "easy",
+    "question": "Who was the first man on the Moon?",
+    "options": ["Buzz Aldrin", "Yuri Gagarin", "Neil Armstrong", "John Glenn"],
+    "correctAnswer": "Neil Armstrong"
+  },
+  {
+    "id": "65",
+    "category": "geography",
+    "difficulty": "medium",
+    "question": "Which country has the most population?",
+    "options": ["USA", "India", "China", "Russia"],
+    "correctAnswer": "India"
+  },
+
+  {
+    "id": "66",
+    "category": "math",
+    "difficulty": "medium",
+    "question": "What is 20% of 150?",
+    "options": ["25", "30", "35", "40"],
+    "correctAnswer": "30"
+  },
+  {
+    "id": "67",
+    "category": "sports",
+    "difficulty": "easy",
+    "question": "What sport uses a net, a shuttlecock, and rackets?",
+    "options": ["Tennis", "Badminton", "Volleyball", "Squash"],
+    "correctAnswer": "Badminton"
+  },
+  {
+    "id": "68",
+    "category": "entertainment",
+    "difficulty": "hard",
+    "question": "Which actor played the Joker in The Dark Knight?",
+    "options": ["Joaquin Phoenix", "Heath Ledger", "Jared Leto", "Jack Nicholson"],
+    "correctAnswer": "Heath Ledger"
+  },
+  {
+    "id": "69",
+    "category": "science",
+    "difficulty": "easy",
+    "question": "How many legs does a spider have?",
+    "options": ["6", "8", "10", "12"],
+    "correctAnswer": "8"
+  },
+  {
+    "id": "70",
+    "category": "history",
+    "difficulty": "medium",
+    "question": "Who was the first emperor of Rome?",
+    "options": ["Julius Caesar", "Augustus", "Nero", "Caligula"],
+    "correctAnswer": "Augustus"
+  }
+]

@@ -41,6 +41,15 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Submitting", tone: "submitting" };
     }
   }
+  if (session.gameState.type === "guessWhoSaidIt") {
+    const st = session.gameState.state;
+    if (st.status === "collecting" && !st.submittedParticipantIds.includes(participantId)) {
+      return { label: "Submitting", tone: "submitting" };
+    }
+    if (st.status === "voting" && !st.votedParticipantIds.includes(participantId)) {
+      return { label: "Guessing", tone: "voter" };
+    }
+  }
   if (session.gameState.type === "twentyQuestions") {
     const st = session.gameState.state;
     if (st.status === "waitingForItem" && st.itemSelectorId === participantId) {

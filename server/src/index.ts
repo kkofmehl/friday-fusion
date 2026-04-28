@@ -16,6 +16,10 @@ import {
   type ServerEvent
 } from "../../shared/contracts";
 import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
+import {
+  guessWhoSaidItQuestionUploadDir,
+  resolveGuessWhoSaidItStoredFile
+} from "./guessWhoSaidItUploads";
 import { captionThisSessionUploadDir, resolveCaptionThisStoredFile } from "./captionThisUploads";
 import { guessTheImageSessionUploadDir, resolveGuessTheImageStoredFile } from "./guessTheImageUploads";
 import { SessionService, createSessionService } from "./sessionService";
@@ -278,6 +282,79 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     const sessionId = (request.params as { sessionId: string }).sessionId;
     const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
     const abs = await resolveIcebreakerStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
+  });
+
+  app.post("/api/sessions/:sessionId/guess-who-said-it/upload", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    let participantId = "";
+    let fileBuffer: Buffer | null = null;
+    let mimeType = "";
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          if (part.fieldname !== "file") {
+            part.file.resume();
+            continue;
+          }
+          mimeType = part.mimetype;
+          fileBuffer = await part.toBuffer();
+        } else if (part.type === "field" && part.fieldname === "participantId") {
+          participantId = String(part.value ?? "").trim();
+        }
+      }
+    } catch (error) {
+      app.log.warn({ err: error }, "guess-who-said-it upload parse failed");
+      return reply.code(400).send({ message: "Invalid multipart body." });
+    }
+    if (!participantId || !fileBuffer?.length) {
+      return reply.code(400).send({ message: "participantId and file are required." });
+    }
+    if (fileBuffer.length > ICEBREAKER_MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ message: "File too large." });
+    }
+    const ext = ICEBREAKER_IMAGE_MIME[mimeType];
+    if (!ext) {
+      return reply.code(400).send({ message: "Only JPEG, PNG, GIF, or WebP images are allowed." });
+    }
+    let fileId: string;
+    try {
+      const { questionIndex } = sessionService.assertGuessWhoSaidItUploadAllowed(sessionId, participantId);
+      const dataDir = sessionService.getDataDirectory();
+      const dir = guessWhoSaidItQuestionUploadDir(dataDir, sessionId, questionIndex);
+      await mkdir(dir, { recursive: true });
+      fileId = `${nanoid(18)}${ext}`;
+      await writeFile(path.join(dir, fileId), fileBuffer);
+    } catch (error) {
+      if (error instanceof Error && error.message === "Session not found.") {
+        return reply.code(404).send({ message: "Session not found." });
+      }
+      const message = error instanceof Error ? error.message : "Upload rejected.";
+      return reply.code(400).send({ message });
+    }
+    return reply.send({ fileId });
+  });
+
+  app.get("/api/sessions/:sessionId/guess-who-said-it/file/:fileId", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
+    const abs = await resolveGuessWhoSaidItStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
     if (!abs) {
       return reply.code(404).send({ message: "Not found." });
     }
@@ -678,6 +755,30 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "icebreaker:nextQuestion") {
           await sessionService.nextIcebreakerQuestion(context.sessionId, context.participantId);
+        } else if (event.type === "guessWhoSaidIt:startRound") {
+          await sessionService.startGuessWhoSaidItRound(
+            context.sessionId,
+            context.participantId,
+            event.payload.totalQuestions
+          );
+        } else if (event.type === "guessWhoSaidIt:submitAnswer") {
+          await sessionService.submitGuessWhoSaidItAnswer(
+            context.sessionId,
+            context.participantId,
+            event.payload
+          );
+        } else if (event.type === "guessWhoSaidIt:beginVoting") {
+          await sessionService.beginGuessWhoSaidItVoting(context.sessionId, context.participantId);
+        } else if (event.type === "guessWhoSaidIt:setVotes") {
+          await sessionService.setGuessWhoSaidItVotes(
+            context.sessionId,
+            context.participantId,
+            event.payload.votes
+          );
+        } else if (event.type === "guessWhoSaidIt:advancePrompt") {
+          await sessionService.advanceGuessWhoPrompt(context.sessionId, context.participantId);
+        } else if (event.type === "guessWhoSaidIt:returnToSetup") {
+          await sessionService.resetGuessWhoSaidItToIdle(context.sessionId, context.participantId);
         } else if (event.type === "guessImage:configure") {
           const d = event.payload.descriptions;
           await sessionService.configureGuessTheImage(context.sessionId, context.participantId, {
