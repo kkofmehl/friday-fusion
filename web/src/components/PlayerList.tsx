@@ -55,6 +55,18 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       }
     }
   }
+  if (session.gameState.type === "captionThis") {
+    const st = session.gameState.state;
+    if (st.status === "waitingForImage" && st.imageProviderId === participantId) {
+      return { label: "Image provider", tone: "presenter" };
+    }
+    if (st.status === "collectingCaptions" && !st.submittedCaptionParticipantIds.includes(participantId)) {
+      return { label: "Captioning", tone: "submitting" };
+    }
+    if (st.status === "voting" && !st.votedParticipantIds.includes(participantId)) {
+      return { label: "Voting", tone: "voter" };
+    }
+  }
   return null;
 };
 

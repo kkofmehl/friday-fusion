@@ -16,6 +16,7 @@ import {
   type ServerEvent
 } from "../../shared/contracts";
 import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
+import { captionThisSessionUploadDir, resolveCaptionThisStoredFile } from "./captionThisUploads";
 import { guessTheImageSessionUploadDir, resolveGuessTheImageStoredFile } from "./guessTheImageUploads";
 import { SessionService, createSessionService } from "./sessionService";
 import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
@@ -368,6 +369,79 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     return reply.send(createReadStream(abs));
   });
 
+  app.post("/api/sessions/:sessionId/caption-this/upload", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    let participantId = "";
+    let fileBuffer: Buffer | null = null;
+    let mimeType = "";
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          if (part.fieldname !== "file") {
+            part.file.resume();
+            continue;
+          }
+          mimeType = part.mimetype;
+          fileBuffer = await part.toBuffer();
+        } else if (part.type === "field" && part.fieldname === "participantId") {
+          participantId = String(part.value ?? "").trim();
+        }
+      }
+    } catch (error) {
+      app.log.warn({ err: error }, "caption-this upload parse failed");
+      return reply.code(400).send({ message: "Invalid multipart body." });
+    }
+    if (!participantId || !fileBuffer?.length) {
+      return reply.code(400).send({ message: "participantId and file are required." });
+    }
+    if (fileBuffer.length > ICEBREAKER_MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ message: "File too large." });
+    }
+    const ext = ICEBREAKER_IMAGE_MIME[mimeType];
+    if (!ext) {
+      return reply.code(400).send({ message: "Only JPEG, PNG, GIF, or WebP images are allowed." });
+    }
+    let fileId: string;
+    try {
+      sessionService.assertCaptionThisUploadAllowed(sessionId, participantId);
+      const dataDir = sessionService.getDataDirectory();
+      const dir = captionThisSessionUploadDir(dataDir, sessionId);
+      await mkdir(dir, { recursive: true });
+      fileId = `${nanoid(18)}${ext}`;
+      await writeFile(path.join(dir, fileId), fileBuffer);
+    } catch (error) {
+      if (error instanceof Error && error.message === "Session not found.") {
+        return reply.code(404).send({ message: "Session not found." });
+      }
+      const message = error instanceof Error ? error.message : "Upload rejected.";
+      return reply.code(400).send({ message });
+    }
+    return reply.send({ fileId });
+  });
+
+  app.get("/api/sessions/:sessionId/caption-this/file/:fileId", async (request, reply) => {
+    const sessionId = (request.params as { sessionId: string }).sessionId;
+    const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
+    const abs = resolveCaptionThisStoredFile(sessionService.getDataDirectory(), sessionId, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
+  });
+
   app.get("/ws", { websocket: true }, (connection) => {
     const socket = connection.socket;
     let context: ConnectionContext | null = null;
@@ -669,6 +743,38 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "twentyQuestions:teamSolved") {
           await sessionService.twentyQuestionsTeamSolved(context.sessionId, context.participantId);
+        } else if (event.type === "captionThis:setImageProvider") {
+          await sessionService.captionThisSetImageProvider(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId
+          );
+        } else if (event.type === "captionThis:submitImage") {
+          await sessionService.captionThisSubmitImage(
+            context.sessionId,
+            context.participantId,
+            event.payload.imageFileId
+          );
+        } else if (event.type === "captionThis:submitCaption") {
+          await sessionService.captionThisSubmitCaption(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "captionThis:beginVoting") {
+          await sessionService.captionThisBeginVoting(context.sessionId, context.participantId);
+        } else if (event.type === "captionThis:vote") {
+          await sessionService.captionThisVote(
+            context.sessionId,
+            context.participantId,
+            event.payload.entryId
+          );
+        } else if (event.type === "captionThis:beginNextRound") {
+          await sessionService.captionThisBeginNextRound(
+            context.sessionId,
+            context.participantId,
+            event.payload.imageProviderId
+          );
         }
 
         broadcastState(context.sessionId);

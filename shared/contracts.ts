@@ -6,7 +6,8 @@ export const gameTypeSchema = z.enum([
   "trivia",
   "icebreaker",
   "guessTheImage",
-  "twentyQuestions"
+  "twentyQuestions",
+  "captionThis"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -292,6 +293,70 @@ export const twentyQuestionsStateSchema = z.discriminatedUnion("status", [
 ]);
 export type TwentyQuestionsState = z.infer<typeof twentyQuestionsStateSchema>;
 
+/** Max length for a submitted caption line. */
+export const CAPTION_THIS_MAX_CHARS = 500;
+
+export const captionThisCaptionEntrySchema = z.object({
+  id: z.string(),
+  authorId: z.string(),
+  text: z.string()
+});
+export type CaptionThisCaptionEntry = z.infer<typeof captionThisCaptionEntrySchema>;
+
+export const captionThisVoteTallySchema = z.object({
+  entryId: z.string(),
+  authorId: z.string(),
+  text: z.string(),
+  voteCount: z.number().int().nonnegative()
+});
+export type CaptionThisVoteTally = z.infer<typeof captionThisVoteTallySchema>;
+
+export const captionThisStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("waitingForImage"),
+    imageProviderId: z.string(),
+    roundNumber: z.number().int().positive()
+  }),
+  z.object({
+    status: z.literal("collectingCaptions"),
+    imageProviderId: z.string(),
+    imageUrl: z.string(),
+    roundNumber: z.number().int().positive(),
+    submittedCaptionParticipantIds: z.array(z.string()),
+    allCaptionsIn: z.boolean()
+  }),
+  z.object({
+    status: z.literal("voting"),
+    imageProviderId: z.string(),
+    imageUrl: z.string(),
+    roundNumber: z.number().int().positive(),
+    /** Shuffled; text only — use `myEntryId` to disable voting on your caption. */
+    displayEntries: z.array(
+      z.object({
+        entryId: z.string(),
+        text: z.string()
+      })
+    ),
+    /** The caption entry authored by the viewing participant, if any. */
+    myEntryId: z.string().nullable(),
+    /** Who has cast a vote (choices hidden until results). */
+    votedParticipantIds: z.array(z.string()),
+    /** Whether the current viewer has voted yet. */
+    hasVoted: z.boolean(),
+    /** All participants have submitted a vote. */
+    allVotesIn: z.boolean()
+  }),
+  z.object({
+    status: z.literal("results"),
+    imageProviderId: z.string(),
+    imageUrl: z.string(),
+    roundNumber: z.number().int().positive(),
+    tallies: z.array(captionThisVoteTallySchema),
+    winnerEntryIds: z.array(z.string())
+  })
+]);
+export type CaptionThisState = z.infer<typeof captionThisStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -316,6 +381,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("twentyQuestions"),
     state: twentyQuestionsStateSchema
+  }),
+  z.object({
+    type: z.literal("captionThis"),
+    state: captionThisStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -365,7 +434,9 @@ export const gameStartOptionsSchema = z.object({
   /** 20 Questions: who picks the secret item and answers yes/no (defaults to host if omitted). */
   twentyQuestionsItemSelectorId: z.string().optional(),
   /** 20 Questions: question budget for the round (default 20, clamped server-side to 1–50). */
-  twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional()
+  twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional(),
+  /** Caption This: who uploads the image for the first round (defaults to host). */
+  captionThisImageProviderId: z.string().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -468,7 +539,28 @@ export const clientEventSchema = z.discriminatedUnion("type", [
       answer: z.enum(["yes", "no"])
     })
   }),
-  z.object({ type: z.literal("twentyQuestions:teamSolved"), payload: z.object({}) })
+  z.object({ type: z.literal("twentyQuestions:teamSolved"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("captionThis:setImageProvider"),
+    payload: z.object({ participantId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("captionThis:submitImage"),
+    payload: z.object({ imageFileId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("captionThis:submitCaption"),
+    payload: z.object({ text: z.string().min(1).max(CAPTION_THIS_MAX_CHARS) })
+  }),
+  z.object({ type: z.literal("captionThis:beginVoting"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("captionThis:vote"),
+    payload: z.object({ entryId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("captionThis:beginNextRound"),
+    payload: z.object({ imageProviderId: z.string().min(1) })
+  })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

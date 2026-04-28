@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import {
+  CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
@@ -13,6 +14,10 @@ import {
 } from "../../shared/contracts";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
+import {
+  deleteCaptionThisStoredFile,
+  purgeAllCaptionThisSessionUploads
+} from "./captionThisUploads";
 import {
   deleteGuessTheImageStoredFile,
   purgeAllGuessTheImageSessionUploads
@@ -154,13 +159,34 @@ type TwentyQuestionsGameInternal = {
   scoresApplied: boolean;
 };
 
+type CaptionThisEntryInternal = {
+  id: string;
+  authorId: string;
+  text: string;
+};
+
+type CaptionThisGameInternal = {
+  id: string;
+  type: "captionThis";
+  status: "waitingForImage" | "collectingCaptions" | "voting" | "results";
+  imageProviderId: string;
+  imageFileId: string | null;
+  roundNumber: number;
+  captions: Record<string, string>;
+  entries: CaptionThisEntryInternal[];
+  /** Shuffled entry ids for display order in voting. */
+  displayOrder: string[];
+  votes: Record<string, string>;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
   | TriviaGameInternal
   | IcebreakerGameInternal
   | GuessTheImageGameInternal
-  | TwentyQuestionsGameInternal;
+  | TwentyQuestionsGameInternal
+  | CaptionThisGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -381,7 +407,31 @@ const ensureGameShape = (
       scoresApplied: g.scoresApplied === true
     };
   }
+  if (game.type === "captionThis") {
+    const g = game as CaptionThisGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      imageFileId: g.imageFileId ?? null,
+      roundNumber: Math.max(1, Number(g.roundNumber) || 1),
+      captions: g.captions && typeof g.captions === "object" ? g.captions : {},
+      entries: Array.isArray(g.entries) ? g.entries : [],
+      displayOrder: Array.isArray(g.displayOrder) ? g.displayOrder : [],
+      votes: g.votes && typeof g.votes === "object" ? g.votes : {}
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
+};
+
+const shuffleEntryIds = (ids: string[]): string[] => {
+  const a = [...ids];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]!;
+    a[i] = a[j]!;
+    a[j] = t;
+  }
+  return a;
 };
 
 const twentyQuestionsGuesserIds = (session: SessionInternal, game: TwentyQuestionsGameInternal): string[] =>
@@ -498,6 +548,23 @@ export class SessionService {
     }
     if (participantId !== game.setupParticipantId) {
       throw new Error("Only the designated setup player can upload for this round.");
+    }
+  }
+
+  public assertCaptionThisUploadAllowed(sessionId: string, participantId: string): void {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "captionThis") {
+      throw new Error("Caption This is not active.");
+    }
+    if (game.status !== "waitingForImage") {
+      throw new Error("Cannot upload an image right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    if (participantId !== game.imageProviderId) {
+      throw new Error("Only the image provider can upload for this round.");
     }
   }
 
@@ -687,6 +754,9 @@ export class SessionService {
       this.clearGuessImageTimer(sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     }
+    if (previousGame?.type === "captionThis") {
+      await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+    }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
     let next: GameInternal;
@@ -815,6 +885,27 @@ export class SessionService {
         outcome: null,
         scoresApplied: false
       };
+    } else if (game === "captionThis") {
+      if (session.participants.length < 2) {
+        throw new Error("Caption This needs at least two players.");
+      }
+      const requestedProvider = options.captionThisImageProviderId;
+      const imageProviderId =
+        requestedProvider && session.participants.some((p) => p.id === requestedProvider)
+          ? requestedProvider
+          : (session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id);
+      next = {
+        id: nanoid(6),
+        type: "captionThis",
+        status: "waitingForImage",
+        imageProviderId,
+        imageFileId: null,
+        roundNumber: 1,
+        captions: {},
+        entries: [],
+        displayOrder: [],
+        votes: {}
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -836,6 +927,9 @@ export class SessionService {
       this.clearGuessImageTimer(sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     }
+    if (active?.type === "captionThis") {
+      await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -850,6 +944,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
   }
@@ -861,6 +956,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+    await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
     return true;
@@ -886,6 +982,7 @@ export class SessionService {
       this.clearGuessImageTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
+      await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
       this.sessions.delete(sessionId);
       await this.persist();
       return { sessionDeleted: true };
@@ -943,6 +1040,19 @@ export class SessionService {
           active20q.currentAskerId = guessersAfter[0] ?? null;
           active20q.questionDraft = null;
         }
+      }
+    }
+
+    const activeCap = session.games[0];
+    if (activeCap?.type === "captionThis") {
+      if (activeCap.imageProviderId === participantId || session.participants.length < 2) {
+        session.games = [];
+        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+      } else if (activeCap.status === "voting" || activeCap.status === "results") {
+        session.games = [];
+        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+      } else if (activeCap.status === "collectingCaptions") {
+        delete activeCap.captions[participantId];
       }
     }
 
@@ -2329,6 +2439,153 @@ export class SessionService {
     await this.persist();
   }
 
+  public async captionThisSetImageProvider(
+    sessionId: string,
+    participantId: string,
+    newProviderId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can change the image provider.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "waitingForImage") {
+      throw new Error("Cannot change the image provider right now.");
+    }
+    if (!session.participants.some((p) => p.id === newProviderId)) {
+      throw new Error("Participant must be in the session.");
+    }
+    game.imageProviderId = newProviderId;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async captionThisSubmitImage(
+    sessionId: string,
+    participantId: string,
+    imageFileId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "waitingForImage") {
+      throw new Error("Cannot submit an image right now.");
+    }
+    if (participantId !== game.imageProviderId) {
+      throw new Error("Only the image provider can submit the image.");
+    }
+    if (game.imageFileId && game.imageFileId !== imageFileId) {
+      await deleteCaptionThisStoredFile(this.dataDirectory, sessionId, game.imageFileId);
+    }
+    game.imageFileId = imageFileId;
+    game.status = "collectingCaptions";
+    game.captions = {};
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async captionThisSubmitCaption(sessionId: string, participantId: string, text: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "collectingCaptions") {
+      throw new Error("Cannot submit a caption right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.length > CAPTION_THIS_MAX_CHARS) {
+      throw new Error("Invalid caption.");
+    }
+    game.captions[participantId] = trimmed;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async captionThisBeginVoting(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can start voting.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "collectingCaptions") {
+      throw new Error("Cannot start voting right now.");
+    }
+    const allIn = session.participants.every((p) => {
+      const c = game.captions[p.id];
+      return typeof c === "string" && c.trim().length > 0;
+    });
+    if (!allIn) {
+      throw new Error("Not everyone has submitted a caption yet.");
+    }
+    const entries: CaptionThisEntryInternal[] = session.participants.map((p) => ({
+      id: nanoid(10),
+      authorId: p.id,
+      text: game.captions[p.id]!.trim()
+    }));
+    game.entries = entries;
+    game.displayOrder = shuffleEntryIds(entries.map((e) => e.id));
+    game.votes = {};
+    game.status = "voting";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async captionThisVote(sessionId: string, participantId: string, entryId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "voting") {
+      throw new Error("Cannot vote right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const entry = game.entries.find((e) => e.id === entryId);
+    if (!entry) {
+      throw new Error("Invalid caption choice.");
+    }
+    if (entry.authorId === participantId) {
+      throw new Error("You cannot vote for your own caption.");
+    }
+    game.votes[participantId] = entryId;
+    session.updatedAt = Date.now();
+    const allVoted = session.participants.every((p) => game.votes[p.id] !== undefined);
+    if (allVoted) {
+      game.status = "results";
+    }
+    await this.persist();
+  }
+
+  public async captionThisBeginNextRound(
+    sessionId: string,
+    participantId: string,
+    nextImageProviderId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can start the next round.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "captionThis" || game.status !== "results") {
+      throw new Error("Cannot start the next round right now.");
+    }
+    if (!session.participants.some((p) => p.id === nextImageProviderId)) {
+      throw new Error("Image provider must be in the session.");
+    }
+    if (game.imageFileId) {
+      await deleteCaptionThisStoredFile(this.dataDirectory, sessionId, game.imageFileId);
+    }
+    game.status = "waitingForImage";
+    game.imageProviderId = nextImageProviderId;
+    game.imageFileId = null;
+    game.captions = {};
+    game.entries = [];
+    game.displayOrder = [];
+    game.votes = {};
+    game.roundNumber += 1;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private toPublicState(session: SessionInternal, viewerParticipantId?: string): SessionState {
     const game = session.games[0];
     const base = {
@@ -2670,6 +2927,119 @@ export class SessionService {
               askedAt: e.askedAt,
               answer: e.answer === "yes" || e.answer === "no" ? e.answer : "no"
             }))
+          }
+        }
+      };
+    }
+
+    if (game.type === "captionThis") {
+      const capImageUrl = (fileId: string | null): string | null =>
+        fileId
+          ? `/api/sessions/${session.sessionId}/caption-this/file/${encodeURIComponent(fileId)}`
+          : null;
+
+      if (game.status === "waitingForImage") {
+        return {
+          ...base,
+          activeGame: "captionThis",
+          gameState: {
+            type: "captionThis",
+            state: {
+              status: "waitingForImage",
+              imageProviderId: game.imageProviderId,
+              roundNumber: game.roundNumber
+            }
+          }
+        };
+      }
+
+      if (game.status === "collectingCaptions") {
+        const submittedCaptionParticipantIds = session.participants
+          .filter((p) => {
+            const c = game.captions[p.id];
+            return typeof c === "string" && c.trim().length > 0;
+          })
+          .map((p) => p.id);
+        const allCaptionsIn = session.participants.every((p) => {
+          const c = game.captions[p.id];
+          return typeof c === "string" && c.trim().length > 0;
+        });
+        return {
+          ...base,
+          activeGame: "captionThis",
+          gameState: {
+            type: "captionThis",
+            state: {
+              status: "collectingCaptions",
+              imageProviderId: game.imageProviderId,
+              imageUrl: capImageUrl(game.imageFileId) ?? "",
+              roundNumber: game.roundNumber,
+              submittedCaptionParticipantIds,
+              allCaptionsIn
+            }
+          }
+        };
+      }
+
+      if (game.status === "voting") {
+        const byId = new Map(game.entries.map((e) => [e.id, e] as const));
+        const displayEntries = game.displayOrder
+          .map((id) => byId.get(id))
+          .filter((e): e is CaptionThisEntryInternal => Boolean(e))
+          .map((e) => ({ entryId: e.id, text: e.text }));
+        const myEntry =
+          viewerParticipantId && session.participants.some((p) => p.id === viewerParticipantId)
+            ? game.entries.find((e) => e.authorId === viewerParticipantId)?.id ?? null
+            : null;
+        const votedParticipantIds = Object.keys(game.votes);
+        const hasVoted = Boolean(viewerParticipantId && game.votes[viewerParticipantId] !== undefined);
+        return {
+          ...base,
+          activeGame: "captionThis",
+          gameState: {
+            type: "captionThis",
+            state: {
+              status: "voting",
+              imageProviderId: game.imageProviderId,
+              imageUrl: capImageUrl(game.imageFileId) ?? "",
+              roundNumber: game.roundNumber,
+              displayEntries,
+              myEntryId: myEntry,
+              votedParticipantIds,
+              hasVoted,
+              allVotesIn: false
+            }
+          }
+        };
+      }
+
+      const tallyMap = new Map<string, number>();
+      for (const e of game.entries) {
+        tallyMap.set(e.id, 0);
+      }
+      for (const eid of Object.values(game.votes)) {
+        tallyMap.set(eid, (tallyMap.get(eid) ?? 0) + 1);
+      }
+      const tallies = game.entries.map((e) => ({
+        entryId: e.id,
+        authorId: e.authorId,
+        text: e.text,
+        voteCount: tallyMap.get(e.id) ?? 0
+      }));
+      const maxVotes = tallies.length === 0 ? 0 : Math.max(...tallies.map((t) => t.voteCount));
+      const winnerEntryIds = tallies.filter((t) => t.voteCount === maxVotes).map((t) => t.entryId);
+      return {
+        ...base,
+        activeGame: "captionThis",
+        gameState: {
+          type: "captionThis",
+          state: {
+            status: "results",
+            imageProviderId: game.imageProviderId,
+            imageUrl: capImageUrl(game.imageFileId) ?? "",
+            roundNumber: game.roundNumber,
+            tallies,
+            winnerEntryIds
           }
         }
       };

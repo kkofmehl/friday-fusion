@@ -6,6 +6,7 @@ import { TwoTruthsGame } from "../games/TwoTruthsGame";
 import { TriviaGame } from "../games/TriviaGame";
 import { GuessTheImageGame } from "../games/GuessTheImageGame";
 import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
+import { CaptionThisGame } from "../games/CaptionThisGame";
 
 export function GameScreen({
   session,
@@ -52,6 +53,14 @@ export function GameScreen({
             twentyQuestionsItemSelectorId: session.gameState.state.itemSelectorId,
             twentyQuestionsMaxQuestions: session.gameState.state.maxQuestions
           }
+        }
+      }
+    : session.gameState?.type === "captionThis"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "captionThis",
+          options: { captionThisImageProviderId: session.gameState.state.imageProviderId }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -103,6 +112,17 @@ export function GameScreen({
           currentParticipantId={currentParticipantId}
           isHost={isHost}
           send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "captionThis") {
+      return (
+        <CaptionThisGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          apiBase={apiBase}
         />
       );
     }

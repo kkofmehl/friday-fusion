@@ -1346,4 +1346,65 @@ describe("SessionService", () => {
     expect(state.gameState).toBeNull();
     expect(state.activeGame).toBeNull();
   });
+
+  it("rejects Caption This with fewer than two players", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(setup.service.startGame(host.sessionId, "captionThis")).rejects.toThrow(
+      "Caption This needs at least two players."
+    );
+  });
+
+  it("runs Caption This through voting and results", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "captionThis", {
+      captionThisImageProviderId: host.participantId
+    });
+    let s = setup.service.getState(host.sessionId);
+    if (s.gameState?.type !== "captionThis" || s.gameState.state.status !== "waitingForImage") {
+      throw new Error("expected waitingForImage");
+    }
+    await setup.service.captionThisSubmitImage(host.sessionId, host.participantId, "img1.jpg");
+    await setup.service.captionThisSubmitCaption(host.sessionId, host.participantId, "Host line");
+    await setup.service.captionThisSubmitCaption(host.sessionId, guest.participantId, "Guest line");
+    await setup.service.captionThisBeginVoting(host.sessionId, host.participantId);
+    const hostV = setup.service.getState(host.sessionId, host.participantId);
+    const guestV = setup.service.getState(host.sessionId, guest.participantId);
+    if (hostV.gameState?.type !== "captionThis" || hostV.gameState.state.status !== "voting") {
+      throw new Error("expected voting");
+    }
+    const hid = hostV.gameState.state.myEntryId;
+    const gid = guestV.gameState.state.myEntryId;
+    if (!hid || !gid) {
+      throw new Error("expected myEntryId");
+    }
+    await expect(
+      setup.service.captionThisVote(host.sessionId, host.participantId, hid)
+    ).rejects.toThrow("You cannot vote for your own caption.");
+    await setup.service.captionThisVote(host.sessionId, host.participantId, gid);
+    await setup.service.captionThisVote(host.sessionId, guest.participantId, hid);
+    const done = setup.service.getState(host.sessionId);
+    if (done.gameState?.type !== "captionThis" || done.gameState.state.status !== "results") {
+      throw new Error("expected results");
+    }
+    expect(done.gameState.state.winnerEntryIds.length).toBeGreaterThan(0);
+    expect(done.gameState.state.tallies.every((t) => t.voteCount === 1)).toBe(true);
+  });
+
+  it("clears Caption This when the image provider leaves", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "captionThis", {
+      captionThisImageProviderId: guest.participantId
+    });
+    await setup.service.removeParticipant(host.sessionId, guest.participantId);
+    const state = setup.service.getState(host.sessionId);
+    expect(state.gameState).toBeNull();
+  });
 });

@@ -53,4 +53,21 @@ describe("LobbyScreen", () => {
       }
     });
   });
+
+  it("sends image provider when starting Caption This", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />
+    );
+
+    const card = screen.getByRole("heading", { name: "Caption This" }).closest("article");
+    if (!card) throw new Error("expected Caption This card");
+    fireEvent.change(card.querySelector("#caption-this-provider-select")!, { target: { value: "p3" } });
+    fireEvent.click(card.querySelector(".btn-primary")!);
+
+    expect(send).toHaveBeenCalledWith({
+      type: "game:start",
+      payload: { game: "captionThis", options: { captionThisImageProviderId: "p3" } }
+    });
+  });
 });

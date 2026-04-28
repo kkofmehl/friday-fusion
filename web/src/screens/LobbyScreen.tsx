@@ -52,6 +52,12 @@ const GAMES: GameOption[] = [
     title: "20 Questions",
     description: "One person picks something; others ask yes/no questions until they guess or run out.",
     emoji: "20"
+  },
+  {
+    id: "captionThis",
+    title: "Caption This",
+    description: "One player supplies an image; everyone captions it, then votes for their favorite.",
+    emoji: "C"
   }
 ];
 
@@ -73,6 +79,10 @@ export function LobbyScreen({
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
   const [twentyQSelectorId, setTwentyQSelectorId] = useState(() => {
+    const host = session.participants.find((p) => p.isHost);
+    return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
+  });
+  const [captionThisProviderId, setCaptionThisProviderId] = useState(() => {
     const host = session.participants.find((p) => p.isHost);
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
@@ -106,6 +116,15 @@ export function LobbyScreen({
     );
   }, [currentParticipantId, session.participants, twentyQSelectorId]);
 
+  useEffect(() => {
+    if (session.participants.some((p) => p.id === captionThisProviderId)) {
+      return;
+    }
+    setCaptionThisProviderId(
+      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+    );
+  }, [captionThisProviderId, currentParticipantId, session.participants]);
+
   const startGame = (game: GameType) => {
     if (game === "hangman") {
       send({ type: "game:start", payload: { game, options: { hangmanMode, hangmanCreatorId } } });
@@ -135,6 +154,16 @@ export function LobbyScreen({
             twentyQuestionsItemSelectorId: twentyQSelectorId,
             twentyQuestionsMaxQuestions: maxQ
           }
+        }
+      });
+      return;
+    }
+    if (game === "captionThis") {
+      send({
+        type: "game:start",
+        payload: {
+          game,
+          options: { captionThisImageProviderId: captionThisProviderId }
         }
       });
       return;
@@ -259,6 +288,27 @@ export function LobbyScreen({
                     onChange={(event) => setTwentyQMaxQuestions(Number(event.target.value))}
                   />
                   <p className="mode-option-hint">1–50 questions (default 20). Guessers take turns asking.</p>
+                </fieldset>
+              )}
+              {game.id === "captionThis" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Round setup</legend>
+                  <label className="mode-picker-label" htmlFor="caption-this-provider-select">
+                    First image provider
+                  </label>
+                  <select
+                    id="caption-this-provider-select"
+                    value={captionThisProviderId}
+                    onChange={(event) => setCaptionThisProviderId(event.target.value)}
+                  >
+                    {session.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                        {participant.isHost ? " (host)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mode-option-hint">They upload the photo for the first round (needs at least two players).</p>
                 </fieldset>
               )}
               <button
