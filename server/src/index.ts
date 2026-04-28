@@ -580,6 +580,12 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             event.payload.game,
             event.payload.options ?? {}
           );
+        } else if (event.type === "lobby:setGamePreference") {
+          await sessionService.setLobbyGamePreference(
+            context.sessionId,
+            context.participantId,
+            event.payload.game
+          );
         } else if (event.type === "hangman:setWord") {
           await sessionService.setHangmanWord(context.sessionId, context.participantId, event.payload.word);
         } else if (event.type === "hangman:guessLetter") {

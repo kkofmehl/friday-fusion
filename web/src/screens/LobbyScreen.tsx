@@ -171,6 +171,11 @@ export function LobbyScreen({
     send({ type: "game:start", payload: { game } });
   };
 
+  const lobbyPrefs = session.lobbyGamePreferences ?? {};
+  const preferenceRows = [...session.participants]
+    .filter((p) => lobbyPrefs[p.id])
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
   return (
     <div className="lobby-grid">
       <section className="card card-players">
@@ -179,6 +184,19 @@ export function LobbyScreen({
           <span className="count-pill">{session.participants.length}</span>
         </header>
         <PlayerList session={session} currentParticipantId={currentParticipantId} />
+        {isHost && preferenceRows.length > 0 && (
+          <ul className="lobby-next-game-votes" aria-label="What guests want to play next">
+            {preferenceRows.map((p) => {
+              const gid = lobbyPrefs[p.id]!;
+              const title = GAMES.find((g) => g.id === gid)?.title ?? gid;
+              return (
+                <li key={p.id}>
+                  <strong>{p.displayName}</strong> wants to play {title}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="card card-games">
@@ -311,14 +329,21 @@ export function LobbyScreen({
                   <p className="mode-option-hint">They upload the photo for the first round (needs at least two players).</p>
                 </fieldset>
               )}
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => startGame(game.id)}
-                disabled={!isHost}
-              >
-                {isHost ? "Start" : "Waiting for host"}
-              </button>
+              {isHost ? (
+                <button type="button" className="btn btn-primary" onClick={() => startGame(game.id)}>
+                  Start
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`btn btn-secondary lobby-want-game${
+                    lobbyPrefs[currentParticipantId] === game.id ? " is-selected" : ""
+                  }`}
+                  onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
+                >
+                  I want to play this
+                </button>
+              )}
             </article>
           ))}
         </div>

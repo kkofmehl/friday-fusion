@@ -152,6 +152,37 @@ button {
   border-color: var(--slate-300);
 }
 
+.btn-secondary {
+  background: #fff;
+  color: var(--slate-800);
+  border-color: var(--slate-300);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--slate-50);
+  border-color: var(--slate-400);
+}
+
+.btn-secondary.lobby-want-game.is-selected {
+  border-color: var(--indigo-400);
+  color: var(--indigo-700);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+
+.lobby-next-game-votes {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--slate-200);
+  font-size: 0.88rem;
+  color: var(--slate-600);
+  line-height: 1.45;
+}
+
+.lobby-next-game-votes li + li {
+  margin-top: 0.35rem;
+}
+
 input,
 select,
 textarea {

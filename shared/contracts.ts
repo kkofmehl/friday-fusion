@@ -395,7 +395,9 @@ export const sessionStateSchema = z.object({
   joinCode: z.string(),
   participants: z.array(participantSchema),
   activeGame: gameTypeSchema.nullable(),
-  gameState: gameStateSchema.nullable()
+  gameState: gameStateSchema.nullable(),
+  /** Non-host lobby votes for which game to play next (participantId -> game); absent or empty when unavailable. */
+  lobbyGamePreferences: z.record(z.string(), gameTypeSchema).optional()
 });
 export type SessionState = z.infer<typeof sessionStateSchema>;
 
@@ -443,6 +445,10 @@ export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:hello"), payload: z.object({ sessionId: z.string(), participantId: z.string() }) }),
   z.object({ type: z.literal("lobby:subscribe"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("lobby:setGamePreference"),
+    payload: z.object({ game: gameTypeSchema })
+  }),
   z.object({ type: z.literal("session:leave"), payload: z.object({}) }),
   z.object({ type: z.literal("session:close"), payload: z.object({}) }),
   z.object({ type: z.literal("game:end"), payload: z.object({}) }),

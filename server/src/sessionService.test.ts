@@ -255,6 +255,73 @@ describe("SessionService", () => {
     expect(() => setup.service.getState(host.sessionId)).toThrow("Session not found.");
   });
 
+  it("lets non-hosts set lobby game preferences and exposes them in getState", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia");
+    const state = setup.service.getState(host.sessionId);
+    expect(state.lobbyGamePreferences?.[guest.participantId]).toBe("trivia");
+    expect(Object.keys(state.lobbyGamePreferences ?? {})).toHaveLength(1);
+  });
+
+  it("overwrites lobby preference when a guest picks a different game", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "hangman");
+    const state = setup.service.getState(host.sessionId);
+    expect(state.lobbyGamePreferences?.[guest.participantId]).toBe("hangman");
+  });
+
+  it("rejects lobby preference from host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await expect(
+      setup.service.setLobbyGamePreference(host.sessionId, host.participantId, "trivia")
+    ).rejects.toThrow("Host cannot set a game preference.");
+  });
+
+  it("clears lobby preferences when a game starts", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia");
+    await setup.service.startGame(host.sessionId, "hangman");
+    const state = setup.service.getState(host.sessionId);
+    expect(state.lobbyGamePreferences ?? {}).toEqual({});
+  });
+
+  it("drops lobby preference when participant leaves", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "icebreaker");
+    await setup.service.removeParticipant(host.sessionId, guest.participantId);
+    const state = setup.service.getState(host.sessionId);
+    expect(Object.keys(state.lobbyGamePreferences ?? {})).toHaveLength(0);
+  });
+
+  it("clears lobby preference when a guest is promoted to host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.joinSession(host.joinCode, "Other");
+    await setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia");
+    await setup.service.removeParticipant(host.sessionId, host.participantId);
+    const state = setup.service.getState(host.sessionId);
+    expect(state.participants.some((p) => p.id === guest.participantId && p.isHost)).toBe(true);
+    expect(state.lobbyGamePreferences ?? {}).toEqual({});
+  });
+
   it("lets the host close the session for everyone", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

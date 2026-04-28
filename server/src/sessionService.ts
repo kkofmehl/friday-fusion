@@ -4,6 +4,7 @@ import {
   ICEBREAKER_PROMPT_MAX_CHARS,
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
+  gameTypeSchema,
   type GameStartOptions,
   type GameType,
   type HangmanActivity,
@@ -198,6 +199,22 @@ type SessionInternal = {
   participants: ParticipantInternal[];
   games: GameInternal[];
   updatedAt: number;
+  lobbyGamePreferences: Record<string, GameType>;
+};
+
+const pruneLobbyGamePreferences = (
+  session: SessionInternal,
+  prefs: Record<string, GameType> | undefined
+): Record<string, GameType> => {
+  const raw = prefs ?? {};
+  const out: Record<string, GameType> = {};
+  for (const [participantId, game] of Object.entries(raw)) {
+    const p = session.participants.find((x) => x.id === participantId);
+    if (p && !p.isHost && gameTypeSchema.safeParse(game).success) {
+      out[participantId] = game as GameType;
+    }
+  }
+  return out;
 };
 
 type PersistedState = {
@@ -585,6 +602,9 @@ export class SessionService {
           : legacy.game
             ? [ensureGameShape(legacy.game as GameInternal)]
             : [];
+        const legacyPrefs = legacy as SessionInternal & {
+          lobbyGamePreferences?: Record<string, GameType>;
+        };
         const migrated: SessionInternal = {
           sessionId: session.sessionId,
           sessionName:
@@ -596,7 +616,11 @@ export class SessionService {
           joinCode: session.joinCode,
           participants: session.participants ?? [],
           games,
-          updatedAt: session.updatedAt ?? Date.now()
+          updatedAt: session.updatedAt ?? Date.now(),
+          lobbyGamePreferences:
+            legacyPrefs.lobbyGamePreferences && typeof legacyPrefs.lobbyGamePreferences === "object"
+              ? { ...legacyPrefs.lobbyGamePreferences }
+              : {}
         };
         return [session.sessionId, migrated] as const;
       })
@@ -666,7 +690,8 @@ export class SessionService {
       joinCode,
       participants: [{ id: participantId, displayName, isHost: true, score: 0 }],
       games: [],
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      lobbyGamePreferences: {}
     };
     this.sessions.set(sessionId, session);
     await this.persist();
@@ -735,12 +760,31 @@ export class SessionService {
 
   public getState(sessionId: string, viewerParticipantId?: string): SessionState {
     const session = this.getSessionOrThrow(sessionId);
-    return this.toPublicState(session, viewerParticipantId);
+    const state = this.toPublicState(session, viewerParticipantId);
+    const lobbyGamePreferences =
+      session.games.length === 0 ? pruneLobbyGamePreferences(session, session.lobbyGamePreferences) : {};
+    return { ...state, lobbyGamePreferences };
   }
 
   public isHost(sessionId: string, participantId: string): boolean {
     const session = this.getSessionOrThrow(sessionId);
     return Boolean(session.participants.find((participant) => participant.id === participantId && participant.isHost));
+  }
+
+  public async setLobbyGamePreference(sessionId: string, participantId: string, game: GameType): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (session.games.length > 0) {
+      throw new Error("Preferences can only be set in the lobby.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    if (session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Host cannot set a game preference.");
+    }
+    session.lobbyGamePreferences[participantId] = game;
+    session.updatedAt = Date.now();
+    await this.persist();
   }
 
   public async startGame(
@@ -749,6 +793,7 @@ export class SessionService {
     options: GameStartOptions = {}
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    session.lobbyGamePreferences = {};
     const previousGame = session.games[0];
     if (previousGame?.type === "guessTheImage") {
       this.clearGuessImageTimer(sessionId);
@@ -978,6 +1023,8 @@ export class SessionService {
 
     session.updatedAt = Date.now();
 
+    delete session.lobbyGamePreferences[participantId];
+
     if (session.participants.length === 0) {
       this.clearGuessImageTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
@@ -992,6 +1039,8 @@ export class SessionService {
     // still has someone able to close it / end games.
     if (!session.participants.some((p) => p.isHost)) {
       session.participants[0]!.isHost = true;
+      const promotedId = session.participants[0]!.id;
+      delete session.lobbyGamePreferences[promotedId];
     }
 
     // A hangman round might have pointed at the leaver as puzzle creator or as

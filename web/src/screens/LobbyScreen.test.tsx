@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../../shared/contracts";
 import { LobbyScreen } from "./LobbyScreen";
 
-const buildSession = (): SessionState => ({
+const buildSession = (overrides: Partial<SessionState> = {}): SessionState => ({
   sessionId: "s1",
   sessionName: "Test",
   joinCode: "BRIGHT-OTTER",
@@ -13,7 +13,8 @@ const buildSession = (): SessionState => ({
     { id: "p3", displayName: "Carol", score: 0, isHost: false }
   ],
   activeGame: null,
-  gameState: null
+  gameState: null,
+  ...overrides
 });
 
 describe("LobbyScreen", () => {
@@ -68,6 +69,38 @@ describe("LobbyScreen", () => {
     expect(send).toHaveBeenCalledWith({
       type: "game:start",
       payload: { game: "captionThis", options: { captionThisImageProviderId: "p3" } }
+    });
+  });
+
+  it("shows guest game wishes to the host under the players list", () => {
+    render(
+      <LobbyScreen
+        session={buildSession({
+          lobbyGamePreferences: { p2: "trivia" }
+        })}
+        currentParticipantId="p1"
+        isHost
+        send={vi.fn()}
+      />
+    );
+
+    const list = screen.getByRole("list", { name: /what guests want to play next/i });
+    expect(list.textContent).toContain("Bob wants to play Trivia");
+  });
+
+  it("sends lobby:setGamePreference when a guest clicks I want to play this", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={send} />
+    );
+
+    const captionCard = screen.getByRole("heading", { name: "Caption This" }).closest("article");
+    if (!captionCard) throw new Error("expected Caption This card");
+    fireEvent.click(captionCard.querySelector(".lobby-want-game")!);
+
+    expect(send).toHaveBeenCalledWith({
+      type: "lobby:setGamePreference",
+      payload: { game: "captionThis" }
     });
   });
 });
