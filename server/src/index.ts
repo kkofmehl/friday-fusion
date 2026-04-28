@@ -781,6 +781,27 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.imageProviderId
           );
+        } else if (event.type === "pictionary:setTeams") {
+          await sessionService.pictionarySetTeams(
+            context.sessionId,
+            context.participantId,
+            event.payload.teamAIds,
+            event.payload.teamBIds
+          );
+        } else if (event.type === "pictionary:beginPlay") {
+          await sessionService.pictionaryBeginPlay(context.sessionId, context.participantId);
+        } else if (event.type === "pictionary:appendStroke") {
+          await sessionService.pictionaryAppendStroke(
+            context.sessionId,
+            context.participantId,
+            event.payload
+          );
+        } else if (event.type === "pictionary:clearCanvas") {
+          await sessionService.pictionaryClearCanvas(context.sessionId, context.participantId);
+        } else if (event.type === "pictionary:teamGuessed") {
+          await sessionService.pictionaryTeamGuessed(context.sessionId, context.participantId);
+        } else if (event.type === "pictionary:hostSkipRound") {
+          await sessionService.pictionaryHostSkipRound(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);

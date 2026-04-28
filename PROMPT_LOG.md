@@ -109,4 +109,6 @@
 
 ## 2026-04-27
 
+56. User requested **Pictionary** (plan): two-team host setup, shared canvas with pen size/eraser/clear, drawer-only prompts, configurable per-draw timer, team-wide +1 scoring on correct guess, random first team with alternating teams and fair drawer rotation, large server clue library, idle-team “stay quiet” banner; implemented `pictionary` in contracts, `pictionaryClues.ts`, `SessionService` + timers + WS routes, lobby/game UI, tests, and prompt log update.
+
 55. User requested **lobby “want to play” preferences**: non-hosts replace the faded “Waiting for host” button with **I want to play this** per game card (one active pick per guest, overwrite on change); host sees **{name} wants to play {game}** under the scoring/players card; implemented `lobby:setGamePreference`, `lobbyGamePreferences` in session state + persistence, pruning on leave/host promotion/start game, UI + styles, server + LobbyScreen tests, and prompt log update.

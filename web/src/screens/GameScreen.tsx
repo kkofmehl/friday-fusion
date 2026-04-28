@@ -7,6 +7,7 @@ import { TriviaGame } from "../games/TriviaGame";
 import { GuessTheImageGame } from "../games/GuessTheImageGame";
 import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
 import { CaptionThisGame } from "../games/CaptionThisGame";
+import { PictionaryGame } from "../games/PictionaryGame";
 
 export function GameScreen({
   session,
@@ -61,6 +62,14 @@ export function GameScreen({
         payload: {
           game: "captionThis",
           options: { captionThisImageProviderId: session.gameState.state.imageProviderId }
+        }
+      }
+    : session.gameState?.type === "pictionary"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "pictionary",
+          options: { pictionaryRoundDurationMs: session.gameState.state.roundDurationMs }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -123,6 +132,16 @@ export function GameScreen({
           isHost={isHost}
           send={send}
           apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "pictionary") {
+      return (
+        <PictionaryGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
         />
       );
     }

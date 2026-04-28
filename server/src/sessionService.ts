@@ -2,6 +2,11 @@ import { nanoid } from "nanoid";
 import {
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
+  PICTORY_MAX_STROKES_PER_ROUND,
+  PICTORY_ROUND_DURATION_DEFAULT_MS,
+  PICTORY_ROUND_DURATION_MAX_MS,
+  PICTORY_ROUND_DURATION_MIN_MS,
+  PICTORY_STROKE_MAX_POINTS,
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
   gameTypeSchema,
@@ -9,10 +14,12 @@ import {
   type GameType,
   type HangmanActivity,
   type HangmanMode,
+  type PictionaryStrokePayload,
   type SessionState,
   type TriviaLoadingState,
   type TriviaQuestion
 } from "../../shared/contracts";
+import { pickPictionaryClue } from "./pictionaryClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
 import {
@@ -180,6 +187,36 @@ type CaptionThisGameInternal = {
   votes: Record<string, string>;
 };
 
+type PictionaryStrokeInternal = {
+  id: string;
+  tool: "pen" | "eraser";
+  width: number;
+  points: { x: number; y: number }[];
+};
+
+type PictionaryGameInternal = {
+  id: string;
+  type: "pictionary";
+  status: "teamSetup" | "drawing" | "roundBreak";
+  roundDurationMs: number;
+  teamAIds: string[];
+  teamBIds: string[];
+  drawCounts: Record<string, number>;
+  strokes: PictionaryStrokeInternal[];
+  usedClueIds: string[];
+  currentPrompt: string | null;
+  currentClueId: string | null;
+  drawerId: string | null;
+  activeTeam: "A" | "B" | null;
+  roundStartedAt: number | null;
+  roundEndsAt: number | null;
+  roundBreakEndsAt: number | null;
+  revealedPrompt: string | null;
+  lastRoundResult: "correct" | "timeout" | null;
+  /** Team that will draw when `roundBreak` ends. */
+  roundBreakNextTeam: "A" | "B" | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -187,7 +224,8 @@ type GameInternal =
   | IcebreakerGameInternal
   | GuessTheImageGameInternal
   | TwentyQuestionsGameInternal
-  | CaptionThisGameInternal;
+  | CaptionThisGameInternal
+  | PictionaryGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -437,6 +475,32 @@ const ensureGameShape = (
       votes: g.votes && typeof g.votes === "object" ? g.votes : {}
     };
   }
+  if (game.type === "pictionary") {
+    const g = game as PictionaryGameInternal;
+    const clampMs = (v: number): number =>
+      Math.min(PICTORY_ROUND_DURATION_MAX_MS, Math.max(PICTORY_ROUND_DURATION_MIN_MS, v));
+    const rd = clampMs(Number(g.roundDurationMs) || PICTORY_ROUND_DURATION_DEFAULT_MS);
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      roundDurationMs: rd,
+      teamAIds: Array.isArray(g.teamAIds) ? g.teamAIds : [],
+      teamBIds: Array.isArray(g.teamBIds) ? g.teamBIds : [],
+      drawCounts: g.drawCounts && typeof g.drawCounts === "object" ? g.drawCounts : {},
+      strokes: Array.isArray(g.strokes) ? g.strokes : [],
+      usedClueIds: Array.isArray(g.usedClueIds) ? g.usedClueIds : [],
+      currentPrompt: g.currentPrompt ?? null,
+      currentClueId: g.currentClueId ?? null,
+      drawerId: g.drawerId ?? null,
+      activeTeam: g.activeTeam === "A" || g.activeTeam === "B" ? g.activeTeam : null,
+      roundStartedAt: g.roundStartedAt ?? null,
+      roundEndsAt: g.roundEndsAt ?? null,
+      roundBreakEndsAt: g.roundBreakEndsAt ?? null,
+      revealedPrompt: g.revealedPrompt ?? null,
+      lastRoundResult: g.lastRoundResult === "correct" || g.lastRoundResult === "timeout" ? g.lastRoundResult : null,
+      roundBreakNextTeam: g.roundBreakNextTeam === "A" || g.roundBreakNextTeam === "B" ? g.roundBreakNextTeam : null
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -480,6 +544,50 @@ const twentyQuestionsAdvanceAsker = (session: SessionInternal, game: TwentyQuest
   game.currentAskerId = guessers[(base + 1) % guessers.length]!;
 };
 
+/** Pause between rounds so everyone can see the clue (ms). */
+const PICTORY_ROUND_BREAK_MS = 3200;
+
+const validatePictionaryTeamRoster = (
+  session: SessionInternal,
+  teamAIds: string[],
+  teamBIds: string[]
+): void => {
+  const all = new Set(session.participants.map((p) => p.id));
+  const a = new Set(teamAIds);
+  const b = new Set(teamBIds);
+  if (teamAIds.length === 0 || teamBIds.length === 0) {
+    throw new Error("Each team needs at least one player.");
+  }
+  for (const id of teamAIds) {
+    if (b.has(id)) {
+      throw new Error("A player cannot be on both teams.");
+    }
+  }
+  if (a.size !== teamAIds.length || b.size !== teamBIds.length) {
+    throw new Error("Duplicate players on a team are not allowed.");
+  }
+  const union = new Set([...teamAIds, ...teamBIds]);
+  if (union.size !== all.size) {
+    throw new Error("Each player must be assigned to exactly one team.");
+  }
+  for (const id of union) {
+    if (!all.has(id)) {
+      throw new Error("Teams can only include players in this session.");
+    }
+  }
+};
+
+const pickPictionaryDrawer = (memberIds: string[], drawCounts: Record<string, number>): string => {
+  if (memberIds.length === 0) {
+    throw new Error("No players on that team.");
+  }
+  const min = Math.min(...memberIds.map((id) => drawCounts[id] ?? 0));
+  const candidates = memberIds.filter((id) => (drawCounts[id] ?? 0) === min);
+  return candidates[Math.floor(Math.random() * candidates.length)]!;
+};
+
+const otherPictionaryTeam = (t: "A" | "B"): "A" | "B" => (t === "A" ? "B" : "A");
+
 const shuffleDisplayPerm = (): [number, number, number, number] => {
   const indices = [0, 1, 2, 3];
   for (let i = indices.length - 1; i > 0; i -= 1) {
@@ -518,6 +626,7 @@ export class SessionService {
   private readonly dataDirectory: string;
   private onSessionUpdated?: (sessionId: string) => void;
   private readonly guessImageResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pictionaryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -802,6 +911,9 @@ export class SessionService {
     if (previousGame?.type === "captionThis") {
       await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     }
+    if (previousGame?.type === "pictionary") {
+      this.clearPictionaryTimer(sessionId);
+    }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
     let next: GameInternal;
@@ -951,6 +1063,37 @@ export class SessionService {
         displayOrder: [],
         votes: {}
       };
+    } else if (game === "pictionary") {
+      if (session.participants.length < 2) {
+        throw new Error("Pictionary needs at least two players.");
+      }
+      const rawMs = options.pictionaryRoundDurationMs ?? PICTORY_ROUND_DURATION_DEFAULT_MS;
+      const roundDurationMs = Math.min(
+        PICTORY_ROUND_DURATION_MAX_MS,
+        Math.max(PICTORY_ROUND_DURATION_MIN_MS, Math.floor(Number(rawMs)) || PICTORY_ROUND_DURATION_DEFAULT_MS)
+      );
+      this.clearPictionaryTimer(sessionId);
+      next = {
+        id: nanoid(6),
+        type: "pictionary",
+        status: "teamSetup",
+        roundDurationMs,
+        teamAIds: [],
+        teamBIds: [],
+        drawCounts: {},
+        strokes: [],
+        usedClueIds: [],
+        currentPrompt: null,
+        currentClueId: null,
+        drawerId: null,
+        activeTeam: null,
+        roundStartedAt: null,
+        roundEndsAt: null,
+        roundBreakEndsAt: null,
+        revealedPrompt: null,
+        lastRoundResult: null,
+        roundBreakNextTeam: null
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -975,6 +1118,9 @@ export class SessionService {
     if (active?.type === "captionThis") {
       await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
     }
+    if (active?.type === "pictionary") {
+      this.clearPictionaryTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -987,6 +1133,7 @@ export class SessionService {
       throw new Error("Only the host can close the session.");
     }
     this.clearGuessImageTimer(sessionId);
+    this.clearPictionaryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
@@ -999,6 +1146,7 @@ export class SessionService {
       return false;
     }
     this.clearGuessImageTimer(sessionId);
+    this.clearPictionaryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
@@ -1027,6 +1175,7 @@ export class SessionService {
 
     if (session.participants.length === 0) {
       this.clearGuessImageTimer(sessionId);
+      this.clearPictionaryTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
       await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
@@ -1102,6 +1251,24 @@ export class SessionService {
         await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
       } else if (activeCap.status === "collectingCaptions") {
         delete activeCap.captions[participantId];
+      }
+    }
+
+    const activePic = session.games[0];
+    if (activePic?.type === "pictionary") {
+      const strip = (ids: string[]): string[] => ids.filter((id) => id !== participantId);
+      const nextA = strip(activePic.teamAIds);
+      const nextB = strip(activePic.teamBIds);
+      if (activePic.status === "drawing" && activePic.drawerId === participantId) {
+        this.clearPictionaryTimer(sessionId);
+        session.games = [];
+      } else if (nextA.length === 0 || nextB.length === 0) {
+        this.clearPictionaryTimer(sessionId);
+        session.games = [];
+      } else {
+        activePic.teamAIds = nextA;
+        activePic.teamBIds = nextB;
+        delete activePic.drawCounts[participantId];
       }
     }
 
@@ -2635,6 +2802,275 @@ export class SessionService {
     await this.persist();
   }
 
+  private clearPictionaryTimer(sessionId: string): void {
+    const existing = this.pictionaryResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.pictionaryResolveTimers.delete(sessionId);
+    }
+  }
+
+  private schedulePictionaryDrawingDeadline(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing" || game.roundEndsAt === null) {
+      return;
+    }
+    this.clearPictionaryTimer(sessionId);
+    const delay = Math.max(0, game.roundEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.pictionaryDrawingTimedOut(sessionId).catch(() => {});
+    }, delay);
+    this.pictionaryResolveTimers.set(sessionId, timer);
+  }
+
+  private schedulePictionaryRoundBreakEnd(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (game?.type !== "pictionary" || game.status !== "roundBreak" || game.roundBreakEndsAt === null) {
+      return;
+    }
+    this.clearPictionaryTimer(sessionId);
+    const delay = Math.max(0, game.roundBreakEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.pictionaryRoundBreakEnded(sessionId).catch(() => {});
+    }, delay);
+    this.pictionaryResolveTimers.set(sessionId, timer);
+  }
+
+  private async pictionaryDrawingTimedOut(sessionId: string): Promise<void> {
+    let session: SessionInternal;
+    try {
+      session = this.getSessionOrThrow(sessionId);
+    } catch {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing") {
+      return;
+    }
+    await this.pictionaryEnterRoundBreak(session, game, "timeout");
+  }
+
+  private async pictionaryRoundBreakEnded(sessionId: string): Promise<void> {
+    let session: SessionInternal;
+    try {
+      session = this.getSessionOrThrow(sessionId);
+    } catch {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "roundBreak") {
+      return;
+    }
+    const nextTeam = game.roundBreakNextTeam;
+    if (!nextTeam) {
+      session.games = [];
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+      return;
+    }
+    this.pictionaryStartDrawingPhase(session, game, nextTeam);
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+    this.schedulePictionaryDrawingDeadline(sessionId);
+  }
+
+  private pictionaryStartDrawingPhase(
+    session: SessionInternal,
+    game: PictionaryGameInternal,
+    team: "A" | "B"
+  ): void {
+    const members = team === "A" ? game.teamAIds : game.teamBIds;
+    const drawer = pickPictionaryDrawer(members, game.drawCounts);
+    const clue = pickPictionaryClue(game.usedClueIds);
+    if (!clue) {
+      throw new Error("No clues available.");
+    }
+    if (game.usedClueIds.includes(clue.id)) {
+      game.usedClueIds = [];
+    }
+    game.usedClueIds.push(clue.id);
+
+    game.status = "drawing";
+    game.activeTeam = team;
+    game.drawerId = drawer;
+    game.currentPrompt = clue.text;
+    game.currentClueId = clue.id;
+    game.strokes = [];
+    const now = Date.now();
+    game.roundStartedAt = now;
+    game.roundEndsAt = now + game.roundDurationMs;
+    game.roundBreakEndsAt = null;
+    game.revealedPrompt = null;
+    game.lastRoundResult = null;
+    game.roundBreakNextTeam = null;
+  }
+
+  private async pictionaryEnterRoundBreak(
+    session: SessionInternal,
+    game: PictionaryGameInternal,
+    result: "correct" | "timeout"
+  ): Promise<void> {
+    if (game.type !== "pictionary" || game.status !== "drawing") {
+      return;
+    }
+    this.clearPictionaryTimer(session.sessionId);
+
+    const drawerId = game.drawerId;
+    const prompt = game.currentPrompt ?? "";
+    const activeTeam = game.activeTeam;
+    if (!activeTeam || !drawerId) {
+      return;
+    }
+
+    if (result === "correct") {
+      const teamIds = activeTeam === "A" ? game.teamAIds : game.teamBIds;
+      for (const pid of teamIds) {
+        const p = session.participants.find((x) => x.id === pid);
+        if (p) {
+          p.score += 1;
+        }
+      }
+    }
+
+    game.drawCounts[drawerId] = (game.drawCounts[drawerId] ?? 0) + 1;
+
+    const nextTeam = otherPictionaryTeam(activeTeam);
+    const now = Date.now();
+    game.status = "roundBreak";
+    game.revealedPrompt = prompt;
+    game.lastRoundResult = result;
+    game.roundBreakNextTeam = nextTeam;
+    game.roundBreakEndsAt = now + PICTORY_ROUND_BREAK_MS;
+    game.currentPrompt = null;
+    game.currentClueId = null;
+    game.drawerId = null;
+    game.activeTeam = null;
+    game.roundStartedAt = null;
+    game.roundEndsAt = null;
+    game.strokes = [];
+
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(session.sessionId);
+    this.schedulePictionaryRoundBreakEnd(session.sessionId);
+  }
+
+  public async pictionarySetTeams(
+    sessionId: string,
+    participantId: string,
+    teamAIds: string[],
+    teamBIds: string[]
+  ): Promise<void> {
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can set teams.");
+    }
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "teamSetup") {
+      throw new Error("Teams can only be edited during setup.");
+    }
+    validatePictionaryTeamRoster(session, teamAIds, teamBIds);
+    game.teamAIds = [...teamAIds];
+    game.teamBIds = [...teamBIds];
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async pictionaryBeginPlay(sessionId: string, participantId: string): Promise<void> {
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can start play.");
+    }
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "teamSetup") {
+      throw new Error("Pictionary is not waiting for team setup.");
+    }
+    validatePictionaryTeamRoster(session, game.teamAIds, game.teamBIds);
+    for (const pid of [...game.teamAIds, ...game.teamBIds]) {
+      if (game.drawCounts[pid] === undefined) {
+        game.drawCounts[pid] = 0;
+      }
+    }
+    this.clearPictionaryTimer(sessionId);
+    const firstTeam: "A" | "B" = Math.random() < 0.5 ? "A" : "B";
+    this.pictionaryStartDrawingPhase(session, game, firstTeam);
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.schedulePictionaryDrawingDeadline(sessionId);
+  }
+
+  public async pictionaryAppendStroke(
+    sessionId: string,
+    participantId: string,
+    stroke: PictionaryStrokePayload
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing") {
+      throw new Error("Drawing is not active.");
+    }
+    if (game.drawerId !== participantId) {
+      throw new Error("Only the drawer can add strokes.");
+    }
+    if (stroke.points.length > PICTORY_STROKE_MAX_POINTS) {
+      throw new Error("Stroke has too many points.");
+    }
+    if (game.strokes.length >= PICTORY_MAX_STROKES_PER_ROUND) {
+      throw new Error("Stroke limit reached for this round.");
+    }
+    const width = Math.min(48, Math.max(1, Math.round(stroke.width)));
+    game.strokes.push({
+      id: nanoid(8),
+      tool: stroke.tool,
+      width,
+      points: stroke.points.map((pt) => ({ x: pt.x, y: pt.y }))
+    });
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async pictionaryClearCanvas(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing") {
+      throw new Error("Drawing is not active.");
+    }
+    if (game.drawerId !== participantId) {
+      throw new Error("Only the drawer can clear the canvas.");
+    }
+    game.strokes = [];
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async pictionaryTeamGuessed(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing") {
+      throw new Error("Drawing is not active.");
+    }
+    if (game.drawerId !== participantId) {
+      throw new Error("Only the drawer can confirm a correct guess.");
+    }
+    await this.pictionaryEnterRoundBreak(session, game, "correct");
+  }
+
+  public async pictionaryHostSkipRound(sessionId: string, participantId: string): Promise<void> {
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can skip a round.");
+    }
+    const session = this.getSessionOrThrow(sessionId);
+    const game = session.games[0];
+    if (game?.type !== "pictionary" || game.status !== "drawing") {
+      throw new Error("Nothing to skip right now.");
+    }
+    await this.pictionaryEnterRoundBreak(session, game, "timeout");
+  }
+
   private toPublicState(session: SessionInternal, viewerParticipantId?: string): SessionState {
     const game = session.games[0];
     const base = {
@@ -3089,6 +3525,71 @@ export class SessionService {
             roundNumber: game.roundNumber,
             tallies,
             winnerEntryIds
+          }
+        }
+      };
+    }
+
+    if (game.type === "pictionary") {
+      if (game.status === "teamSetup") {
+        return {
+          ...base,
+          activeGame: "pictionary",
+          gameState: {
+            type: "pictionary",
+            state: {
+              status: "teamSetup",
+              roundDurationMs: game.roundDurationMs,
+              teamAIds: [...game.teamAIds],
+              teamBIds: [...game.teamBIds]
+            }
+          }
+        };
+      }
+      if (game.status === "drawing") {
+        const showPrompt = Boolean(
+          viewerParticipantId && game.drawerId && viewerParticipantId === game.drawerId
+        );
+        return {
+          ...base,
+          activeGame: "pictionary",
+          gameState: {
+            type: "pictionary",
+            state: {
+              status: "drawing",
+              roundDurationMs: game.roundDurationMs,
+              teamAIds: [...game.teamAIds],
+              teamBIds: [...game.teamBIds],
+              activeTeam: game.activeTeam!,
+              drawerId: game.drawerId!,
+              roundStartedAt: game.roundStartedAt!,
+              roundEndsAt: game.roundEndsAt!,
+              strokes: game.strokes.map((s) => ({
+                id: s.id,
+                tool: s.tool,
+                width: s.width,
+                points: s.points.map((p) => ({ x: p.x, y: p.y }))
+              })),
+              myPrompt: showPrompt ? game.currentPrompt : null
+            }
+          }
+        };
+      }
+      const lastResult = game.lastRoundResult === "correct" ? "correct" : "timeout";
+      return {
+        ...base,
+        activeGame: "pictionary",
+        gameState: {
+          type: "pictionary",
+          state: {
+            status: "roundBreak",
+            roundDurationMs: game.roundDurationMs,
+            teamAIds: [...game.teamAIds],
+            teamBIds: [...game.teamBIds],
+            revealedPrompt: game.revealedPrompt ?? "",
+            lastResult,
+            nextRoundStartsAt: game.roundBreakEndsAt ?? Date.now(),
+            nextTeam: game.roundBreakNextTeam!
           }
         }
       };

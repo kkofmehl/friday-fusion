@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import type {
-  ClientEvent,
-  GameType,
-  HangmanMode,
-  SessionState
+import {
+  PICTORY_ROUND_DURATION_DEFAULT_MS,
+  PICTORY_ROUND_DURATION_MAX_MS,
+  PICTORY_ROUND_DURATION_MIN_MS,
+  type ClientEvent,
+  type GameType,
+  type HangmanMode,
+  type SessionState
 } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
 
@@ -58,6 +61,12 @@ const GAMES: GameOption[] = [
     title: "Caption This",
     description: "One player supplies an image; everyone captions it, then votes for their favorite.",
     emoji: "C"
+  },
+  {
+    id: "pictionary",
+    title: "Pictionary",
+    description: "Two teams take turns drawing clues on a shared canvas—guess aloud with your team.",
+    emoji: "P"
   }
 ];
 
@@ -87,6 +96,7 @@ export function LobbyScreen({
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
   const [twentyQMaxQuestions, setTwentyQMaxQuestions] = useState(20);
+  const [pictionaryDrawSecs, setPictionaryDrawSecs] = useState(PICTORY_ROUND_DURATION_DEFAULT_MS / 1000);
 
   useEffect(() => {
     if (session.participants.some((participant) => participant.id === hangmanCreatorId)) {
@@ -165,6 +175,16 @@ export function LobbyScreen({
           game,
           options: { captionThisImageProviderId: captionThisProviderId }
         }
+      });
+      return;
+    }
+    if (game === "pictionary") {
+      const minSec = PICTORY_ROUND_DURATION_MIN_MS / 1000;
+      const maxSec = PICTORY_ROUND_DURATION_MAX_MS / 1000;
+      const sec = Math.min(maxSec, Math.max(minSec, Math.floor(pictionaryDrawSecs) || minSec));
+      send({
+        type: "game:start",
+        payload: { game, options: { pictionaryRoundDurationMs: sec * 1000 } }
       });
       return;
     }
@@ -327,6 +347,27 @@ export function LobbyScreen({
                     ))}
                   </select>
                   <p className="mode-option-hint">They upload the photo for the first round (needs at least two players).</p>
+                </fieldset>
+              )}
+              {game.id === "pictionary" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Drawing timer</legend>
+                  <label className="mode-picker-label" htmlFor="pictionary-draw-seconds">
+                    Seconds per drawing turn
+                  </label>
+                  <input
+                    id="pictionary-draw-seconds"
+                    type="number"
+                    min={PICTORY_ROUND_DURATION_MIN_MS / 1000}
+                    max={PICTORY_ROUND_DURATION_MAX_MS / 1000}
+                    step={15}
+                    value={pictionaryDrawSecs}
+                    onChange={(event) => setPictionaryDrawSecs(Number(event.target.value))}
+                  />
+                  <p className="mode-option-hint">
+                    {PICTORY_ROUND_DURATION_MIN_MS / 1000}–{PICTORY_ROUND_DURATION_MAX_MS / 1000} seconds (default{" "}
+                    {PICTORY_ROUND_DURATION_DEFAULT_MS / 1000}). Host assigns teams after starting.
+                  </p>
                 </fieldset>
               )}
               {isHost ? (

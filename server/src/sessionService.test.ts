@@ -1474,4 +1474,140 @@ describe("SessionService", () => {
     const state = setup.service.getState(host.sessionId);
     expect(state.gameState).toBeNull();
   });
+
+  it("Pictionary: rejects start with fewer than two players", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(setup.service.startGame(host.sessionId, "pictionary")).rejects.toThrow("at least two players");
+  });
+
+  it("Pictionary: clamps round duration to configured min and max", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 5_000 });
+    let s = setup.service.getState(host.sessionId);
+    if (s.gameState?.type !== "pictionary") {
+      throw new Error("expected pictionary");
+    }
+    expect(s.gameState.state.roundDurationMs).toBe(30_000);
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 999_000 });
+    s = setup.service.getState(host.sessionId);
+    if (s.gameState?.type !== "pictionary") {
+      throw new Error("expected pictionary");
+    }
+    expect(s.gameState.state.roundDurationMs).toBe(300_000);
+  });
+
+  it("Pictionary: only drawer sees prompt; HTTP snapshot hides prompt", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 60_000 });
+    await setup.service.pictionarySetTeams(host.sessionId, host.participantId, [host.participantId], [guest.participantId]);
+    await setup.service.pictionaryBeginPlay(host.sessionId, host.participantId);
+    const base = setup.service.getState(host.sessionId);
+    if (base.gameState?.type !== "pictionary" || base.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    const drawerId = base.gameState.state.drawerId;
+    const otherId = drawerId === host.participantId ? guest.participantId : host.participantId;
+    const drawerState = setup.service.getState(host.sessionId, drawerId);
+    const otherState = setup.service.getState(host.sessionId, otherId);
+    if (drawerState.gameState?.type !== "pictionary" || drawerState.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    if (otherState.gameState?.type !== "pictionary" || otherState.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    expect(drawerState.gameState.state.myPrompt).toBeTruthy();
+    expect(otherState.gameState.state.myPrompt).toBeNull();
+    const httpSnap = setup.service.getState(host.sessionId);
+    if (httpSnap.gameState?.type !== "pictionary" || httpSnap.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    expect(httpSnap.gameState.state.myPrompt).toBeNull();
+  });
+
+  it("Pictionary: team guessed gives +1 to every member of the drawing team", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    const carol = await setup.service.joinSession(host.joinCode, "Carol");
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 60_000 });
+    await setup.service.pictionarySetTeams(host.sessionId, host.participantId, [host.participantId, carol.participantId], [
+      guest.participantId
+    ]);
+    await setup.service.pictionaryBeginPlay(host.sessionId, host.participantId);
+    const mid = setup.service.getState(host.sessionId);
+    if (mid.gameState?.type !== "pictionary" || mid.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    const drawerId = mid.gameState.state.drawerId;
+    const activeTeam = mid.gameState.state.activeTeam;
+    const scoringTeamIds =
+      activeTeam === "A" ? [...mid.gameState.state.teamAIds] : [...mid.gameState.state.teamBIds];
+    const before = new Map(mid.participants.map((p) => [p.id, p.score]));
+    await setup.service.pictionaryTeamGuessed(host.sessionId, drawerId);
+    const fin = setup.service.getState(host.sessionId);
+    if (fin.gameState?.type !== "pictionary" || fin.gameState.state.status !== "roundBreak") {
+      throw new Error("expected roundBreak");
+    }
+    const after = new Map(fin.participants.map((p) => [p.id, p.score]));
+    for (const id of scoringTeamIds) {
+      expect(after.get(id)).toBe((before.get(id) ?? 0) + 1);
+    }
+    for (const p of fin.participants) {
+      if (!scoringTeamIds.includes(p.id)) {
+        expect(after.get(p.id)).toBe(before.get(p.id));
+      }
+    }
+  });
+
+  it("Pictionary: rejects appendStroke from non-drawer", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 60_000 });
+    await setup.service.pictionarySetTeams(host.sessionId, host.participantId, [host.participantId], [guest.participantId]);
+    await setup.service.pictionaryBeginPlay(host.sessionId, host.participantId);
+    const mid = setup.service.getState(host.sessionId);
+    if (mid.gameState?.type !== "pictionary" || mid.gameState.state.status !== "drawing") {
+      throw new Error("expected drawing");
+    }
+    const drawerId = mid.gameState.state.drawerId;
+    const notDrawer = drawerId === host.participantId ? guest.participantId : host.participantId;
+    await expect(
+      setup.service.pictionaryAppendStroke(host.sessionId, notDrawer, {
+        tool: "pen",
+        width: 4,
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.2, y: 0.2 }
+        ]
+      })
+    ).rejects.toThrow("Only the drawer");
+  });
+
+  it("Pictionary: host skip round ends draw like a timeout without points", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "pictionary", { pictionaryRoundDurationMs: 60_000 });
+    await setup.service.pictionarySetTeams(host.sessionId, host.participantId, [host.participantId], [guest.participantId]);
+    await setup.service.pictionaryBeginPlay(host.sessionId, host.participantId);
+    await setup.service.pictionaryHostSkipRound(host.sessionId, host.participantId);
+    const fin = setup.service.getState(host.sessionId);
+    if (fin.gameState?.type !== "pictionary" || fin.gameState.state.status !== "roundBreak") {
+      throw new Error("expected roundBreak");
+    }
+    expect(fin.gameState.state.lastResult).toBe("timeout");
+    expect(fin.participants.every((p) => p.score === 0)).toBe(true);
+  });
 });

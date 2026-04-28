@@ -7,7 +7,8 @@ export const gameTypeSchema = z.enum([
   "icebreaker",
   "guessTheImage",
   "twentyQuestions",
-  "captionThis"
+  "captionThis",
+  "pictionary"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -357,6 +358,70 @@ export const captionThisStateSchema = z.discriminatedUnion("status", [
 ]);
 export type CaptionThisState = z.infer<typeof captionThisStateSchema>;
 
+/** Per-draw timer bounds (ms) for Pictionary; server clamps `game:start` options to this range. */
+export const PICTORY_ROUND_DURATION_MIN_MS = 30_000;
+export const PICTORY_ROUND_DURATION_MAX_MS = 300_000;
+export const PICTORY_ROUND_DURATION_DEFAULT_MS = 90_000;
+/** Max points per stroke segment (normalized 0–1 coords). */
+export const PICTORY_STROKE_MAX_POINTS = 400;
+/** Max saved strokes per drawing round (server-enforced). */
+export const PICTORY_MAX_STROKES_PER_ROUND = 250;
+
+export const pictionaryPointSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1)
+});
+export type PictionaryPoint = z.infer<typeof pictionaryPointSchema>;
+
+export const pictionaryStrokePayloadSchema = z.object({
+  tool: z.enum(["pen", "eraser"]),
+  width: z.number().min(1).max(48),
+  points: z.array(pictionaryPointSchema).min(1).max(PICTORY_STROKE_MAX_POINTS)
+});
+export type PictionaryStrokePayload = z.infer<typeof pictionaryStrokePayloadSchema>;
+
+export const pictionarySavedStrokeSchema = pictionaryStrokePayloadSchema.extend({
+  id: z.string().min(1)
+});
+export type PictionarySavedStroke = z.infer<typeof pictionarySavedStrokeSchema>;
+
+export const pictionaryTeamIdSchema = z.enum(["A", "B"]);
+export type PictionaryTeamId = z.infer<typeof pictionaryTeamIdSchema>;
+
+export const pictionaryStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("teamSetup"),
+    roundDurationMs: z.number().int().min(PICTORY_ROUND_DURATION_MIN_MS).max(PICTORY_ROUND_DURATION_MAX_MS),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("drawing"),
+    roundDurationMs: z.number().int().min(PICTORY_ROUND_DURATION_MIN_MS).max(PICTORY_ROUND_DURATION_MAX_MS),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    activeTeam: pictionaryTeamIdSchema,
+    drawerId: z.string(),
+    roundStartedAt: z.number().int(),
+    roundEndsAt: z.number().int(),
+    strokes: z.array(pictionarySavedStrokeSchema),
+    /** Only the current drawer receives the prompt over the socket; always null for HTTP snapshot and other viewers. */
+    myPrompt: z.string().nullable()
+  }),
+  z.object({
+    status: z.literal("roundBreak"),
+    roundDurationMs: z.number().int().min(PICTORY_ROUND_DURATION_MIN_MS).max(PICTORY_ROUND_DURATION_MAX_MS),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    revealedPrompt: z.string(),
+    lastResult: z.enum(["correct", "timeout"]),
+    nextRoundStartsAt: z.number().int(),
+    /** Which team draws after the break ends. */
+    nextTeam: pictionaryTeamIdSchema
+  })
+]);
+export type PictionaryState = z.infer<typeof pictionaryStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -385,6 +450,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("captionThis"),
     state: captionThisStateSchema
+  }),
+  z.object({
+    type: z.literal("pictionary"),
+    state: pictionaryStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -438,7 +507,9 @@ export const gameStartOptionsSchema = z.object({
   /** 20 Questions: question budget for the round (default 20, clamped server-side to 1–50). */
   twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional(),
   /** Caption This: who uploads the image for the first round (defaults to host). */
-  captionThisImageProviderId: z.string().optional()
+  captionThisImageProviderId: z.string().optional(),
+  /** Pictionary: ms per drawing turn (server clamps to PICTORY_ROUND_DURATION_*). */
+  pictionaryRoundDurationMs: z.number().int().positive().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -566,7 +637,22 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("captionThis:beginNextRound"),
     payload: z.object({ imageProviderId: z.string().min(1) })
-  })
+  }),
+  z.object({
+    type: z.literal("pictionary:setTeams"),
+    payload: z.object({
+      teamAIds: z.array(z.string()),
+      teamBIds: z.array(z.string())
+    })
+  }),
+  z.object({ type: z.literal("pictionary:beginPlay"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("pictionary:appendStroke"),
+    payload: pictionaryStrokePayloadSchema
+  }),
+  z.object({ type: z.literal("pictionary:clearCanvas"), payload: z.object({}) }),
+  z.object({ type: z.literal("pictionary:teamGuessed"), payload: z.object({}) }),
+  z.object({ type: z.literal("pictionary:hostSkipRound"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 
