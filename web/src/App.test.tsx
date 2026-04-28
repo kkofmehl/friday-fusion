@@ -20,5 +20,7 @@ describe("App", () => {
     expect(screen.getByRole("tab", { name: "Create session" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "Join session" })).toBeDefined();
     expect(screen.getByLabelText("Your display name")).toBeDefined();
+    expect(screen.getByRole("contentinfo")).toBeDefined();
+    expect(screen.getByText(/© 2026 Kmofy Consulting/i)).toBeDefined();
   });
 });

@@ -536,15 +536,60 @@ label {
   margin: 0 auto;
 }
 
+.app-layout--landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-layout--landing .landing-shell {
+  flex: 1;
+}
+
+.app-footer {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 0.85rem 1.25rem 1.1rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--slate-500);
+  border-top: 1px solid rgba(226, 232, 240, 0.85);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.app-footer-note {
+  margin: 0 0 0.35rem;
+  max-width: 36rem;
+  margin-inline: auto;
+}
+
+.app-footer-copy {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--slate-400);
+  letter-spacing: 0.02em;
+}
+
+.app-footer a {
+  color: var(--slate-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-footer a:hover {
+  color: var(--indigo-600);
+}
+
 /* ============================================================
    Landing screen
    ============================================================ */
 .landing-shell {
-  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
+  flex: 1;
+  min-height: 0;
 }
 
 .landing-card {

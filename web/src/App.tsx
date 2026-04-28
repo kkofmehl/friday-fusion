@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { ClientEvent, SessionState } from "../../shared/contracts";
 import { resolveApiBase } from "./config";
 import { useRealtime, type SessionClosedReason } from "./hooks/useRealtime";
+import { AppFooter } from "./components/AppFooter";
 import { Toast } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
 import { LandingScreen, type LandingSuccess } from "./screens/LandingScreen";
@@ -78,12 +79,15 @@ export function App(): JSX.Element {
   if (!auth || !session) {
     return (
       <>
-        <LandingScreen
-          apiBase={apiBase}
-          onSuccess={handleLandingSuccess}
-          error={error || notice}
-          onError={setError}
-        />
+        <div className="app-layout app-layout--landing">
+          <LandingScreen
+            apiBase={apiBase}
+            onSuccess={handleLandingSuccess}
+            error={error || notice}
+            onError={setError}
+          />
+          <AppFooter />
+        </div>
         <Toast message={status === "idle" ? "" : ""} onDismiss={() => setError("")} />
       </>
     );
@@ -120,6 +124,7 @@ export function App(): JSX.Element {
           />
         )}
       </main>
+      <AppFooter />
       <Toast message={error} onDismiss={() => setError("")} />
     </div>
   );
