@@ -9,7 +9,8 @@ export const gameTypeSchema = z.enum([
   "guessTheImage",
   "twentyQuestions",
   "captionThis",
-  "pictionary"
+  "pictionary",
+  "applesToApples"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -521,6 +522,73 @@ export const pictionaryStateSchema = z.discriminatedUnion("status", [
 ]);
 export type PictionaryState = z.infer<typeof pictionaryStateSchema>;
 
+/** Hand size and finite-mode table rounds (no redraw). */
+export const APPLES_TO_APPLES_HAND_SIZE = 6;
+export const APPLES_TO_APPLES_FINITE_ROUNDS = 6;
+export const APPLES_TO_APPLES_CARD_TEXT_MAX_CHARS = 200;
+
+export const applesToApplesModeSchema = z.enum(["standard", "finite"]);
+export type ApplesToApplesMode = z.infer<typeof applesToApplesModeSchema>;
+
+export const applesToApplesHandCardSchema = z.object({
+  id: z.string(),
+  text: z.string()
+});
+export type ApplesToApplesHandCard = z.infer<typeof applesToApplesHandCardSchema>;
+
+/** Stock topic/response rows loaded from JSON. */
+export const applesToApplesLibraryCardSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1).max(APPLES_TO_APPLES_CARD_TEXT_MAX_CHARS)
+});
+export type ApplesToApplesLibraryCard = z.infer<typeof applesToApplesLibraryCardSchema>;
+
+const applesToApplesRoundBaseSchema = z.object({
+  mode: applesToApplesModeSchema,
+  topicText: z.string(),
+  topicId: z.string(),
+  judgeId: z.string(),
+  roundNumber: z.number().int().min(1),
+  isJudge: z.boolean()
+});
+
+export const applesToApplesStateSchema = z.discriminatedUnion("status", [
+  applesToApplesRoundBaseSchema.extend({
+    status: z.literal("collecting"),
+    submittedNonJudgeIds: z.array(z.string()),
+    allSubmissionsIn: z.boolean(),
+    myHand: z.array(applesToApplesHandCardSchema).nullable()
+  }),
+  applesToApplesRoundBaseSchema.extend({
+    status: z.literal("judging"),
+    anonymousOptions: z
+      .array(
+        z.object({
+          entryId: z.string(),
+          text: z.string()
+        })
+      )
+      .nullable(),
+    waitingForJudge: z.boolean()
+  }),
+  z.object({
+    status: z.literal("roundResult"),
+    mode: applesToApplesModeSchema,
+    topicText: z.string(),
+    winningEntryId: z.string(),
+    winnerParticipantId: z.string(),
+    winningText: z.string(),
+    roundNumber: z.number().int().min(1),
+    /** When false (finite mode after round 6), host `beginNextRound` ends the game. */
+    canContinue: z.boolean()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    mode: applesToApplesModeSchema
+  })
+]);
+export type ApplesToApplesState = z.infer<typeof applesToApplesStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -557,6 +625,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("guessWhoSaidIt"),
     state: guessWhoSaidItStateSchema
+  }),
+  z.object({
+    type: z.literal("applesToApples"),
+    state: applesToApplesStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -615,7 +687,9 @@ export const gameStartOptionsSchema = z.object({
   /** Caption This: who uploads the image for the first round (defaults to host). */
   captionThisImageProviderId: z.string().optional(),
   /** Pictionary: ms per drawing turn (server clamps to PICTORY_ROUND_DURATION_*). */
-  pictionaryRoundDurationMs: z.number().int().positive().optional()
+  pictionaryRoundDurationMs: z.number().int().positive().optional(),
+  /** Apples to Apples: standard (redraw to hand size) or finite (6 rounds, no redraw). */
+  applesToApplesMode: applesToApplesModeSchema.optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -783,7 +857,16 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("pictionary:clearCanvas"), payload: z.object({}) }),
   z.object({ type: z.literal("pictionary:teamGuessed"), payload: z.object({}) }),
-  z.object({ type: z.literal("pictionary:hostSkipRound"), payload: z.object({}) })
+  z.object({ type: z.literal("pictionary:hostSkipRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("applesToApples:submitCard"),
+    payload: z.object({ cardId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("applesToApples:judgePick"),
+    payload: z.object({ entryId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("applesToApples:beginNextRound"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

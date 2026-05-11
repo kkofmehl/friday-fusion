@@ -1,0 +1,774 @@
+[
+  {
+    "id": "ata-r-001",
+    "text": "A broken umbrella"
+  },
+  {
+    "id": "ata-r-002",
+    "text": "A cat in a tuxedo"
+  },
+  {
+    "id": "ata-r-003",
+    "text": "A conspiracy theory"
+  },
+  {
+    "id": "ata-r-004",
+    "text": "A crisp high five"
+  },
+  {
+    "id": "ata-r-005",
+    "text": "A dance move you regret"
+  },
+  {
+    "id": "ata-r-006",
+    "text": "A dream about work"
+  },
+  {
+    "id": "ata-r-007",
+    "text": "A group chat mutiny"
+  },
+  {
+    "id": "ata-r-008",
+    "text": "A haunted printer"
+  },
+  {
+    "id": "ata-r-009",
+    "text": "A hug that lasts too long"
+  },
+  {
+    "id": "ata-r-010",
+    "text": "A karaoke mic"
+  },
+  {
+    "id": "ata-r-011",
+    "text": "A leftover pizza slice"
+  },
+  {
+    "id": "ata-r-012",
+    "text": "A lucky penny"
+  },
+  {
+    "id": "ata-r-013",
+    "text": "A midnight snack"
+  },
+  {
+    "id": "ata-r-014",
+    "text": "A minivan"
+  },
+  {
+    "id": "ata-r-015",
+    "text": "A mismatched sock"
+  },
+  {
+    "id": "ata-r-016",
+    "text": "A nap that ruins your night"
+  },
+  {
+    "id": "ata-r-017",
+    "text": "A parking ticket"
+  },
+  {
+    "id": "ata-r-018",
+    "text": "A password on a sticky note"
+  },
+  {
+    "id": "ata-r-019",
+    "text": "A pet that judges you"
+  },
+  {
+    "id": "ata-r-020",
+    "text": "A pile of laundry"
+  },
+  {
+    "id": "ata-r-021",
+    "text": "A plastic fork"
+  },
+  {
+    "id": "ata-r-022",
+    "text": "A really good yawn"
+  },
+  {
+    "id": "ata-r-023",
+    "text": "A rubber duck"
+  },
+  {
+    "id": "ata-r-024",
+    "text": "A secret handshake"
+  },
+  {
+    "id": "ata-r-025",
+    "text": "A shopping cart with one bad wheel"
+  },
+  {
+    "id": "ata-r-026",
+    "text": "A snack drawer"
+  },
+  {
+    "id": "ata-r-027",
+    "text": "A squeaky door"
+  },
+  {
+    "id": "ata-r-028",
+    "text": "A sticky keyboard"
+  },
+  {
+    "id": "ata-r-029",
+    "text": "A surprise quiz"
+  },
+  {
+    "id": "ata-r-030",
+    "text": "A suspiciously free Wi‑Fi"
+  },
+  {
+    "id": "ata-r-031",
+    "text": "A text sent to the wrong person"
+  },
+  {
+    "id": "ata-r-032",
+    "text": "A theme park line"
+  },
+  {
+    "id": "ata-r-033",
+    "text": "A toaster fire"
+  },
+  {
+    "id": "ata-r-034",
+    "text": "A traffic jam"
+  },
+  {
+    "id": "ata-r-035",
+    "text": "A typo in an email"
+  },
+  {
+    "id": "ata-r-036",
+    "text": "A very long receipt"
+  },
+  {
+    "id": "ata-r-037",
+    "text": "A voicemail from 2014"
+  },
+  {
+    "id": "ata-r-038",
+    "text": "A water cooler rumor"
+  },
+  {
+    "id": "ata-r-039",
+    "text": "A white lie"
+  },
+  {
+    "id": "ata-r-040",
+    "text": "Accidentally liking an old photo"
+  },
+  {
+    "id": "ata-r-041",
+    "text": "Adulting"
+  },
+  {
+    "id": "ata-r-042",
+    "text": "Airport sushi"
+  },
+  {
+    "id": "ata-r-043",
+    "text": "An all-you-can-eat buffet"
+  },
+  {
+    "id": "ata-r-044",
+    "text": "An awkward silence"
+  },
+  {
+    "id": "ata-r-045",
+    "text": "An expired coupon"
+  },
+  {
+    "id": "ata-r-046",
+    "text": "Autocorrect"
+  },
+  {
+    "id": "ata-r-047",
+    "text": "Avocado toast"
+  },
+  {
+    "id": "ata-r-048",
+    "text": "Backup plans"
+  },
+  {
+    "id": "ata-r-049",
+    "text": "Bad Wi‑Fi"
+  },
+  {
+    "id": "ata-r-050",
+    "text": "Bedhead"
+  },
+  {
+    "id": "ata-r-051",
+    "text": "Being early"
+  },
+  {
+    "id": "ata-r-052",
+    "text": "Being fashionably late"
+  },
+  {
+    "id": "ata-r-053",
+    "text": "Big data"
+  },
+  {
+    "id": "ata-r-054",
+    "text": "Bluetooth that won't pair"
+  },
+  {
+    "id": "ata-r-055",
+    "text": "Board game night"
+  },
+  {
+    "id": "ata-r-056",
+    "text": "Brunch"
+  },
+  {
+    "id": "ata-r-057",
+    "text": "Bubble wrap"
+  },
+  {
+    "id": "ata-r-058",
+    "text": "Burning popcorn"
+  },
+  {
+    "id": "ata-r-059",
+    "text": "Camping in the rain"
+  },
+  {
+    "id": "ata-r-060",
+    "text": "Car karaoke"
+  },
+  {
+    "id": "ata-r-061",
+    "text": "Cardio"
+  },
+  {
+    "id": "ata-r-062",
+    "text": "Cat videos"
+  },
+  {
+    "id": "ata-r-063",
+    "text": "Cheap sunglasses"
+  },
+  {
+    "id": "ata-r-064",
+    "text": "Checking the fridge again"
+  },
+  {
+    "id": "ata-r-065",
+    "text": "Coffee breath"
+  },
+  {
+    "id": "ata-r-066",
+    "text": "Cold pizza"
+  },
+  {
+    "id": "ata-r-067",
+    "text": "Comic sans"
+  },
+  {
+    "id": "ata-r-068",
+    "text": "Conference calls"
+  },
+  {
+    "id": "ata-r-069",
+    "text": "Crying at a commercial"
+  },
+  {
+    "id": "ata-r-070",
+    "text": "Daylight saving confusion"
+  },
+  {
+    "id": "ata-r-071",
+    "text": "Dead batteries"
+  },
+  {
+    "id": "ata-r-072",
+    "text": "Desk snacks"
+  },
+  {
+    "id": "ata-r-073",
+    "text": "Doomscrolling"
+  },
+  {
+    "id": "ata-r-074",
+    "text": "Double texting"
+  },
+  {
+    "id": "ata-r-075",
+    "text": "Drama in the comments"
+  },
+  {
+    "id": "ata-r-076",
+    "text": "Duct tape"
+  },
+  {
+    "id": "ata-r-077",
+    "text": "Elevator small talk"
+  },
+  {
+    "id": "ata-r-078",
+    "text": "Email chains"
+  },
+  {
+    "id": "ata-r-079",
+    "text": "Empty ink cartridges"
+  },
+  {
+    "id": "ata-r-080",
+    "text": "Explaining memes"
+  },
+  {
+    "id": "ata-r-081",
+    "text": "Fake it till you make it"
+  },
+  {
+    "id": "ata-r-082",
+    "text": "Fast food at 2 a.m."
+  },
+  {
+    "id": "ata-r-083",
+    "text": "First dates"
+  },
+  {
+    "id": "ata-r-084",
+    "text": "Free samples"
+  },
+  {
+    "id": "ata-r-085",
+    "text": "Friday afternoon energy"
+  },
+  {
+    "id": "ata-r-086",
+    "text": "Frozen dinners"
+  },
+  {
+    "id": "ata-r-087",
+    "text": "Getting carded"
+  },
+  {
+    "id": "ata-r-088",
+    "text": "Ghosting"
+  },
+  {
+    "id": "ata-r-089",
+    "text": "Glitter"
+  },
+  {
+    "id": "ata-r-090",
+    "text": "Grocery store muzak"
+  },
+  {
+    "id": "ata-r-091",
+    "text": "Group projects"
+  },
+  {
+    "id": "ata-r-092",
+    "text": "Hacky sack"
+  },
+  {
+    "id": "ata-r-093",
+    "text": "High heels"
+  },
+  {
+    "id": "ata-r-094",
+    "text": "Hoarding cables"
+  },
+  {
+    "id": "ata-r-095",
+    "text": "Humble brags"
+  },
+  {
+    "id": "ata-r-096",
+    "text": "Icebreaker games"
+  },
+  {
+    "id": "ata-r-097",
+    "text": "Impulse buys"
+  },
+  {
+    "id": "ata-r-098",
+    "text": "Indoor voices"
+  },
+  {
+    "id": "ata-r-099",
+    "text": "Internet drama"
+  },
+  {
+    "id": "ata-r-100",
+    "text": "Introvert energy"
+  },
+  {
+    "id": "ata-r-101",
+    "text": "Junk drawers"
+  },
+  {
+    "id": "ata-r-102",
+    "text": "Karaoke confidence"
+  },
+  {
+    "id": "ata-r-103",
+    "text": "Laundry day"
+  },
+  {
+    "id": "ata-r-104",
+    "text": "Leftover holiday candy"
+  },
+  {
+    "id": "ata-r-105",
+    "text": "Leg day"
+  },
+  {
+    "id": "ata-r-106",
+    "text": "Losing one AirPod"
+  },
+  {
+    "id": "ata-r-107",
+    "text": "Loud chewing"
+  },
+  {
+    "id": "ata-r-108",
+    "text": "Lucky socks"
+  },
+  {
+    "id": "ata-r-109",
+    "text": "Making a spreadsheet"
+  },
+  {
+    "id": "ata-r-110",
+    "text": "Mall Santas"
+  },
+  {
+    "id": "ata-r-111",
+    "text": "Manuals nobody reads"
+  },
+  {
+    "id": "ata-r-112",
+    "text": "Microwave explosions"
+  },
+  {
+    "id": "ata-r-113",
+    "text": "Mismatched Tupperware lids"
+  },
+  {
+    "id": "ata-r-114",
+    "text": "Monday mornings"
+  },
+  {
+    "id": "ata-r-115",
+    "text": "Mystery leftovers"
+  },
+  {
+    "id": "ata-r-116",
+    "text": "Napkin math"
+  },
+  {
+    "id": "ata-r-117",
+    "text": "Nostalgia"
+  },
+  {
+    "id": "ata-r-118",
+    "text": "Office birthday cake"
+  },
+  {
+    "id": "ata-r-119",
+    "text": "Online shopping carts"
+  },
+  {
+    "id": "ata-r-120",
+    "text": "Overpacking"
+  },
+  {
+    "id": "ata-r-121",
+    "text": "Parallel parking"
+  },
+  {
+    "id": "ata-r-122",
+    "text": "Password reset emails"
+  },
+  {
+    "id": "ata-r-123",
+    "text": "Petty revenge"
+  },
+  {
+    "id": "ata-r-124",
+    "text": "Phone on 1%"
+  },
+  {
+    "id": "ata-r-125",
+    "text": "Pineapple on pizza debates"
+  },
+  {
+    "id": "ata-r-126",
+    "text": "Popcorn ceilings"
+  },
+  {
+    "id": "ata-r-127",
+    "text": "Procrastination"
+  },
+  {
+    "id": "ata-r-128",
+    "text": "Public restrooms"
+  },
+  {
+    "id": "ata-r-129",
+    "text": "Pushing a pull door"
+  },
+  {
+    "id": "ata-r-130",
+    "text": "QR codes on tables"
+  },
+  {
+    "id": "ata-r-131",
+    "text": "Rain on your day off"
+  },
+  {
+    "id": "ata-r-132",
+    "text": "Reading terms and conditions"
+  },
+  {
+    "id": "ata-r-133",
+    "text": "Reply-all disasters"
+  },
+  {
+    "id": "ata-r-134",
+    "text": "Road trip snacks"
+  },
+  {
+    "id": "ata-r-135",
+    "text": "Robocalls"
+  },
+  {
+    "id": "ata-r-136",
+    "text": "Rolling the dice"
+  },
+  {
+    "id": "ata-r-137",
+    "text": "Rubber bands"
+  },
+  {
+    "id": "ata-r-138",
+    "text": "Running for the bus"
+  },
+  {
+    "id": "ata-r-139",
+    "text": "Sarcasm"
+  },
+  {
+    "id": "ata-r-140",
+    "text": "Self-checkout attitude"
+  },
+  {
+    "id": "ata-r-141",
+    "text": "Singing in the shower"
+  },
+  {
+    "id": "ata-r-142",
+    "text": "Skipping leg day"
+  },
+  {
+    "id": "ata-r-143",
+    "text": "Sleeping through alarms"
+  },
+  {
+    "id": "ata-r-144",
+    "text": "Small talk"
+  },
+  {
+    "id": "ata-r-145",
+    "text": "Snack wrappers"
+  },
+  {
+    "id": "ata-r-146",
+    "text": "Social battery at 0%"
+  },
+  {
+    "id": "ata-r-147",
+    "text": "Spoilers"
+  },
+  {
+    "id": "ata-r-148",
+    "text": "Spontaneous road trips"
+  },
+  {
+    "id": "ata-r-149",
+    "text": "Spring cleaning"
+  },
+  {
+    "id": "ata-r-150",
+    "text": "Stale cereal"
+  },
+  {
+    "id": "ata-r-151",
+    "text": "Standing desks"
+  },
+  {
+    "id": "ata-r-152",
+    "text": "Sticker residue"
+  },
+  {
+    "id": "ata-r-153",
+    "text": "Storm chips"
+  },
+  {
+    "id": "ata-r-154",
+    "text": "Streaming decision fatigue"
+  },
+  {
+    "id": "ata-r-155",
+    "text": "Stubbing your toe"
+  },
+  {
+    "id": "ata-r-156",
+    "text": "Sudden hiccups"
+  },
+  {
+    "id": "ata-r-157",
+    "text": "Sunday scaries"
+  },
+  {
+    "id": "ata-r-158",
+    "text": "Suspiciously quiet pets"
+  },
+  {
+    "id": "ata-r-159",
+    "text": "Swiping the wrong way"
+  },
+  {
+    "id": "ata-r-160",
+    "text": "Tax season"
+  },
+  {
+    "id": "ata-r-161",
+    "text": "Team-building exercises"
+  },
+  {
+    "id": "ata-r-162",
+    "text": "That one coworker"
+  },
+  {
+    "id": "ata-r-163",
+    "text": "The bottom of a bag of chips"
+  },
+  {
+    "id": "ata-r-164",
+    "text": "The last slice of pizza"
+  },
+  {
+    "id": "ata-r-165",
+    "text": "The snooze button"
+  },
+  {
+    "id": "ata-r-166",
+    "text": "The sound of Velcro"
+  },
+  {
+    "id": "ata-r-167",
+    "text": "Theme songs"
+  },
+  {
+    "id": "ata-r-168",
+    "text": "Therapy homework"
+  },
+  {
+    "id": "ata-r-169",
+    "text": "Thumb wrestling"
+  },
+  {
+    "id": "ata-r-170",
+    "text": "TikTok trends"
+  },
+  {
+    "id": "ata-r-171",
+    "text": "Toothpaste economics"
+  },
+  {
+    "id": "ata-r-172",
+    "text": "Traffic circles"
+  },
+  {
+    "id": "ata-r-173",
+    "text": "Train delays"
+  },
+  {
+    "id": "ata-r-174",
+    "text": "Trying a new recipe"
+  },
+  {
+    "id": "ata-r-175",
+    "text": "Unexpected compliments"
+  },
+  {
+    "id": "ata-r-176",
+    "text": "Unlimited breadsticks"
+  },
+  {
+    "id": "ata-r-177",
+    "text": "Vacuum lines on carpet"
+  },
+  {
+    "id": "ata-r-178",
+    "text": "Very specific playlists"
+  },
+  {
+    "id": "ata-r-179",
+    "text": "Video game lag"
+  },
+  {
+    "id": "ata-r-180",
+    "text": "Voicemail etiquette"
+  },
+  {
+    "id": "ata-r-181",
+    "text": "Waiting for paint to dry"
+  },
+  {
+    "id": "ata-r-182",
+    "text": "Waking up before the alarm"
+  },
+  {
+    "id": "ata-r-183",
+    "text": "Water cooler gossip"
+  },
+  {
+    "id": "ata-r-184",
+    "text": "Wearing headphones to avoid people"
+  },
+  {
+    "id": "ata-r-185",
+    "text": "Wet socks"
+  },
+  {
+    "id": "ata-r-186",
+    "text": "Wi‑Fi passwords on chalkboards"
+  },
+  {
+    "id": "ata-r-187",
+    "text": "Windy umbrella days"
+  },
+  {
+    "id": "ata-r-188",
+    "text": "Workout playlists"
+  },
+  {
+    "id": "ata-r-189",
+    "text": "Yard sale treasures"
+  },
+  {
+    "id": "ata-r-190",
+    "text": "Your browser history"
+  },
+  {
+    "id": "ata-r-191",
+    "text": "Your high school yearbook photo"
+  },
+  {
+    "id": "ata-r-192",
+    "text": "Your spam folder"
+  },
+  {
+    "id": "ata-r-193",
+    "text": "Zoom fatigue"
+  }
+]

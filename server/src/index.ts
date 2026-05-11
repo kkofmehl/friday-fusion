@@ -939,6 +939,20 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.imageProviderId
           );
+        } else if (event.type === "applesToApples:submitCard") {
+          await sessionService.applesToApplesSubmitCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId
+          );
+        } else if (event.type === "applesToApples:judgePick") {
+          await sessionService.applesToApplesJudgePick(
+            context.sessionId,
+            context.participantId,
+            event.payload.entryId
+          );
+        } else if (event.type === "applesToApples:beginNextRound") {
+          await sessionService.applesToApplesBeginNextRound(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

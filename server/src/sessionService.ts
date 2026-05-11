@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 import {
+  APPLES_TO_APPLES_FINITE_ROUNDS,
+  APPLES_TO_APPLES_HAND_SIZE,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
   PICTORY_MAX_STROKES_PER_ROUND,
@@ -35,6 +37,11 @@ import {
   deleteGuessTheImageStoredFile,
   purgeAllGuessTheImageSessionUploads
 } from "./guessTheImageUploads";
+import {
+  getApplesResponseText,
+  pickApplesTopic,
+  shuffledResponseCardIds
+} from "./applesToApplesCardLoader";
 import { FileStore } from "./storage/fileStore";
 import {
   createTriviaQuestionLoader,
@@ -275,6 +282,34 @@ type PictionaryGameInternal = {
   roundBreakNextTeam: "A" | "B" | null;
 };
 
+type ApplesToApplesEntryInternal = {
+  entryId: string;
+  authorId: string;
+  cardId: string;
+};
+
+type ApplesToApplesGameInternal = {
+  id: string;
+  type: "applesToApples";
+  mode: "standard" | "finite";
+  status: "collecting" | "judging" | "roundResult" | "finished";
+  roundNumber: number;
+  judgeOrder: string[];
+  judgeIndex: number;
+  topicId: string;
+  topicText: string;
+  usedTopicIds: string[];
+  hands: Record<string, string[]>;
+  drawPile: string[];
+  discardPile: string[];
+  submissions: Record<string, string>;
+  entries: ApplesToApplesEntryInternal[];
+  displayOrder: string[];
+  roundWinnerEntryId: string | null;
+  roundWinnerParticipantId: string | null;
+  roundWinningText: string | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -284,7 +319,8 @@ type GameInternal =
   | GuessTheImageGameInternal
   | TwentyQuestionsGameInternal
   | CaptionThisGameInternal
-  | PictionaryGameInternal;
+  | PictionaryGameInternal
+  | ApplesToApplesGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -419,16 +455,7 @@ const appendHangmanActivity = (
   }
 };
 
-const ensureGameShape = (
-  game: GameInternal & {
-    mode?: HangmanMode;
-    usedQuestionIds?: string[];
-    loading?: TriviaLoadingState | null;
-    totalQuestions?: number;
-    privateSubmissions?: Record<string, { text: string; imageFileId: string | null }>;
-    revealed?: IcebreakerRevealedInternal[];
-  }
-): GameInternal => {
+const ensureGameShape = (game: GameInternal): GameInternal => {
   if (game.type === "hangman") {
     return {
       ...game,
@@ -608,6 +635,36 @@ const ensureGameShape = (
       roundBreakNextTeam: g.roundBreakNextTeam === "A" || g.roundBreakNextTeam === "B" ? g.roundBreakNextTeam : null
     };
   }
+  if (game.type === "applesToApples") {
+    const g = game as ApplesToApplesGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      mode: g.mode === "finite" ? "finite" : "standard",
+      roundNumber: Math.max(1, Number(g.roundNumber) || 1),
+      judgeOrder: Array.isArray(g.judgeOrder) ? g.judgeOrder : [],
+      judgeIndex: Math.max(0, Number(g.judgeIndex) || 0),
+      topicId: g.topicId ?? "",
+      topicText: g.topicText ?? "",
+      usedTopicIds: Array.isArray(g.usedTopicIds) ? g.usedTopicIds : [],
+      hands: g.hands && typeof g.hands === "object" ? g.hands : {},
+      drawPile: Array.isArray(g.drawPile) ? g.drawPile : [],
+      discardPile: Array.isArray(g.discardPile) ? g.discardPile : [],
+      submissions: g.submissions && typeof g.submissions === "object" ? g.submissions : {},
+      entries: Array.isArray(g.entries) ? g.entries : [],
+      displayOrder: Array.isArray(g.displayOrder) ? g.displayOrder : [],
+      roundWinnerEntryId: g.roundWinnerEntryId ?? null,
+      roundWinnerParticipantId: g.roundWinnerParticipantId ?? null,
+      roundWinningText: g.roundWinningText ?? null,
+      status:
+        g.status === "collecting" ||
+        g.status === "judging" ||
+        g.status === "roundResult" ||
+        g.status === "finished"
+          ? g.status
+          : "collecting"
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -628,6 +685,42 @@ const shuffleGuessWhoSlotsInPlace = (slots: GuessWhoSlotInternal[]): void => {
     const t = slots[i]!;
     slots[i] = slots[j]!;
     slots[j] = t;
+  }
+};
+
+const applesJudgeId = (game: ApplesToApplesGameInternal): string => {
+  if (game.judgeOrder.length === 0) {
+    return "";
+  }
+  return game.judgeOrder[game.judgeIndex % game.judgeOrder.length]!;
+};
+
+const applesNonJudgeIds = (session: SessionInternal, game: ApplesToApplesGameInternal): string[] => {
+  const j = applesJudgeId(game);
+  return activeParticipants(session)
+    .map((p) => p.id)
+    .filter((id) => id !== j);
+};
+
+const refillApplesHands = (session: SessionInternal, game: ApplesToApplesGameInternal): void => {
+  const ids = activeParticipants(session).map((p) => p.id);
+  for (const pid of ids) {
+    let hand = [...(game.hands[pid] ?? [])];
+    while (hand.length < APPLES_TO_APPLES_HAND_SIZE) {
+      if (game.drawPile.length === 0) {
+        if (game.discardPile.length === 0) {
+          break;
+        }
+        game.drawPile = shuffleEntryIds([...game.discardPile]);
+        game.discardPile = [];
+      }
+      const next = game.drawPile.pop();
+      if (!next) {
+        break;
+      }
+      hand.push(next);
+    }
+    game.hands[pid] = hand;
   }
 };
 
@@ -1272,6 +1365,46 @@ export class SessionService {
         lastRoundResult: null,
         roundBreakNextTeam: null
       };
+    } else if (game === "applesToApples") {
+      const actives = activeParticipants(session);
+      if (actives.length < 3) {
+        throw new Error("Apples to Apples needs at least three active players.");
+      }
+      const mode = options.applesToApplesMode === "finite" ? "finite" : "standard";
+      const judgeOrder = actives.map((p) => p.id);
+      const deck = shuffledResponseCardIds();
+      const need = judgeOrder.length * APPLES_TO_APPLES_HAND_SIZE;
+      if (deck.length < need) {
+        throw new Error("Not enough response cards in the library to deal hands.");
+      }
+      const hands: Record<string, string[]> = {};
+      for (const pid of judgeOrder) {
+        hands[pid] = deck.splice(0, APPLES_TO_APPLES_HAND_SIZE);
+      }
+      const usedTopicIds: string[] = [];
+      const topic = pickApplesTopic(new Set(usedTopicIds));
+      usedTopicIds.push(topic.id);
+      next = {
+        id: nanoid(6),
+        type: "applesToApples",
+        mode,
+        status: "collecting",
+        roundNumber: 1,
+        judgeOrder,
+        judgeIndex: 0,
+        topicId: topic.id,
+        topicText: topic.text,
+        usedTopicIds,
+        hands,
+        drawPile: deck,
+        discardPile: [],
+        submissions: {},
+        entries: [],
+        displayOrder: [],
+        roundWinnerEntryId: null,
+        roundWinnerParticipantId: null,
+        roundWinningText: null
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -1427,6 +1560,11 @@ export class SessionService {
         activePic.teamBIds = nextB;
         delete activePic.drawCounts[participantId];
       }
+    }
+
+    const activeApples = session.games[0];
+    if (activeApples?.type === "applesToApples") {
+      session.games = [];
     }
   }
 
@@ -3396,6 +3534,129 @@ export class SessionService {
     await this.persist();
   }
 
+  private maybeAdvanceApplesToJudging(session: SessionInternal, game: ApplesToApplesGameInternal): void {
+    const nonJudges = applesNonJudgeIds(session, game);
+    const allIn =
+      nonJudges.length > 0 && nonJudges.every((id) => game.submissions[id] !== undefined);
+    if (!allIn) {
+      return;
+    }
+    game.entries = nonJudges.map((pid) => ({
+      entryId: nanoid(10),
+      authorId: pid,
+      cardId: game.submissions[pid]!
+    }));
+    game.displayOrder = shuffleEntryIds(game.entries.map((e) => e.entryId));
+    game.status = "judging";
+  }
+
+  public async applesToApplesSubmitCard(sessionId: string, participantId: string, cardId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "applesToApples" || game.status !== "collecting") {
+      throw new Error("Cannot play a card right now.");
+    }
+    const judgeId = applesJudgeId(game);
+    if (participantId === judgeId) {
+      throw new Error("The judge does not submit a card.");
+    }
+    const hand = game.hands[participantId];
+    if (!hand || !hand.includes(cardId)) {
+      throw new Error("That card is not in your hand.");
+    }
+    if (getApplesResponseText(cardId) === undefined) {
+      throw new Error("Unknown card.");
+    }
+    game.submissions[participantId] = cardId;
+    session.updatedAt = Date.now();
+    this.maybeAdvanceApplesToJudging(session, game);
+    await this.persist();
+  }
+
+  public async applesToApplesJudgePick(sessionId: string, participantId: string, entryId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "applesToApples" || game.status !== "judging") {
+      throw new Error("Cannot pick a winner right now.");
+    }
+    if (participantId !== applesJudgeId(game)) {
+      throw new Error("Only the judge can pick the winning card.");
+    }
+    const entry = game.entries.find((e) => e.entryId === entryId);
+    if (!entry) {
+      throw new Error("Invalid entry.");
+    }
+    const winner = session.participants.find((p) => p.id === entry.authorId);
+    if (winner) {
+      winner.score += 1;
+    }
+    const winningEntryId = entry.entryId;
+    const winningText = getApplesResponseText(entry.cardId) ?? "";
+    const winnerParticipantId = entry.authorId;
+    for (const [, cid] of Object.entries(game.submissions)) {
+      game.discardPile.push(cid);
+    }
+    for (const pid of Object.keys(game.submissions)) {
+      const hand = game.hands[pid];
+      if (!hand) {
+        continue;
+      }
+      const cid = game.submissions[pid];
+      if (!cid) {
+        continue;
+      }
+      const ix = hand.indexOf(cid);
+      if (ix >= 0) {
+        hand.splice(ix, 1);
+      }
+    }
+    game.submissions = {};
+    game.entries = [];
+    game.displayOrder = [];
+    if (game.mode === "standard") {
+      refillApplesHands(session, game);
+    }
+    game.roundWinnerEntryId = winningEntryId;
+    game.roundWinnerParticipantId = winnerParticipantId;
+    game.roundWinningText = winningText;
+    game.status = "roundResult";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async applesToApplesBeginNextRound(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can continue the game.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "applesToApples" || game.status !== "roundResult") {
+      throw new Error("Cannot advance the round right now.");
+    }
+    const canContinue = !(game.mode === "finite" && game.roundNumber >= APPLES_TO_APPLES_FINITE_ROUNDS);
+    if (!canContinue) {
+      game.status = "finished";
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    game.roundNumber += 1;
+    game.judgeIndex = (game.judgeIndex + 1) % Math.max(1, game.judgeOrder.length);
+    const topic = pickApplesTopic(new Set(game.usedTopicIds));
+    game.topicId = topic.id;
+    game.topicText = topic.text;
+    game.usedTopicIds.push(topic.id);
+    game.roundWinnerEntryId = null;
+    game.roundWinnerParticipantId = null;
+    game.roundWinningText = null;
+    game.status = "collecting";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -4357,6 +4618,109 @@ export class SessionService {
             lastResult,
             nextRoundStartsAt: game.roundBreakEndsAt ?? Date.now(),
             nextTeam: game.roundBreakNextTeam!
+          }
+        }
+      };
+    }
+
+    if (game.type === "applesToApples") {
+      const judgeId = applesJudgeId(game);
+      const viewerId = viewerParticipantId ?? "";
+
+      if (game.status === "finished") {
+        return {
+          ...base,
+          activeGame: "applesToApples",
+          gameState: {
+            type: "applesToApples",
+            state: {
+              status: "finished",
+              mode: game.mode
+            }
+          }
+        };
+      }
+
+      if (game.status === "roundResult") {
+        const canContinue = !(
+          game.mode === "finite" && game.roundNumber >= APPLES_TO_APPLES_FINITE_ROUNDS
+        );
+        return {
+          ...base,
+          activeGame: "applesToApples",
+          gameState: {
+            type: "applesToApples",
+            state: {
+              status: "roundResult",
+              mode: game.mode,
+              topicText: game.topicText,
+              winningEntryId: game.roundWinnerEntryId ?? "",
+              winnerParticipantId: game.roundWinnerParticipantId ?? "",
+              winningText: game.roundWinningText ?? "",
+              roundNumber: game.roundNumber,
+              canContinue
+            }
+          }
+        };
+      }
+
+      if (game.status === "judging") {
+        const isJudge = viewerId === judgeId;
+        const byEntryId = new Map(game.entries.map((e) => [e.entryId, e] as const));
+        const options = game.displayOrder
+          .map((id) => byEntryId.get(id))
+          .filter((e): e is ApplesToApplesEntryInternal => Boolean(e))
+          .map((e) => ({
+            entryId: e.entryId,
+            text: getApplesResponseText(e.cardId) ?? ""
+          }));
+        return {
+          ...base,
+          activeGame: "applesToApples",
+          gameState: {
+            type: "applesToApples",
+            state: {
+              status: "judging",
+              mode: game.mode,
+              topicText: game.topicText,
+              topicId: game.topicId,
+              judgeId,
+              roundNumber: game.roundNumber,
+              isJudge,
+              anonymousOptions: isJudge ? options : null,
+              waitingForJudge: !isJudge
+            }
+          }
+        };
+      }
+
+      const nonJudges = applesNonJudgeIds(session, game);
+      const submitted = nonJudges.filter((id) => game.submissions[id] !== undefined);
+      const isJudge = viewerId === judgeId;
+      const handIds = !isJudge && viewerId ? (game.hands[viewerId] ?? []) : [];
+      const myHand = handIds
+        .map((id) => {
+          const text = getApplesResponseText(id);
+          return text ? { id, text } : null;
+        })
+        .filter((c): c is { id: string; text: string } => c !== null);
+
+      return {
+        ...base,
+        activeGame: "applesToApples",
+        gameState: {
+          type: "applesToApples",
+          state: {
+            status: "collecting",
+            mode: game.mode,
+            topicText: game.topicText,
+            topicId: game.topicId,
+            judgeId,
+            roundNumber: game.roundNumber,
+            isJudge,
+            submittedNonJudgeIds: submitted,
+            allSubmissionsIn: submitted.length === nonJudges.length && nonJudges.length > 0,
+            myHand: isJudge ? null : myHand
           }
         }
       };

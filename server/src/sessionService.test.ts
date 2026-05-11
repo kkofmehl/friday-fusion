@@ -1482,6 +1482,119 @@ describe("SessionService", () => {
     expect(state.gameState).toBeNull();
   });
 
+  it("Apples to Apples: rejects start with fewer than three players", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await expect(setup.service.startGame(host.sessionId, "applesToApples")).rejects.toThrow(
+      "Apples to Apples needs at least three active players."
+    );
+  });
+
+  it("Apples to Apples: standard mode refills hands to six after a round", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const p2 = await setup.service.joinSession(host.joinCode, "Two");
+    const p3 = await setup.service.joinSession(host.joinCode, "Three");
+    await setup.service.startGame(host.sessionId, "applesToApples", { applesToApplesMode: "standard" });
+    const p2View = setup.service.getState(host.sessionId, p2.participantId);
+    if (p2View.gameState?.type !== "applesToApples" || p2View.gameState.state.status !== "collecting") {
+      throw new Error("expected collecting");
+    }
+    const hand2 = p2View.gameState.state.myHand;
+    expect(hand2?.length).toBe(6);
+    const p3View = setup.service.getState(host.sessionId, p3.participantId);
+    if (p3View.gameState?.type !== "applesToApples" || p3View.gameState.state.status !== "collecting") {
+      throw new Error("expected apples collecting for p3");
+    }
+    const stP3 = p3View.gameState.state;
+    const card2 = hand2![0]!.id;
+    const card3 = stP3.myHand![0]!.id;
+    await setup.service.applesToApplesSubmitCard(host.sessionId, p2.participantId, card2);
+    await setup.service.applesToApplesSubmitCard(host.sessionId, p3.participantId, card3);
+    const judgeView = setup.service.getState(host.sessionId, host.participantId);
+    if (judgeView.gameState?.type !== "applesToApples" || judgeView.gameState.state.status !== "judging") {
+      throw new Error("expected judging");
+    }
+    const opts = judgeView.gameState.state.anonymousOptions;
+    if (!opts?.[0]) {
+      throw new Error("expected options");
+    }
+    await setup.service.applesToApplesJudgePick(host.sessionId, host.participantId, opts[0].entryId);
+    const winnerId = setup.service.getState(host.sessionId, host.participantId);
+    if (winnerId.gameState?.type !== "applesToApples" || winnerId.gameState.state.status !== "roundResult") {
+      throw new Error("expected roundResult");
+    }
+    expect([p2.participantId, p3.participantId]).toContain(winnerId.gameState.state.winnerParticipantId);
+    await setup.service.applesToApplesBeginNextRound(host.sessionId, host.participantId);
+    const p3Next = setup.service.getState(host.sessionId, p3.participantId);
+    if (p3Next.gameState?.type !== "applesToApples" || p3Next.gameState.state.status !== "collecting") {
+      throw new Error("expected next collecting");
+    }
+    const st3 = p3Next.gameState.state;
+    expect(st3.myHand?.length).toBe(6);
+  });
+
+  it("Apples to Apples: finite mode ends after six rounds", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const p2 = await setup.service.joinSession(host.joinCode, "Two");
+    const p3 = await setup.service.joinSession(host.joinCode, "Three");
+    await setup.service.startGame(host.sessionId, "applesToApples", { applesToApplesMode: "finite" });
+    for (let round = 1; round <= 6; round += 1) {
+      const snap = setup.service.getState(host.sessionId, host.participantId);
+      if (snap.gameState?.type !== "applesToApples") {
+        throw new Error("expected apples");
+      }
+      const st = snap.gameState.state;
+      if (st.status !== "collecting") {
+        throw new Error(`round ${round}: expected collecting`);
+      }
+      const judgeId = st.judgeId;
+      const submitters = [host.participantId, p2.participantId, p3.participantId].filter((id) => id !== judgeId);
+      expect(submitters).toHaveLength(2);
+      for (const pid of submitters) {
+        const v = setup.service.getState(host.sessionId, pid);
+        if (v.gameState?.type !== "applesToApples" || v.gameState.state.status !== "collecting") {
+          throw new Error("submitters collecting");
+        }
+        const hand = v.gameState.state.myHand;
+        if (!hand?.[0]) {
+          throw new Error("need a card");
+        }
+        await setup.service.applesToApplesSubmitCard(host.sessionId, pid, hand[0].id);
+      }
+      const judgeSnap = setup.service.getState(host.sessionId, judgeId);
+      if (judgeSnap.gameState?.type !== "applesToApples" || judgeSnap.gameState.state.status !== "judging") {
+        throw new Error("expected judging");
+      }
+      const opts = judgeSnap.gameState.state.anonymousOptions;
+      if (!opts?.[0]) {
+        throw new Error("options");
+      }
+      await setup.service.applesToApplesJudgePick(host.sessionId, judgeId, opts[0].entryId);
+      const rr = setup.service.getState(host.sessionId, host.participantId);
+      if (rr.gameState?.type !== "applesToApples" || rr.gameState.state.status !== "roundResult") {
+        throw new Error("roundResult");
+      }
+      const { canContinue } = rr.gameState.state;
+      if (round < 6) {
+        expect(canContinue).toBe(true);
+        await setup.service.applesToApplesBeginNextRound(host.sessionId, host.participantId);
+      } else {
+        expect(canContinue).toBe(false);
+        await setup.service.applesToApplesBeginNextRound(host.sessionId, host.participantId);
+        const fin = setup.service.getState(host.sessionId, host.participantId);
+        if (fin.gameState?.type !== "applesToApples" || fin.gameState.state.status !== "finished") {
+          throw new Error("finished");
+        }
+      }
+    }
+  });
+
   it("Pictionary: rejects start with fewer than two players", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

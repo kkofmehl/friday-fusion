@@ -1,0 +1,542 @@
+[
+  {
+    "id": "ata-t-001",
+    "text": "Absurd"
+  },
+  {
+    "id": "ata-t-002",
+    "text": "Adorable"
+  },
+  {
+    "id": "ata-t-003",
+    "text": "Aggressive"
+  },
+  {
+    "id": "ata-t-004",
+    "text": "Ancient"
+  },
+  {
+    "id": "ata-t-005",
+    "text": "Annoying"
+  },
+  {
+    "id": "ata-t-006",
+    "text": "Artistic"
+  },
+  {
+    "id": "ata-t-007",
+    "text": "Awkward"
+  },
+  {
+    "id": "ata-t-008",
+    "text": "Beautiful"
+  },
+  {
+    "id": "ata-t-009",
+    "text": "Bizarre"
+  },
+  {
+    "id": "ata-t-010",
+    "text": "Bold"
+  },
+  {
+    "id": "ata-t-011",
+    "text": "Boring"
+  },
+  {
+    "id": "ata-t-012",
+    "text": "Brave"
+  },
+  {
+    "id": "ata-t-013",
+    "text": "Brilliant"
+  },
+  {
+    "id": "ata-t-014",
+    "text": "Calm"
+  },
+  {
+    "id": "ata-t-015",
+    "text": "Chaotic"
+  },
+  {
+    "id": "ata-t-016",
+    "text": "Cheesy"
+  },
+  {
+    "id": "ata-t-017",
+    "text": "Classic"
+  },
+  {
+    "id": "ata-t-018",
+    "text": "Clumsy"
+  },
+  {
+    "id": "ata-t-019",
+    "text": "Colorful"
+  },
+  {
+    "id": "ata-t-020",
+    "text": "Comforting"
+  },
+  {
+    "id": "ata-t-021",
+    "text": "Confusing"
+  },
+  {
+    "id": "ata-t-022",
+    "text": "Cozy"
+  },
+  {
+    "id": "ata-t-023",
+    "text": "Creative"
+  },
+  {
+    "id": "ata-t-024",
+    "text": "Creepy"
+  },
+  {
+    "id": "ata-t-025",
+    "text": "Cute"
+  },
+  {
+    "id": "ata-t-026",
+    "text": "Dangerous"
+  },
+  {
+    "id": "ata-t-027",
+    "text": "Deadly"
+  },
+  {
+    "id": "ata-t-028",
+    "text": "Delicious"
+  },
+  {
+    "id": "ata-t-029",
+    "text": "Dramatic"
+  },
+  {
+    "id": "ata-t-030",
+    "text": "Elegant"
+  },
+  {
+    "id": "ata-t-031",
+    "text": "Epic"
+  },
+  {
+    "id": "ata-t-032",
+    "text": "Expensive"
+  },
+  {
+    "id": "ata-t-033",
+    "text": "Famous"
+  },
+  {
+    "id": "ata-t-034",
+    "text": "Fancy"
+  },
+  {
+    "id": "ata-t-035",
+    "text": "Fast"
+  },
+  {
+    "id": "ata-t-036",
+    "text": "Fierce"
+  },
+  {
+    "id": "ata-t-037",
+    "text": "Fluffy"
+  },
+  {
+    "id": "ata-t-038",
+    "text": "Fragile"
+  },
+  {
+    "id": "ata-t-039",
+    "text": "Friendly"
+  },
+  {
+    "id": "ata-t-040",
+    "text": "Frustrating"
+  },
+  {
+    "id": "ata-t-041",
+    "text": "Funny"
+  },
+  {
+    "id": "ata-t-042",
+    "text": "Genius"
+  },
+  {
+    "id": "ata-t-043",
+    "text": "Gentle"
+  },
+  {
+    "id": "ata-t-044",
+    "text": "Glorious"
+  },
+  {
+    "id": "ata-t-045",
+    "text": "Gross"
+  },
+  {
+    "id": "ata-t-046",
+    "text": "Handy"
+  },
+  {
+    "id": "ata-t-047",
+    "text": "Happy"
+  },
+  {
+    "id": "ata-t-048",
+    "text": "Haunted"
+  },
+  {
+    "id": "ata-t-049",
+    "text": "Heavy"
+  },
+  {
+    "id": "ata-t-050",
+    "text": "Heroic"
+  },
+  {
+    "id": "ata-t-051",
+    "text": "Hilarious"
+  },
+  {
+    "id": "ata-t-052",
+    "text": "Honest"
+  },
+  {
+    "id": "ata-t-053",
+    "text": "Huge"
+  },
+  {
+    "id": "ata-t-054",
+    "text": "Hungry"
+  },
+  {
+    "id": "ata-t-055",
+    "text": "Iconic"
+  },
+  {
+    "id": "ata-t-056",
+    "text": "Imaginary"
+  },
+  {
+    "id": "ata-t-057",
+    "text": "Inspiring"
+  },
+  {
+    "id": "ata-t-058",
+    "text": "Intense"
+  },
+  {
+    "id": "ata-t-059",
+    "text": "Ironic"
+  },
+  {
+    "id": "ata-t-060",
+    "text": "Juicy"
+  },
+  {
+    "id": "ata-t-061",
+    "text": "Lazy"
+  },
+  {
+    "id": "ata-t-062",
+    "text": "Legendary"
+  },
+  {
+    "id": "ata-t-063",
+    "text": "Loud"
+  },
+  {
+    "id": "ata-t-064",
+    "text": "Lucky"
+  },
+  {
+    "id": "ata-t-065",
+    "text": "Magical"
+  },
+  {
+    "id": "ata-t-066",
+    "text": "Messy"
+  },
+  {
+    "id": "ata-t-067",
+    "text": "Miniature"
+  },
+  {
+    "id": "ata-t-068",
+    "text": "Misunderstood"
+  },
+  {
+    "id": "ata-t-069",
+    "text": "Mysterious"
+  },
+  {
+    "id": "ata-t-070",
+    "text": "Nerdy"
+  },
+  {
+    "id": "ata-t-071",
+    "text": "Noisy"
+  },
+  {
+    "id": "ata-t-072",
+    "text": "Nostalgic"
+  },
+  {
+    "id": "ata-t-073",
+    "text": "Obvious"
+  },
+  {
+    "id": "ata-t-074",
+    "text": "Odd"
+  },
+  {
+    "id": "ata-t-075",
+    "text": "Overrated"
+  },
+  {
+    "id": "ata-t-076",
+    "text": "Peaceful"
+  },
+  {
+    "id": "ata-t-077",
+    "text": "Perfect"
+  },
+  {
+    "id": "ata-t-078",
+    "text": "Playful"
+  },
+  {
+    "id": "ata-t-079",
+    "text": "Powerful"
+  },
+  {
+    "id": "ata-t-080",
+    "text": "Priceless"
+  },
+  {
+    "id": "ata-t-081",
+    "text": "Puzzling"
+  },
+  {
+    "id": "ata-t-082",
+    "text": "Quiet"
+  },
+  {
+    "id": "ata-t-083",
+    "text": "Random"
+  },
+  {
+    "id": "ata-t-084",
+    "text": "Rare"
+  },
+  {
+    "id": "ata-t-085",
+    "text": "Relatable"
+  },
+  {
+    "id": "ata-t-086",
+    "text": "Relaxing"
+  },
+  {
+    "id": "ata-t-087",
+    "text": "Ridiculous"
+  },
+  {
+    "id": "ata-t-088",
+    "text": "Romantic"
+  },
+  {
+    "id": "ata-t-089",
+    "text": "Royal"
+  },
+  {
+    "id": "ata-t-090",
+    "text": "Rusty"
+  },
+  {
+    "id": "ata-t-091",
+    "text": "Sad"
+  },
+  {
+    "id": "ata-t-092",
+    "text": "Savage"
+  },
+  {
+    "id": "ata-t-093",
+    "text": "Scary"
+  },
+  {
+    "id": "ata-t-094",
+    "text": "Scientific"
+  },
+  {
+    "id": "ata-t-095",
+    "text": "Shiny"
+  },
+  {
+    "id": "ata-t-096",
+    "text": "Shocking"
+  },
+  {
+    "id": "ata-t-097",
+    "text": "Silly"
+  },
+  {
+    "id": "ata-t-098",
+    "text": "Simple"
+  },
+  {
+    "id": "ata-t-099",
+    "text": "Slick"
+  },
+  {
+    "id": "ata-t-100",
+    "text": "Slow"
+  },
+  {
+    "id": "ata-t-101",
+    "text": "Small"
+  },
+  {
+    "id": "ata-t-102",
+    "text": "Smelly"
+  },
+  {
+    "id": "ata-t-103",
+    "text": "Smooth"
+  },
+  {
+    "id": "ata-t-104",
+    "text": "Snarky"
+  },
+  {
+    "id": "ata-t-105",
+    "text": "Soft"
+  },
+  {
+    "id": "ata-t-106",
+    "text": "Sparkly"
+  },
+  {
+    "id": "ata-t-107",
+    "text": "Spicy"
+  },
+  {
+    "id": "ata-t-108",
+    "text": "Spooky"
+  },
+  {
+    "id": "ata-t-109",
+    "text": "Sticky"
+  },
+  {
+    "id": "ata-t-110",
+    "text": "Strange"
+  },
+  {
+    "id": "ata-t-111",
+    "text": "Stunning"
+  },
+  {
+    "id": "ata-t-112",
+    "text": "Stupid"
+  },
+  {
+    "id": "ata-t-113",
+    "text": "Sudden"
+  },
+  {
+    "id": "ata-t-114",
+    "text": "Sweet"
+  },
+  {
+    "id": "ata-t-115",
+    "text": "Tacky"
+  },
+  {
+    "id": "ata-t-116",
+    "text": "Terrible"
+  },
+  {
+    "id": "ata-t-117",
+    "text": "Tiny"
+  },
+  {
+    "id": "ata-t-118",
+    "text": "Tough"
+  },
+  {
+    "id": "ata-t-119",
+    "text": "Trendy"
+  },
+  {
+    "id": "ata-t-120",
+    "text": "Trustworthy"
+  },
+  {
+    "id": "ata-t-121",
+    "text": "Underrated"
+  },
+  {
+    "id": "ata-t-122",
+    "text": "Unexpected"
+  },
+  {
+    "id": "ata-t-123",
+    "text": "Unforgettable"
+  },
+  {
+    "id": "ata-t-124",
+    "text": "Unstable"
+  },
+  {
+    "id": "ata-t-125",
+    "text": "Useful"
+  },
+  {
+    "id": "ata-t-126",
+    "text": "Useless"
+  },
+  {
+    "id": "ata-t-127",
+    "text": "Valuable"
+  },
+  {
+    "id": "ata-t-128",
+    "text": "Violent"
+  },
+  {
+    "id": "ata-t-129",
+    "text": "Weird"
+  },
+  {
+    "id": "ata-t-130",
+    "text": "Wild"
+  },
+  {
+    "id": "ata-t-131",
+    "text": "Wise"
+  },
+  {
+    "id": "ata-t-132",
+    "text": "Witty"
+  },
+  {
+    "id": "ata-t-133",
+    "text": "Wonderful"
+  },
+  {
+    "id": "ata-t-134",
+    "text": "Worst"
+  },
+  {
+    "id": "ata-t-135",
+    "text": "Zany"
+  }
+]

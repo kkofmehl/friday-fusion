@@ -10,6 +10,7 @@ import { GuessTheImageGame } from "../games/GuessTheImageGame";
 import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
 import { CaptionThisGame } from "../games/CaptionThisGame";
 import { PictionaryGame } from "../games/PictionaryGame";
+import { ApplesToApplesGame } from "../games/ApplesToApplesGame";
 
 export function GameScreen({
   session,
@@ -76,6 +77,14 @@ export function GameScreen({
         payload: {
           game: "pictionary",
           options: { pictionaryRoundDurationMs: session.gameState.state.roundDurationMs }
+        }
+      }
+    : session.gameState?.type === "applesToApples"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "applesToApples",
+          options: { applesToApplesMode: session.gameState.state.mode }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -158,6 +167,17 @@ export function GameScreen({
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "applesToApples") {
+      return (
+        <ApplesToApplesGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
           send={send}
         />
       );

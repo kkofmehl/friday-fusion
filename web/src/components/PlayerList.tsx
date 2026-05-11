@@ -78,6 +78,18 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Voting", tone: "voter" };
     }
   }
+  if (session.gameState.type === "applesToApples") {
+    const st = session.gameState.state;
+    if (st.status === "collecting" && !st.isJudge && !st.submittedNonJudgeIds.includes(participantId)) {
+      return { label: "Playing a card", tone: "submitting" };
+    }
+    if (st.status === "judging" && st.isJudge) {
+      return { label: "Judging", tone: "presenter" };
+    }
+    if (st.status === "judging" && !st.isJudge) {
+      return { label: "Waiting for judge", tone: "voter" };
+    }
+  }
   return null;
 };
 

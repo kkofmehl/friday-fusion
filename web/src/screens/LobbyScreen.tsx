@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  type ApplesToApplesMode,
   PICTORY_ROUND_DURATION_DEFAULT_MS,
   PICTORY_ROUND_DURATION_MAX_MS,
   PICTORY_ROUND_DURATION_MIN_MS,
@@ -73,6 +74,13 @@ const GAMES: GameOption[] = [
     title: "Pictionary",
     description: "Two teams take turns drawing clues on a shared canvas—guess aloud with your team.",
     emoji: "P"
+  },
+  {
+    id: "applesToApples",
+    title: "Apples to Apples",
+    description:
+      "Rotating judge, topic card, and hidden responses—stock phrases in JSON (original content, easy to expand).",
+    emoji: "🍎"
   }
 ];
 
@@ -107,6 +115,7 @@ export function LobbyScreen({
   });
   const [twentyQMaxQuestions, setTwentyQMaxQuestions] = useState(20);
   const [pictionaryDrawSecs, setPictionaryDrawSecs] = useState(PICTORY_ROUND_DURATION_DEFAULT_MS / 1000);
+  const [applesMode, setApplesMode] = useState<ApplesToApplesMode>("standard");
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -195,6 +204,13 @@ export function LobbyScreen({
       send({
         type: "game:start",
         payload: { game, options: { pictionaryRoundDurationMs: sec * 1000 } }
+      });
+      return;
+    }
+    if (game === "applesToApples") {
+      send({
+        type: "game:start",
+        payload: { game, options: { applesToApplesMode: applesMode } }
       });
       return;
     }
@@ -393,6 +409,38 @@ export function LobbyScreen({
                     {PICTORY_ROUND_DURATION_MIN_MS / 1000}–{PICTORY_ROUND_DURATION_MAX_MS / 1000} seconds (default{" "}
                     {PICTORY_ROUND_DURATION_DEFAULT_MS / 1000}). Host assigns teams after starting.
                   </p>
+                </fieldset>
+              )}
+              {game.id === "applesToApples" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Mode</legend>
+                  <label className={`mode-option${applesMode === "standard" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="apples-mode"
+                      value="standard"
+                      checked={applesMode === "standard"}
+                      onChange={() => setApplesMode("standard")}
+                    />
+                    <span className="mode-option-title">Standard</span>
+                    <span className="mode-option-hint">
+                      After each round everyone redraws to six response cards.
+                    </span>
+                  </label>
+                  <label className={`mode-option${applesMode === "finite" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="apples-mode"
+                      value="finite"
+                      checked={applesMode === "finite"}
+                      onChange={() => setApplesMode("finite")}
+                    />
+                    <span className="mode-option-title">Finite</span>
+                    <span className="mode-option-hint">
+                      No redraws—exactly six table rounds, then the game ends (leftover cards are fine).
+                    </span>
+                  </label>
+                  <p className="mode-option-hint">Needs at least three active players.</p>
                 </fieldset>
               )}
               {isHost ? (
