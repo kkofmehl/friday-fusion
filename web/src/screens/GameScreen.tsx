@@ -1,6 +1,7 @@
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
 import { HangmanGame } from "../games/HangmanGame";
+import { activeParticipants } from "../utils/participants";
 import { IcebreakerGame } from "../games/IcebreakerGame";
 import { GuessWhoSaidItGame } from "../games/GuessWhoSaidItGame";
 import { TwoTruthsGame } from "../games/TwoTruthsGame";
@@ -14,22 +15,26 @@ export function GameScreen({
   session,
   currentParticipantId,
   isHost,
+  canPlay,
   send,
   apiBase
 }: {
   session: SessionState;
   currentParticipantId: string;
   isHost: boolean;
+  /** When false, the current user is benched and cannot interact with the game surface. */
+  canPlay: boolean;
   send: (event: ClientEvent) => void;
   apiBase: string;
 }): JSX.Element {
   const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
+  const hangmanRoster = hangmanState ? activeParticipants(session.participants) : [];
   const rotatedCreatorId = hangmanState
     ? (
-      session.participants.length > 0
-        ? session.participants[
-          (session.participants.findIndex((participant) => participant.id === hangmanState.puzzleCreatorId) + 1)
-          % session.participants.length
+      hangmanRoster.length > 0
+        ? hangmanRoster[
+          (hangmanRoster.findIndex((participant) => participant.id === hangmanState.puzzleCreatorId) + 1)
+          % hangmanRoster.length
         ]?.id ?? hangmanState.puzzleCreatorId
         : hangmanState.puzzleCreatorId
     )
@@ -167,7 +172,14 @@ export function GameScreen({
           <h2>Players</h2>
           <span className="count-pill">{session.participants.length}</span>
         </header>
-        <PlayerList session={session} currentParticipantId={currentParticipantId} />
+        <PlayerList
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          allowActivate={false}
+          allowBench={false}
+        />
         {isHost && (
           <div className="card-footer card-footer-actions">
             <button
@@ -190,7 +202,7 @@ export function GameScreen({
         )}
       </aside>
 
-      <div className="game-stage">{renderGame()}</div>
+      <div className={`game-stage${canPlay ? "" : " game-stage--readonly"}`}>{renderGame()}</div>
     </div>
   );
 }

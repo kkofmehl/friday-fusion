@@ -87,6 +87,10 @@ export function LobbyScreen({
   isHost: boolean;
   send: (event: ClientEvent) => void;
 }): JSX.Element {
+  const activeRoster = session.participants.filter((p) => p.isActive !== false);
+  const me = session.participants.find((p) => p.id === currentParticipantId);
+  const canInteractAsGuest = me?.isActive !== false;
+  const waitingOnBenchDuringGame = Boolean(session.activeGame && !canInteractAsGuest);
   const [hangmanMode, setHangmanMode] = useState<HangmanMode>("team");
   const [hangmanCreatorId, setHangmanCreatorId] = useState(currentParticipantId);
   const [guessImagePreparer, setGuessImagePreparer] = useState(() => {
@@ -105,41 +109,41 @@ export function LobbyScreen({
   const [pictionaryDrawSecs, setPictionaryDrawSecs] = useState(PICTORY_ROUND_DURATION_DEFAULT_MS / 1000);
 
   useEffect(() => {
-    if (session.participants.some((participant) => participant.id === hangmanCreatorId)) {
+    if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
       return;
     }
-    setHangmanCreatorId(session.participants[0]?.id ?? currentParticipantId);
-  }, [currentParticipantId, hangmanCreatorId, session.participants]);
+    setHangmanCreatorId(activeRoster[0]?.id ?? currentParticipantId);
+  }, [currentParticipantId, hangmanCreatorId, activeRoster]);
 
   useEffect(() => {
     if (guessImagePreparer === GUESS_IMAGE_LOBBY_EVERYONE) {
       return;
     }
-    if (session.participants.some((p) => p.id === guessImagePreparer)) {
+    if (activeRoster.some((p) => p.id === guessImagePreparer)) {
       return;
     }
     setGuessImagePreparer(
-      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+      activeRoster.find((p) => p.isHost)?.id ?? activeRoster[0]?.id ?? currentParticipantId
     );
-  }, [currentParticipantId, guessImagePreparer, session.participants]);
+  }, [currentParticipantId, guessImagePreparer, activeRoster]);
 
   useEffect(() => {
-    if (session.participants.some((p) => p.id === twentyQSelectorId)) {
+    if (activeRoster.some((p) => p.id === twentyQSelectorId)) {
       return;
     }
     setTwentyQSelectorId(
-      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+      activeRoster.find((p) => p.isHost)?.id ?? activeRoster[0]?.id ?? currentParticipantId
     );
-  }, [currentParticipantId, session.participants, twentyQSelectorId]);
+  }, [currentParticipantId, activeRoster, twentyQSelectorId]);
 
   useEffect(() => {
-    if (session.participants.some((p) => p.id === captionThisProviderId)) {
+    if (activeRoster.some((p) => p.id === captionThisProviderId)) {
       return;
     }
     setCaptionThisProviderId(
-      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+      activeRoster.find((p) => p.isHost)?.id ?? activeRoster[0]?.id ?? currentParticipantId
     );
-  }, [captionThisProviderId, currentParticipantId, session.participants]);
+  }, [captionThisProviderId, currentParticipantId, activeRoster]);
 
   const startGame = (game: GameType) => {
     if (game === "hangman") {
@@ -209,7 +213,13 @@ export function LobbyScreen({
           <h2>Players</h2>
           <span className="count-pill">{session.participants.length}</span>
         </header>
-        <PlayerList session={session} currentParticipantId={currentParticipantId} />
+        <PlayerList
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+          allowActivate
+        />
         {isHost && preferenceRows.length > 0 && (
           <ul className="lobby-next-game-votes" aria-label="What guests want to play next">
             {preferenceRows.map((p) => {
@@ -225,13 +235,22 @@ export function LobbyScreen({
         )}
       </section>
 
-      <section className="card card-games">
-        <header className="card-head">
-          <h2>Choose a game</h2>
-          {!isHost && <span className="pill pill-muted">Host picks</span>}
-        </header>
-        <div className="game-grid">
-          {GAMES.map((game) => (
+      {waitingOnBenchDuringGame ? (
+        <section className="card card-games" aria-label="Game in progress">
+          <header className="card-head">
+            <h2>Game in progress</h2>
+          </header>
+          <p>You are on the bench for this round, so you stay here until the game ends.</p>
+          <p className="mode-option-hint">The host can activate you in the player list after returning to the lobby.</p>
+        </section>
+      ) : (
+        <section className="card card-games">
+          <header className="card-head">
+            <h2>Choose a game</h2>
+            {!isHost && <span className="pill pill-muted">Host picks</span>}
+          </header>
+          <div className="game-grid">
+            {GAMES.map((game) => (
             <article key={game.id} className="game-card">
               <div className="game-card-emoji" aria-hidden="true">
                 {game.emoji}
@@ -271,7 +290,7 @@ export function LobbyScreen({
                     value={hangmanCreatorId}
                     onChange={(event) => setHangmanCreatorId(event.target.value)}
                   >
-                    {session.participants.map((participant) => (
+                    {activeRoster.map((participant) => (
                       <option key={participant.id} value={participant.id}>
                         {participant.displayName}
                       </option>
@@ -293,7 +312,7 @@ export function LobbyScreen({
                     <option value={GUESS_IMAGE_LOBBY_EVERYONE}>
                       Everyone — each prepares; host picks whose image to guess
                     </option>
-                    {session.participants.map((participant) => (
+                    {activeRoster.map((participant) => (
                       <option key={participant.id} value={participant.id}>
                         {participant.displayName}
                         {participant.isHost ? " (host)" : ""}
@@ -313,7 +332,7 @@ export function LobbyScreen({
                     value={twentyQSelectorId}
                     onChange={(event) => setTwentyQSelectorId(event.target.value)}
                   >
-                    {session.participants.map((participant) => (
+                    {activeRoster.map((participant) => (
                       <option key={participant.id} value={participant.id}>
                         {participant.displayName}
                         {participant.isHost ? " (host)" : ""}
@@ -345,7 +364,7 @@ export function LobbyScreen({
                     value={captionThisProviderId}
                     onChange={(event) => setCaptionThisProviderId(event.target.value)}
                   >
-                    {session.participants.map((participant) => (
+                    {activeRoster.map((participant) => (
                       <option key={participant.id} value={participant.id}>
                         {participant.displayName}
                         {participant.isHost ? " (host)" : ""}
@@ -386,15 +405,18 @@ export function LobbyScreen({
                   className={`btn btn-secondary lobby-want-game${
                     lobbyPrefs[currentParticipantId] === game.id ? " is-selected" : ""
                   }`}
+                  disabled={!canInteractAsGuest}
+                  title={!canInteractAsGuest ? "You are benched and cannot vote from the lobby." : undefined}
                   onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
                 >
                   I want to play this
                 </button>
               )}
             </article>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

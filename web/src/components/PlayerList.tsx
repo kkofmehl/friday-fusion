@@ -1,6 +1,8 @@
-import type { Participant, SessionState } from "../../../shared/contracts";
+import type { ClientEvent, Participant, SessionState } from "../../../shared/contracts";
 
 type TurnTag = { label: string; tone: "creator" | "guesser" | "presenter" | "voter" | "answerer" | "submitting" };
+
+const participantIsActive = (p: Participant): boolean => p.isActive !== false;
 
 const resolveTurnTag = (session: SessionState, participantId: string): TurnTag | null => {
   if (!session.gameState) return null;
@@ -81,10 +83,20 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
 
 export function PlayerList({
   session,
-  currentParticipantId
+  currentParticipantId,
+  isHost = false,
+  send,
+  allowActivate = true,
+  allowBench = true
 }: {
   session: SessionState;
   currentParticipantId: string;
+  isHost?: boolean;
+  send?: (event: ClientEvent) => void;
+  /** When false (in-game), host cannot activate benched players from this list. */
+  allowActivate?: boolean;
+  /** When false (in-game), host cannot bench players; use the lobby to bench before a game starts. */
+  allowBench?: boolean;
 }): JSX.Element {
   const hideScores = session.activeGame === "icebreaker";
   const ranked = hideScores
@@ -98,8 +110,14 @@ export function PlayerList({
         const turnTag = resolveTurnTag(session, participant.id);
         const isYou = participant.id === currentParticipantId;
         const isLeader = !hideScores && topScore > 0 && participant.score === topScore;
+        const isInactive = !participantIsActive(participant);
+        const showHostActions =
+          Boolean(isHost && send && !participant.isHost && participant.id !== currentParticipantId);
         return (
-          <li key={participant.id} className={`player-row${isYou ? " player-row-you" : ""}`}>
+          <li
+            key={participant.id}
+            className={`player-row${isYou ? " player-row-you" : ""}${isInactive ? " player-row-inactive" : ""}`}
+          >
             <div className="player-identity">
               <span className="player-name">
                 {participant.displayName}
@@ -107,11 +125,61 @@ export function PlayerList({
               </span>
               <div className="player-tags">
                 {participant.isHost && <span className="tag tag-host">Host</span>}
+                {isInactive && <span className="tag tag-inactive">Inactive</span>}
                 {turnTag && <span className={`tag tag-turn tag-${turnTag.tone}`}>{turnTag.label}</span>}
                 {isLeader && <span className="tag tag-leader">Leader</span>}
               </div>
             </div>
-            {!hideScores && <span className="player-score">{participant.score}</span>}
+            <div className="player-row-right">
+              {!hideScores && <span className="player-score">{participant.score}</span>}
+              {showHostActions && (
+                <div className="player-host-actions">
+                  {allowBench && participantIsActive(participant) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        send!({
+                          type: "session:setParticipantActive",
+                          payload: { participantId: participant.id, isActive: false }
+                        })
+                      }
+                    >
+                      Bench
+                    </button>
+                  )}
+                  {allowActivate && !participantIsActive(participant) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        send!({
+                          type: "session:setParticipantActive",
+                          payload: { participantId: participant.id, isActive: true }
+                        })
+                      }
+                    >
+                      Activate
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Remove ${participant.displayName} from the session? They will be disconnected.`
+                        )
+                      ) {
+                        send!({ type: "session:boot", payload: { participantId: participant.id } });
+                      }
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
           </li>
         );
       })}

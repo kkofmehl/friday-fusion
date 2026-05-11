@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClipboardEvent } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
+import { activeParticipants } from "../utils/participants";
 
 const clampQuestionCount = (value: number): number => {
   if (!Number.isFinite(value)) return 1;
@@ -91,15 +92,18 @@ export function GuessWhoSaidItGame({
   }
 
   const question = state.status === "collecting" ? state.activeQuestion : null;
-  const totalParticipants = session.participants.length;
+  const roster = activeParticipants(session.participants);
+  const totalParticipants = roster.length;
   const submittedCount =
-    state.status === "collecting" ? state.submittedParticipantIds.length : 0;
+    state.status === "collecting"
+      ? state.submittedParticipantIds.filter((id) => roster.some((p) => p.id === id)).length
+      : 0;
   const everyoneSubmitted =
     state.status === "collecting" &&
     totalParticipants > 0 &&
-    session.participants.every((p) => state.submittedParticipantIds.includes(p.id));
+    roster.every((p) => state.submittedParticipantIds.includes(p.id));
 
-  const guessOptions = session.participants.filter((p) => p.id !== currentParticipantId);
+  const guessOptions = roster.filter((p) => p.id !== currentParticipantId);
 
   const votesComplete =
     state.status === "voting" &&

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { TurnOrderPanel } from "./TurnOrderPanel";
+import { activeParticipants } from "../utils/participants";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -42,6 +43,7 @@ export function HangmanGame({
 
   if (session.gameState?.type !== "hangman") return null;
   const state = session.gameState.state;
+  const roster = activeParticipants(session.participants);
   const isCreator = state.puzzleCreatorId === currentParticipantId;
   const creator = session.participants.find((p) => p.id === state.puzzleCreatorId);
   const isTurnMode = state.mode === "turns";
@@ -168,10 +170,10 @@ export function HangmanGame({
       text: `${actor} is attempting to solve the puzzle`
     };
   });
-  const currentCreatorIndex = session.participants.findIndex((participant) => participant.id === state.puzzleCreatorId);
-  const rotatedCreatorId = currentCreatorIndex === -1 || session.participants.length === 0
+  const currentCreatorIndex = roster.findIndex((participant) => participant.id === state.puzzleCreatorId);
+  const rotatedCreatorId = currentCreatorIndex === -1 || roster.length === 0
     ? state.puzzleCreatorId
-    : session.participants[(currentCreatorIndex + 1) % session.participants.length]?.id ?? state.puzzleCreatorId;
+    : roster[(currentCreatorIndex + 1) % roster.length]?.id ?? state.puzzleCreatorId;
   const effectiveNextCreatorId = nextCreatorId ?? rotatedCreatorId;
 
   const renderWord = (): JSX.Element => (
@@ -368,7 +370,7 @@ export function HangmanGame({
                         value={effectiveNextCreatorId}
                         onChange={(event) => setNextCreatorId(event.target.value)}
                       >
-                        {session.participants.map((participant) => (
+                        {roster.map((participant) => (
                           <option key={participant.id} value={participant.id}>
                             {participant.displayName}
                           </option>

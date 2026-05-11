@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { activeParticipants } from "../utils/participants";
 
 export function TwoTruthsGame({
   session,
@@ -31,14 +32,16 @@ export function TwoTruthsGame({
     () => new Map(session.participants.map((participant) => [participant.id, participant.displayName])),
     [session.participants]
   );
+  const activeRoster = useMemo(() => activeParticipants(session.participants), [session.participants]);
+  const activeRosterIds = useMemo(() => new Set(activeRoster.map((p) => p.id)), [activeRoster]);
   const availablePresenterIds = useMemo(() => {
     if (!truthState) return [];
-    const submittedIds = Object.keys(truthState.submissions);
+    const submittedIds = Object.keys(truthState.submissions).filter((id) => activeRosterIds.has(id));
     if (truthState.status === "revealed" && truthState.currentPresenterId) {
       return submittedIds.filter((participantId) => participantId !== truthState.currentPresenterId);
     }
     return submittedIds;
-  }, [truthState]);
+  }, [truthState, activeRosterIds]);
 
   useEffect(() => {
     if (!truthState) return;
@@ -101,7 +104,7 @@ export function TwoTruthsGame({
       ? "Revealed"
       : "Finished";
 
-  const submittedCount = Object.keys(truthState.submissions).length;
+  const submittedActiveCount = Object.keys(truthState.submissions).filter((id) => activeRosterIds.has(id)).length;
 
   return (
     <section className="card game-card-truths">
@@ -124,7 +127,7 @@ export function TwoTruthsGame({
                 ))}
               </ol>
               <p className="truths-progress">
-                {submittedCount} of {session.participants.length} submitted
+                {submittedActiveCount} of {activeRoster.length} submitted
               </p>
             </div>
           ) : (
@@ -172,7 +175,7 @@ export function TwoTruthsGame({
                   onChange={(event) => setSelectedPresenter(event.target.value)}
                 >
                   <option value="">Select...</option>
-                  {Object.keys(truthState.submissions).map((participantId) => {
+                  {availablePresenterIds.map((participantId) => {
                     const participant = session.participants.find((p) => p.id === participantId);
                     return (
                       <option key={participantId} value={participantId}>

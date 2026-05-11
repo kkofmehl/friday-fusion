@@ -35,7 +35,9 @@ export function App(): JSX.Element {
     setNotice(
       reason === "host_closed"
         ? "The host closed this session."
-        : "Session closed after everyone left."
+        : reason === "booted"
+          ? "You were removed from the session by the host."
+          : "Session closed after everyone left."
     );
   }, []);
 
@@ -95,7 +97,9 @@ export function App(): JSX.Element {
 
   const me = session.participants.find((participant) => participant.id === auth.participantId);
   const isHost = Boolean(me?.isHost);
-  const inGame = Boolean(session.activeGame);
+  const canPlay = isHost || me?.isActive !== false;
+  /** Benched guests stay on the lobby shell while a game runs; only active players (and host) see GameScreen. */
+  const inGame = Boolean(session.activeGame && canPlay);
 
   return (
     <div className="app-shell">
@@ -112,6 +116,7 @@ export function App(): JSX.Element {
             session={session}
             currentParticipantId={auth.participantId}
             isHost={isHost}
+            canPlay={canPlay}
             send={sendEvent}
             apiBase={apiBase}
           />

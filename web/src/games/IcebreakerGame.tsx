@@ -6,6 +6,7 @@ import {
   type SessionState
 } from "../../../shared/contracts";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
+import { activeParticipants, participantIsActive } from "../utils/participants";
 
 const clampQuestionCount = (value: number): number => {
   if (!Number.isFinite(value)) return 1;
@@ -101,7 +102,7 @@ export function IcebreakerGame({
       setRevealTargetId("");
       return;
     }
-    const remaining = session.participants.filter(
+    const remaining = activeParticipants(session.participants).filter(
       (p) =>
         state.submittedParticipantIds.includes(p.id) && !state.revealed.some((r) => r.participantId === p.id)
     );
@@ -119,16 +120,19 @@ export function IcebreakerGame({
   }
 
   const question = state.activeQuestion;
-  const totalParticipants = session.participants.length;
-  const submittedCount = state.submittedParticipantIds.length;
+  const roster = activeParticipants(session.participants);
+  const totalParticipants = roster.length;
+  const submittedCount = state.submittedParticipantIds.filter((id) => roster.some((p) => p.id === id)).length;
   const everyoneSubmitted =
-    totalParticipants > 0 && session.participants.every((p) => state.submittedParticipantIds.includes(p.id));
+    totalParticipants > 0 && roster.every((p) => state.submittedParticipantIds.includes(p.id));
   const everyonePromptsSubmitted =
     state.status === "gatheringPrompts" &&
     totalParticipants > 0 &&
-    session.participants.every((p) => state.submittedPromptParticipantIds.includes(p.id));
+    roster.every((p) => state.submittedPromptParticipantIds.includes(p.id));
   const promptsSubmittedCount =
-    state.status === "gatheringPrompts" ? state.submittedPromptParticipantIds.length : 0;
+    state.status === "gatheringPrompts"
+      ? state.submittedPromptParticipantIds.filter((id) => roster.some((p) => p.id === id)).length
+      : 0;
 
   const startRound = () => {
     send({
@@ -479,6 +483,7 @@ export function IcebreakerGame({
               {session.participants
                 .filter(
                   (p) =>
+                    participantIsActive(p) &&
                     state.submittedParticipantIds.includes(p.id) &&
                     !state.revealed.some((r) => r.participantId === p.id)
                 )
@@ -506,6 +511,7 @@ export function IcebreakerGame({
               onClick={() => {
                 const stillToReveal = session.participants.filter(
                   (p) =>
+                    participantIsActive(p) &&
                     state.submittedParticipantIds.includes(p.id) &&
                     !state.revealed.some((r) => r.participantId === p.id)
                 );

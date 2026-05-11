@@ -107,7 +107,7 @@ describe("SessionService", () => {
       setup.service.startGame(host.sessionId, "hangman", {
         hangmanCreatorId: "missing-player"
       })
-    ).rejects.toThrow("Puzzle creator must be in this session.");
+    ).rejects.toThrow("Puzzle creator must be an active player in this session.");
   });
 
   it("scores two truths and a lie", async () => {
@@ -131,7 +131,7 @@ describe("SessionService", () => {
     const host = await setup.service.createSession("Host");
     const player = await setup.service.joinSession(host.joinCode, "Player");
     await setup.service.startGame(host.sessionId, "trivia");
-    await setup.service.startTrivia(host.sessionId, 1);
+    await setup.service.startTrivia(host.sessionId, host.participantId, 1);
     const state = setup.service.getState(host.sessionId);
     if (!state.gameState || state.gameState.type !== "trivia" || !state.gameState.state.activeQuestion) {
       throw new Error("Expected trivia state");
@@ -146,7 +146,7 @@ describe("SessionService", () => {
       host.participantId,
       state.gameState.state.activeQuestion.options[0]!
     );
-    await setup.service.closeTriviaQuestion(host.sessionId);
+    await setup.service.closeTriviaQuestion(host.sessionId, host.participantId);
     const scored = setup.service.getState(host.sessionId);
     const participant = scored.participants.find((item) => item.id === player.participantId);
     expect(participant?.score).toBe(1);
@@ -158,7 +158,7 @@ describe("SessionService", () => {
     const host = await setup.service.createSession("Host");
     const player = await setup.service.joinSession(host.joinCode, "Player");
     await setup.service.startGame(host.sessionId, "trivia");
-    await setup.service.startTrivia(host.sessionId, 1);
+    await setup.service.startTrivia(host.sessionId, host.participantId, 1);
     const state = setup.service.getState(host.sessionId);
     if (!state.gameState || state.gameState.type !== "trivia" || !state.gameState.state.activeQuestion) {
       throw new Error("Expected trivia state");
@@ -168,7 +168,7 @@ describe("SessionService", () => {
       player.participantId,
       state.gameState.state.activeQuestion.correctAnswer
     );
-    await expect(setup.service.closeTriviaQuestion(host.sessionId)).rejects.toThrow(
+    await expect(setup.service.closeTriviaQuestion(host.sessionId, host.participantId)).rejects.toThrow(
       "Not all participants have answered."
     );
   });
@@ -208,7 +208,7 @@ describe("SessionService", () => {
 
     const host = await service.createSession("Host");
     await service.startGame(host.sessionId, "trivia");
-    await service.startTrivia(host.sessionId, {
+    await service.startTrivia(host.sessionId, host.participantId, {
       totalQuestions: 10,
       categoryMode: "single",
       categoryId: 17,
@@ -710,7 +710,7 @@ describe("SessionService", () => {
     tempDir = setup.tempDir;
     const host = await setup.service.createSession("Host");
     await setup.service.startGame(host.sessionId, "trivia");
-    await setup.service.startTrivia(host.sessionId, 5);
+    await setup.service.startTrivia(host.sessionId, host.participantId, 5);
     const seen = new Set<string>();
     for (let i = 0; i < 5; i += 1) {
       const state = setup.service.getState(host.sessionId);
@@ -724,8 +724,8 @@ describe("SessionService", () => {
         host.participantId,
         state.gameState.state.activeQuestion.options[0]!
       );
-      await setup.service.closeTriviaQuestion(host.sessionId);
-      await setup.service.nextTriviaQuestion(host.sessionId);
+      await setup.service.closeTriviaQuestion(host.sessionId, host.participantId);
+      await setup.service.nextTriviaQuestion(host.sessionId, host.participantId);
     }
   });
 
@@ -734,7 +734,7 @@ describe("SessionService", () => {
     tempDir = setup.tempDir;
     const host = await setup.service.createSession("Host");
     await setup.service.startGame(host.sessionId, "trivia");
-    await setup.service.startTrivia(host.sessionId, 4);
+    await setup.service.startTrivia(host.sessionId, host.participantId, 4);
     const seen = new Set<string>();
     for (let i = 0; i < 4; i += 1) {
       const state = setup.service.getState(host.sessionId);
@@ -745,12 +745,12 @@ describe("SessionService", () => {
       seen.add(question.id);
       const hostAnswer = state.gameState.state.activeQuestion.options[0]!;
       await setup.service.submitTriviaAnswer(host.sessionId, host.participantId, hostAnswer);
-      await setup.service.closeTriviaQuestion(host.sessionId);
-      await setup.service.nextTriviaQuestion(host.sessionId);
+      await setup.service.closeTriviaQuestion(host.sessionId, host.participantId);
+      await setup.service.nextTriviaQuestion(host.sessionId, host.participantId);
     }
 
     await setup.service.startGame(host.sessionId, "trivia");
-    await setup.service.startTrivia(host.sessionId, 4);
+    await setup.service.startTrivia(host.sessionId, host.participantId, 4);
     const nextState = setup.service.getState(host.sessionId);
     if (!nextState.gameState || nextState.gameState.type !== "trivia" || !nextState.gameState.state.activeQuestion) {
       throw new Error("Expected trivia state");
@@ -1349,7 +1349,9 @@ describe("SessionService", () => {
     const askerId = playing.gameState.state.currentAskerId;
     await setup.service.submitTwentyQuestionsQuestion(host.sessionId, askerId, "Is it in outer space?");
     const mid = setup.service.getState(host.sessionId);
-    if (mid.gameState?.type !== "twentyQuestions") throw new Error("expected twentyQuestions");
+    if (mid.gameState?.type !== "twentyQuestions" || mid.gameState.state.status !== "playing") {
+      throw new Error("expected twentyQuestions playing");
+    }
     const qid = mid.gameState.state.questionLog[0]?.id;
     if (!qid) throw new Error("expected question id");
     await setup.service.answerTwentyQuestions(host.sessionId, host.participantId, qid, "yes");
@@ -1386,8 +1388,10 @@ describe("SessionService", () => {
       const asker = s.gameState.state.currentAskerId;
       await setup.service.submitTwentyQuestionsQuestion(host.sessionId, asker, `Q${i + 1}?`);
       const afterQ = setup.service.getState(host.sessionId);
-      if (afterQ.gameState?.type !== "twentyQuestions") throw new Error("expected twentyQuestions");
-      const pending = afterQ.gameState.state.questionLog.find((e) => e.answer === null);
+      if (afterQ.gameState?.type !== "twentyQuestions" || afterQ.gameState.state.status !== "playing") {
+        throw new Error("expected twentyQuestions playing");
+      }
+      const pending = afterQ.gameState.state.questionLog.find((e: { answer: string | null }) => e.answer === null);
       if (!pending) throw new Error("expected pending");
       await setup.service.answerTwentyQuestions(host.sessionId, host.participantId, pending.id, "no");
     }
@@ -1419,7 +1423,7 @@ describe("SessionService", () => {
     tempDir = setup.tempDir;
     const host = await setup.service.createSession("Host");
     await expect(setup.service.startGame(host.sessionId, "captionThis")).rejects.toThrow(
-      "Caption This needs at least two players."
+      "Caption This needs at least two active players."
     );
   });
 
@@ -1445,6 +1449,9 @@ describe("SessionService", () => {
       throw new Error("expected voting");
     }
     const hid = hostV.gameState.state.myEntryId;
+    if (guestV.gameState?.type !== "captionThis" || guestV.gameState.state.status !== "voting") {
+      throw new Error("expected guest voting");
+    }
     const gid = guestV.gameState.state.myEntryId;
     if (!hid || !gid) {
       throw new Error("expected myEntryId");
@@ -1479,7 +1486,9 @@ describe("SessionService", () => {
     const setup = await createService();
     tempDir = setup.tempDir;
     const host = await setup.service.createSession("Host");
-    await expect(setup.service.startGame(host.sessionId, "pictionary")).rejects.toThrow("at least two players");
+    await expect(setup.service.startGame(host.sessionId, "pictionary")).rejects.toThrow(
+      "Pictionary needs at least two active players."
+    );
   });
 
   it("Pictionary: clamps round duration to configured min and max", async () => {
@@ -1609,5 +1618,71 @@ describe("SessionService", () => {
     }
     expect(fin.gameState.state.lastResult).toBe("timeout");
     expect(fin.participants.every((p) => p.score === 0)).toBe(true);
+  });
+
+  it("host can bench a guest and inactive guests cannot submit trivia answers", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setParticipantActive(host.sessionId, host.participantId, guest.participantId, false);
+    const s = setup.service.getState(host.sessionId);
+    expect(s.participants.find((p) => p.id === guest.participantId)?.isActive).toBe(false);
+    await setup.service.startGame(host.sessionId, "trivia");
+    await setup.service.startTrivia(host.sessionId, host.participantId, 1);
+    const st = setup.service.getState(host.sessionId);
+    if (!st.gameState || st.gameState.type !== "trivia" || !st.gameState.state.activeQuestion) {
+      throw new Error("expected trivia question");
+    }
+    await expect(
+      setup.service.submitTriviaAnswer(
+        host.sessionId,
+        guest.participantId,
+        st.gameState.state.activeQuestion.options[0]!
+      )
+    ).rejects.toThrow("Inactive players cannot take this action.");
+  });
+
+  it("rejects activating a player while a game is in progress", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setParticipantActive(host.sessionId, host.participantId, guest.participantId, false);
+    await setup.service.startGame(host.sessionId, "hangman");
+    await expect(
+      setup.service.setParticipantActive(host.sessionId, host.participantId, guest.participantId, true)
+    ).rejects.toThrow("Cannot activate a player while a game is in progress.");
+  });
+
+  it("rejects benching a player while a game is in progress", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.startGame(host.sessionId, "hangman");
+    await expect(
+      setup.service.setParticipantActive(host.sessionId, host.participantId, guest.participantId, false)
+    ).rejects.toThrow("Cannot bench a player while a game is in progress.");
+  });
+
+  it("rejects deactivating the host", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(
+      setup.service.setParticipantActive(host.sessionId, host.participantId, host.participantId, false)
+    ).rejects.toThrow("Cannot deactivate the host.");
+  });
+
+  it("rejects lobby game preference for inactive players", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.setParticipantActive(host.sessionId, host.participantId, guest.participantId, false);
+    await expect(
+      setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia")
+    ).rejects.toThrow("Inactive players cannot set a game preference.");
   });
 });

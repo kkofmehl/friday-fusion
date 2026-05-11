@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionState, TriviaState } from "../../../shared/contracts";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import type { Participant, SessionState, TriviaState } from "../../../shared/contracts";
 import { TriviaGame } from "./TriviaGame";
 
 const question = {
@@ -17,8 +17,8 @@ const session: SessionState = {
   sessionName: "Test",
   joinCode: "BRIGHT-OTTER",
   participants: [
-    { id: "p1", displayName: "Alice", score: 0, isHost: true },
-    { id: "p2", displayName: "Bob", score: 0, isHost: false }
+    { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+    { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: true }
   ],
   activeGame: "trivia",
   gameState: {
@@ -130,6 +130,56 @@ describe("TriviaGame", () => {
     );
     expect(screen.getByRole("button", { name: "Check answers" })).toBeDefined();
     expect(screen.getByText("Everyone has answered. You can check answers now.")).toBeDefined();
+  });
+
+  it("treats only active players as needing to answer for host check button", () => {
+    const hostView = (parts: Participant[], answers: Record<string, string>): SessionState => ({
+      sessionId: "s1",
+      sessionName: "Test",
+      joinCode: "BRIGHT-OTTER",
+      participants: parts,
+      activeGame: "trivia",
+      gameState: {
+        type: "trivia",
+        state: {
+          questionIndex: 0,
+          totalQuestions: 3,
+          activeQuestion: question,
+          answers,
+          loading: null,
+          status: "questionOpen"
+        }
+      }
+    });
+
+    const parts: Participant[] = [
+      { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+      { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: true },
+      { id: "p3", displayName: "Carol", score: 0, isHost: false, isActive: false }
+    ];
+
+    const { rerender } = render(
+      <TriviaGame
+        session={hostView(parts, { p2: "Mars" })}
+        currentParticipantId="p1"
+        isHost={true}
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Check answers" })).toBeNull();
+    expect(screen.getByText("1/2 answered")).toBeDefined();
+
+    rerender(
+      <TriviaGame
+        session={hostView(parts, { p1: "Earth", p2: "Mars" })}
+        currentParticipantId="p1"
+        isHost={true}
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect(screen.getByRole("button", { name: "Check answers" })).toBeDefined();
   });
 
   it("sends selected setup options when host starts a round", () => {

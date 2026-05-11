@@ -47,6 +47,8 @@ type ParticipantInternal = {
   displayName: string;
   score: number;
   isHost: boolean;
+  /** Omitted or true = participates in games; false = in session but benched. */
+  isActive?: boolean;
 };
 
 type HangmanGameInternal = {
@@ -305,11 +307,23 @@ const pruneLobbyGamePreferences = (
   const out: Record<string, GameType> = {};
   for (const [participantId, game] of Object.entries(raw)) {
     const p = session.participants.find((x) => x.id === participantId);
-    if (p && !p.isHost && gameTypeSchema.safeParse(game).success) {
+    if (p && !p.isHost && participantIsActive(p) && gameTypeSchema.safeParse(game).success) {
       out[participantId] = game as GameType;
     }
   }
   return out;
+};
+
+const participantIsActive = (p: ParticipantInternal): boolean => p.isActive !== false;
+
+const activeParticipants = (session: SessionInternal): ParticipantInternal[] =>
+  session.participants.filter(participantIsActive);
+
+const assertParticipantActiveForGameplay = (session: SessionInternal, participantId: string): void => {
+  const p = session.participants.find((x) => x.id === participantId);
+  if (!p || !participantIsActive(p)) {
+    throw new Error("Inactive players cannot take this action.");
+  }
 };
 
 type PersistedState = {
@@ -374,7 +388,8 @@ const maskWord = (word: string, guessedLetters: string[]): string => {
 const nonCreatorGuessers = (
   session: SessionInternal,
   game: HangmanGameInternal
-): ParticipantInternal[] => session.participants.filter((p) => p.id !== game.puzzleCreatorId);
+): ParticipantInternal[] =>
+  activeParticipants(session).filter((p) => p.id !== game.puzzleCreatorId);
 
 const firstGuesserId = (
   session: SessionInternal,
@@ -617,7 +632,9 @@ const shuffleGuessWhoSlotsInPlace = (slots: GuessWhoSlotInternal[]): void => {
 };
 
 const twentyQuestionsGuesserIds = (session: SessionInternal, game: TwentyQuestionsGameInternal): string[] =>
-  session.participants.filter((p) => p.id !== game.itemSelectorId).map((p) => p.id);
+  activeParticipants(session)
+    .filter((p) => p.id !== game.itemSelectorId)
+    .map((p) => p.id);
 
 const twentyQuestionsHasPendingQuestion = (game: TwentyQuestionsGameInternal): boolean =>
   game.questionLog.some((entry) => entry.answer === null);
@@ -653,7 +670,7 @@ const validatePictionaryTeamRoster = (
   teamAIds: string[],
   teamBIds: string[]
 ): void => {
-  const all = new Set(session.participants.map((p) => p.id));
+  const activeIds = new Set(activeParticipants(session).map((p) => p.id));
   const a = new Set(teamAIds);
   const b = new Set(teamBIds);
   if (teamAIds.length === 0 || teamBIds.length === 0) {
@@ -668,12 +685,12 @@ const validatePictionaryTeamRoster = (
     throw new Error("Duplicate players on a team are not allowed.");
   }
   const union = new Set([...teamAIds, ...teamBIds]);
-  if (union.size !== all.size) {
-    throw new Error("Each player must be assigned to exactly one team.");
+  if (union.size !== activeIds.size || ![...activeIds].every((id) => union.has(id))) {
+    throw new Error("Each active player must be assigned to exactly one team.");
   }
   for (const id of union) {
-    if (!all.has(id)) {
-      throw new Error("Teams can only include players in this session.");
+    if (!activeIds.has(id)) {
+      throw new Error("Teams can only include active players in this session.");
     }
   }
 };
@@ -711,14 +728,15 @@ const freshGuessImageParticipantSlot = (): GuessImageParticipantSlotInternal => 
 const buildGuessImageParticipantSetups = (
   session: SessionInternal
 ): Record<string, GuessImageParticipantSlotInternal> =>
-  Object.fromEntries(session.participants.map((p) => [p.id, freshGuessImageParticipantSlot()]));
+  Object.fromEntries(activeParticipants(session).map((p) => [p.id, freshGuessImageParticipantSlot()]));
 
 const guessImageEveryoneAllConfigured = (
   session: SessionInternal,
   game: GuessTheImageGameInternal
-): boolean =>
-  session.participants.length > 0 &&
-  session.participants.every((p) => Boolean(game.participantSetups[p.id]?.configured));
+): boolean => {
+  const ids = activeParticipants(session).map((p) => p.id);
+  return ids.length > 0 && ids.every((id) => Boolean(game.participantSetups[id]?.configured));
+};
 
 export class SessionService {
   private sessions = new Map<string, SessionInternal>();
@@ -745,6 +763,7 @@ export class SessionService {
 
   public assertIcebreakerUploadAllowed(sessionId: string, participantId: string): { questionIndex: number } {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "collecting") {
       throw new Error("Icebreaker is not accepting uploads.");
@@ -757,6 +776,7 @@ export class SessionService {
 
   public assertGuessWhoSaidItUploadAllowed(sessionId: string, participantId: string): { questionIndex: number } {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "collecting") {
       throw new Error("Guess Who Said It is not accepting uploads.");
@@ -769,6 +789,7 @@ export class SessionService {
 
   public assertGuessTheImageUploadAllowed(sessionId: string, participantId: string): void {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
@@ -792,6 +813,7 @@ export class SessionService {
 
   public assertCaptionThisUploadAllowed(sessionId: string, participantId: string): void {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "captionThis") {
       throw new Error("Caption This is not active.");
@@ -844,6 +866,11 @@ export class SessionService {
               ? { ...legacyPrefs.lobbyGamePreferences }
               : {}
         };
+        for (const p of migrated.participants) {
+          if (p.isActive === undefined) {
+            p.isActive = true;
+          }
+        }
         return [session.sessionId, migrated] as const;
       })
     );
@@ -857,7 +884,7 @@ export class SessionService {
           repairedGuessImageSetup = true;
         }
         if (g.setupMode === "everyone" && g.status === "setup") {
-          for (const p of s.participants) {
+          for (const p of activeParticipants(s)) {
             if (!g.participantSetups[p.id]) {
               g.participantSetups[p.id] = freshGuessImageParticipantSlot();
               repairedGuessImageSetup = true;
@@ -910,7 +937,7 @@ export class SessionService {
       sessionId,
       sessionName,
       joinCode,
-      participants: [{ id: participantId, displayName, isHost: true, score: 0 }],
+      participants: [{ id: participantId, displayName, isHost: true, score: 0, isActive: true }],
       games: [],
       updatedAt: Date.now(),
       lobbyGamePreferences: {}
@@ -931,12 +958,17 @@ export class SessionService {
 
     const existing = session.participants.find((participant) => participant.displayName === displayName);
     const participantId = existing ? existing.id : nanoid(8);
-    if (!existing) {
+    if (existing) {
+      existing.isActive = true;
+      session.updatedAt = Date.now();
+      await this.persist();
+    } else {
       session.participants.push({
         id: participantId,
         displayName,
         isHost: false,
-        score: 0
+        score: 0,
+        isActive: true
       });
       session.updatedAt = Date.now();
 
@@ -1001,6 +1033,10 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === participantId)) {
       throw new Error("Participant is not in this session.");
     }
+    const prefParticipant = session.participants.find((p) => p.id === participantId);
+    if (!prefParticipant || !participantIsActive(prefParticipant)) {
+      throw new Error("Inactive players cannot set a game preference.");
+    }
     if (session.participants.some((p) => p.id === participantId && p.isHost)) {
       throw new Error("Host cannot set a game preference.");
     }
@@ -1032,12 +1068,14 @@ export class SessionService {
     let next: GameInternal;
     if (game === "hangman") {
       const requestedCreatorId = options.hangmanCreatorId;
-      if (requestedCreatorId && !session.participants.some((participant) => participant.id === requestedCreatorId)) {
-        throw new Error("Puzzle creator must be in this session.");
+      const actives = activeParticipants(session);
+      if (requestedCreatorId && !actives.some((participant) => participant.id === requestedCreatorId)) {
+        throw new Error("Puzzle creator must be an active player in this session.");
       }
-      const creatorId = requestedCreatorId
-        ?? session.participants.find((participant) => participant.isHost)?.id
-        ?? session.participants[0]?.id;
+      const creatorId =
+        requestedCreatorId
+        ?? actives.find((participant) => participant.isHost)?.id
+        ?? actives[0]?.id;
       if (!creatorId) {
         throw new Error("No participants in session.");
       }
@@ -1099,8 +1137,8 @@ export class SessionService {
         promptDraftsByParticipant: {}
       };
     } else if (game === "guessWhoSaidIt") {
-      if (session.participants.length < 2) {
-        throw new Error("Guess Who Said It needs at least two players.");
+      if (activeParticipants(session).length < 2) {
+        throw new Error("Guess Who Said It needs at least two active players.");
       }
       const previousGuessWho = session.games.find(
         (entry): entry is GuessWhoSaidItGameInternal => entry.type === "guessWhoSaidIt"
@@ -1123,13 +1161,14 @@ export class SessionService {
         promptRevealSnapshot: null
       };
     } else if (game === "guessTheImage") {
-      const hostId = session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id;
+      const actives = activeParticipants(session);
+      const hostId = actives.find((p) => p.isHost)?.id ?? actives[0]?.id;
       if (!hostId) {
-        throw new Error("No participants in session.");
+        throw new Error("No active participants in session.");
       }
       const requestedSetup = options.guessImageSetupParticipantId;
       const setupParticipantId =
-        requestedSetup && session.participants.some((p) => p.id === requestedSetup) ? requestedSetup : hostId;
+        requestedSetup && actives.some((p) => p.id === requestedSetup) ? requestedSetup : hostId;
       const setupMode = options.guessImageSetupMode === "everyone" ? "everyone" : "single";
       next = {
         id: nanoid(6),
@@ -1151,15 +1190,16 @@ export class SessionService {
         everyoneBetweenRounds: false
       };
     } else if (game === "twentyQuestions") {
-      if (session.participants.length < 2) {
-        throw new Error("20 Questions needs at least two players.");
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("20 Questions needs at least two active players.");
       }
       const requestedSelector = options.twentyQuestionsItemSelectorId;
       const itemSelectorId =
-        requestedSelector && session.participants.some((p) => p.id === requestedSelector)
+        requestedSelector && actives.some((p) => p.id === requestedSelector)
           ? requestedSelector
-          : (session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id);
-      const guessers = session.participants.filter((p) => p.id !== itemSelectorId);
+          : (actives.find((p) => p.isHost)?.id ?? actives[0]!.id);
+      const guessers = actives.filter((p) => p.id !== itemSelectorId);
       if (guessers.length === 0) {
         throw new Error("20 Questions needs at least one person who is not the item selector.");
       }
@@ -1180,14 +1220,15 @@ export class SessionService {
         scoresApplied: false
       };
     } else if (game === "captionThis") {
-      if (session.participants.length < 2) {
-        throw new Error("Caption This needs at least two players.");
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Caption This needs at least two active players.");
       }
       const requestedProvider = options.captionThisImageProviderId;
       const imageProviderId =
-        requestedProvider && session.participants.some((p) => p.id === requestedProvider)
+        requestedProvider && actives.some((p) => p.id === requestedProvider)
           ? requestedProvider
-          : (session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id);
+          : (actives.find((p) => p.isHost)?.id ?? actives[0]!.id);
       next = {
         id: nanoid(6),
         type: "captionThis",
@@ -1201,8 +1242,8 @@ export class SessionService {
         votes: {}
       };
     } else if (game === "pictionary") {
-      if (session.participants.length < 2) {
-        throw new Error("Pictionary needs at least two players.");
+      if (activeParticipants(session).length < 2) {
+        throw new Error("Pictionary needs at least two active players.");
       }
       const rawMs = options.pictionaryRoundDurationMs ?? PICTORY_ROUND_DURATION_DEFAULT_MS;
       const roundDurationMs = Math.min(
@@ -1244,6 +1285,7 @@ export class SessionService {
     if (!isHost) {
       throw new Error("Only the host can end the game.");
     }
+    assertParticipantActiveForGameplay(session, participantId);
     const active = session.games[0];
     if (active?.type === "icebreaker") {
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
@@ -1272,6 +1314,7 @@ export class SessionService {
     if (!isHost) {
       throw new Error("Only the host can close the session.");
     }
+    assertParticipantActiveForGameplay(session, participantId);
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
@@ -1295,6 +1338,96 @@ export class SessionService {
     this.sessions.delete(sessionId);
     await this.persist();
     return true;
+  }
+
+  private async detachParticipantFromActiveGame(
+    session: SessionInternal,
+    sessionId: string,
+    participantId: string
+  ): Promise<void> {
+    const activeHangman = session.games.find((entry) => entry.type === "hangman") as HangmanGameInternal | undefined;
+    if (activeHangman) {
+      if (activeHangman.puzzleCreatorId === participantId) {
+        session.games = [];
+      } else if (activeHangman.currentTurnId === participantId) {
+        activeHangman.currentTurnId = pickNextGuesser(session, activeHangman, participantId);
+      }
+    }
+
+    const activeIcebreaker = session.games[0];
+    if (activeIcebreaker?.type === "icebreaker") {
+      delete activeIcebreaker.privateSubmissions[participantId];
+      activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
+      delete activeIcebreaker.promptDraftsByParticipant[participantId];
+    }
+
+    const activeGuessWho = session.games[0];
+    if (activeGuessWho?.type === "guessWhoSaidIt" && activeGuessWho.status !== "idle") {
+      session.games = [];
+      await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
+    }
+
+    const activeGuess = session.games[0];
+    if (activeGuess?.type === "guessTheImage") {
+      delete activeGuess.locks[participantId];
+      delete activeGuess.participantSetups[participantId];
+      if (activeGuess.selectedRoundParticipantId === participantId) {
+        activeGuess.selectedRoundParticipantId = null;
+      }
+      if (activeGuess.setupMode === "single" && activeGuess.setupParticipantId === participantId) {
+        activeGuess.setupParticipantId =
+          activeParticipants(session).find((p) => p.isHost)?.id
+          ?? activeParticipants(session)[0]?.id
+          ?? session.participants.find((p) => p.isHost)?.id
+          ?? session.participants[0]!.id;
+      }
+    }
+
+    const active20q = session.games[0];
+    if (active20q?.type === "twentyQuestions") {
+      if (active20q.itemSelectorId === participantId) {
+        session.games = [];
+      } else if (active20q.status === "playing") {
+        const guessersAfter = twentyQuestionsGuesserIds(session, active20q);
+        if (guessersAfter.length === 0) {
+          session.games = [];
+        } else if (active20q.currentAskerId === participantId) {
+          active20q.currentAskerId = guessersAfter[0] ?? null;
+          active20q.questionDraft = null;
+        }
+      }
+    }
+
+    const activeCap = session.games[0];
+    if (activeCap?.type === "captionThis") {
+      if (activeCap.imageProviderId === participantId || activeParticipants(session).length < 2) {
+        session.games = [];
+        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+      } else if (activeCap.status === "voting" || activeCap.status === "results") {
+        session.games = [];
+        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+      } else if (activeCap.status === "collectingCaptions") {
+        delete activeCap.captions[participantId];
+      }
+    }
+
+    const activePic = session.games[0];
+    if (activePic?.type === "pictionary") {
+      const strip = (ids: string[]): string[] => ids.filter((id) => id !== participantId);
+      const nextA = strip(activePic.teamAIds);
+      const nextB = strip(activePic.teamBIds);
+      if (activePic.status === "drawing" && activePic.drawerId === participantId) {
+        this.clearPictionaryTimer(sessionId);
+        session.games = [];
+      } else if (nextA.length === 0 || nextB.length === 0) {
+        this.clearPictionaryTimer(sessionId);
+        session.games = [];
+      } else {
+        activePic.teamAIds = nextA;
+        activePic.teamBIds = nextB;
+        delete activePic.drawCounts[participantId];
+      }
+    }
   }
 
   public async removeParticipant(
@@ -1335,98 +1468,49 @@ export class SessionService {
       delete session.lobbyGamePreferences[promotedId];
     }
 
-    // A hangman round might have pointed at the leaver as puzzle creator or as
-    // the current turn. Either situation makes the game unrecoverable, so we
-    // drop the active game and push the session back to the lobby.
-    const activeHangman = session.games.find((entry) => entry.type === "hangman") as
-      | HangmanGameInternal
-      | undefined;
-    if (activeHangman) {
-      if (activeHangman.puzzleCreatorId === participantId) {
-        session.games = [];
-      } else if (activeHangman.currentTurnId === participantId) {
-        activeHangman.currentTurnId = pickNextGuesser(session, activeHangman, participantId);
-      }
-    }
-
-    const activeIcebreaker = session.games[0];
-    if (activeIcebreaker?.type === "icebreaker") {
-      delete activeIcebreaker.privateSubmissions[participantId];
-      activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
-      delete activeIcebreaker.promptDraftsByParticipant[participantId];
-    }
-
-    const activeGuessWho = session.games[0];
-    if (activeGuessWho?.type === "guessWhoSaidIt" && activeGuessWho.status !== "idle") {
-      session.games = [];
-      await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
-    }
-
-    const activeGuess = session.games[0];
-    if (activeGuess?.type === "guessTheImage") {
-      delete activeGuess.locks[participantId];
-      delete activeGuess.participantSetups[participantId];
-      if (activeGuess.selectedRoundParticipantId === participantId) {
-        activeGuess.selectedRoundParticipantId = null;
-      }
-      if (activeGuess.setupMode === "single" && activeGuess.setupParticipantId === participantId) {
-        activeGuess.setupParticipantId =
-          session.participants.find((p) => p.isHost)?.id ?? session.participants[0]!.id;
-      }
-    }
-
-    const active20q = session.games[0];
-    if (active20q?.type === "twentyQuestions") {
-      if (active20q.itemSelectorId === participantId) {
-        session.games = [];
-      } else if (active20q.status === "playing") {
-        const guessersAfter = twentyQuestionsGuesserIds(session, active20q);
-        if (guessersAfter.length === 0) {
-          session.games = [];
-        } else if (active20q.currentAskerId === participantId) {
-          active20q.currentAskerId = guessersAfter[0] ?? null;
-          active20q.questionDraft = null;
-        }
-      }
-    }
-
-    const activeCap = session.games[0];
-    if (activeCap?.type === "captionThis") {
-      if (activeCap.imageProviderId === participantId || session.participants.length < 2) {
-        session.games = [];
-        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
-      } else if (activeCap.status === "voting" || activeCap.status === "results") {
-        session.games = [];
-        await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
-      } else if (activeCap.status === "collectingCaptions") {
-        delete activeCap.captions[participantId];
-      }
-    }
-
-    const activePic = session.games[0];
-    if (activePic?.type === "pictionary") {
-      const strip = (ids: string[]): string[] => ids.filter((id) => id !== participantId);
-      const nextA = strip(activePic.teamAIds);
-      const nextB = strip(activePic.teamBIds);
-      if (activePic.status === "drawing" && activePic.drawerId === participantId) {
-        this.clearPictionaryTimer(sessionId);
-        session.games = [];
-      } else if (nextA.length === 0 || nextB.length === 0) {
-        this.clearPictionaryTimer(sessionId);
-        session.games = [];
-      } else {
-        activePic.teamAIds = nextA;
-        activePic.teamBIds = nextB;
-        delete activePic.drawCounts[participantId];
-      }
-    }
+    await this.detachParticipantFromActiveGame(session, sessionId, participantId);
 
     await this.persist();
     return { sessionDeleted: false };
   }
 
+  public async setParticipantActive(
+    sessionId: string,
+    hostParticipantId: string,
+    targetId: string,
+    isActive: boolean
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can change participant activity.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const target = session.participants.find((p) => p.id === targetId);
+    if (!target) {
+      throw new Error("Participant is not in this session.");
+    }
+    if (target.isHost && !isActive) {
+      throw new Error("Cannot deactivate the host.");
+    }
+    if (isActive && session.games.length > 0) {
+      throw new Error("Cannot activate a player while a game is in progress.");
+    }
+    if (!isActive && session.games.length > 0) {
+      throw new Error("Cannot bench a player while a game is in progress.");
+    }
+    if (participantIsActive(target) === isActive) {
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    target.isActive = isActive;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   public async setHangmanWord(sessionId: string, participantId: string, word: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "hangman") {
       throw new Error("Hangman game is not active.");
@@ -1449,6 +1533,7 @@ export class SessionService {
 
   public async openHangmanSolve(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "hangman") {
       throw new Error("Hangman game is not active.");
@@ -1487,6 +1572,7 @@ export class SessionService {
 
   public async cancelHangmanSolve(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "hangman") {
       throw new Error("Hangman game is not active.");
@@ -1506,6 +1592,7 @@ export class SessionService {
 
   public async guessHangmanLetter(sessionId: string, participantId: string, letter: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "hangman") {
       throw new Error("Hangman game is not active.");
@@ -1599,6 +1686,7 @@ export class SessionService {
 
   public async solveHangman(sessionId: string, participantId: string, guess: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "hangman") {
       throw new Error("Hangman game is not active.");
@@ -1681,6 +1769,7 @@ export class SessionService {
 
   public async setHangmanTurn(sessionId: string, participantId: string, targetId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const isHost = session.participants.some((p) => p.id === participantId && p.isHost);
     if (!isHost) {
       throw new Error("Only the host can override the current guesser.");
@@ -1699,6 +1788,7 @@ export class SessionService {
     if (target.id === game.puzzleCreatorId) {
       throw new Error("Puzzle creator cannot take a turn.");
     }
+    assertParticipantActiveForGameplay(session, target.id);
     game.currentTurnId = target.id;
     session.updatedAt = Date.now();
     await this.persist();
@@ -1710,6 +1800,7 @@ export class SessionService {
     orderedIds: string[]
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const isHost = session.participants.some((p) => p.id === participantId && p.isHost);
     if (!isHost) {
       throw new Error("Only the host can reorder participants.");
@@ -1731,6 +1822,7 @@ export class SessionService {
 
   public async submitTwoTruths(sessionId: string, participantId: string, statements: string[], lieIndex: number): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twoTruthsLie") {
       throw new Error("Two Truths and a Lie is not active.");
@@ -1742,6 +1834,7 @@ export class SessionService {
 
   public async beginVoting(sessionId: string, presenterId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, presenterId);
     const game = session.games[0];
     if (game?.type !== "twoTruthsLie") {
       throw new Error("Two Truths and a Lie is not active.");
@@ -1758,6 +1851,7 @@ export class SessionService {
 
   public async voteLie(sessionId: string, participantId: string, lieIndex: number): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twoTruthsLie" || game.status !== "voting") {
       throw new Error("Voting is not active.");
@@ -1801,6 +1895,7 @@ export class SessionService {
 
   public async startTrivia(
     sessionId: string,
+    participantId: string,
     config:
       | number
       | {
@@ -1811,6 +1906,7 @@ export class SessionService {
       }
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "trivia") {
       throw new Error("Trivia game is not active.");
@@ -1863,6 +1959,7 @@ export class SessionService {
 
   public async submitTriviaAnswer(sessionId: string, participantId: string, answer: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "trivia" || game.status !== "questionOpen") {
       throw new Error("No trivia question is open.");
@@ -1872,13 +1969,14 @@ export class SessionService {
     await this.persist();
   }
 
-  public async closeTriviaQuestion(sessionId: string): Promise<void> {
+  public async closeTriviaQuestion(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "trivia" || game.status !== "questionOpen" || !game.activeQuestion) {
       throw new Error("No trivia question is open.");
     }
-    const allParticipantsAnswered = session.participants.every(
+    const allParticipantsAnswered = activeParticipants(session).every(
       (participant) => typeof game.answers[participant.id] === "string"
     );
     if (!allParticipantsAnswered) {
@@ -1898,8 +1996,9 @@ export class SessionService {
     await this.persist();
   }
 
-  public async nextTriviaQuestion(sessionId: string): Promise<void> {
+  public async nextTriviaQuestion(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "trivia") {
       throw new Error("Trivia game is not active.");
@@ -1939,6 +2038,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can start the icebreaker round.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker") {
       throw new Error("Icebreaker game is not active.");
@@ -1971,6 +2071,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can begin custom question gathering.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker") {
       throw new Error("Icebreaker game is not active.");
@@ -1988,6 +2089,7 @@ export class SessionService {
 
   public async submitIcebreakerPrompts(sessionId: string, participantId: string, texts: string[]): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "gatheringPrompts") {
       throw new Error("Icebreaker is not accepting custom questions.");
@@ -2023,6 +2125,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can start the icebreaker round.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "gatheringPrompts") {
       throw new Error("Icebreaker is not ready to start from submitted questions.");
@@ -2032,7 +2135,7 @@ export class SessionService {
       throw new Error("Invalid prompt gathering configuration.");
     }
     const pool: Array<{ id: string; text: string }> = [];
-    for (const p of session.participants) {
+    for (const p of activeParticipants(session)) {
       const draft = game.promptDraftsByParticipant[p.id];
       if (!draft || draft.length !== expected) {
         throw new Error("Not all participants have submitted their questions.");
@@ -2066,6 +2169,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can return to setup.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "finished") {
       throw new Error("Icebreaker can only return to setup after the round has finished.");
@@ -2089,6 +2193,7 @@ export class SessionService {
     payload: { text: string; imageFileId: string | null }
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "collecting") {
       throw new Error("Icebreaker is not accepting answers.");
@@ -2111,13 +2216,14 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can begin reveals.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "collecting") {
       throw new Error("Icebreaker is not ready for reveals.");
     }
     const valid = (s: { text: string; imageFileId: string | null }): boolean =>
       s.text.trim().length > 0 || Boolean(s.imageFileId);
-    const allReady = session.participants.every((p) => {
+    const allReady = activeParticipants(session).every((p) => {
       const sub = game.privateSubmissions[p.id];
       return sub && valid(sub);
     });
@@ -2138,6 +2244,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can reveal an answer.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker" || game.status !== "revealing") {
       throw new Error("Icebreaker reveals are not active.");
@@ -2163,6 +2270,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can move to the next question.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "icebreaker") {
       throw new Error("Icebreaker game is not active.");
@@ -2195,7 +2303,7 @@ export class SessionService {
     }
     const valid = (s: GuessWhoAnswerInternal): boolean =>
       s.text.trim().length > 0 || Boolean(s.imageFileId);
-    const allReady = session.participants.every((p) => {
+    const allReady = activeParticipants(session).every((p) => {
       const sub = game.privateSubmissions[p.id];
       return sub && valid(sub);
     });
@@ -2223,8 +2331,9 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can start the round.");
     }
-    if (session.participants.length < 2) {
-      throw new Error("Guess Who Said It needs at least two players.");
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    if (activeParticipants(session).length < 2) {
+      throw new Error("Guess Who Said It needs at least two active players.");
     }
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "idle") {
@@ -2257,6 +2366,7 @@ export class SessionService {
     payload: { text: string; imageFileId: string | null }
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "collecting") {
       throw new Error("Guess Who Said It is not accepting answers.");
@@ -2280,6 +2390,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can begin guessing.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "votingReady") {
       throw new Error("Guess Who Said It is not ready for guessing.");
@@ -2298,6 +2409,7 @@ export class SessionService {
     votes: Record<string, string>
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "voting") {
       throw new Error("Guess Who Said It is not in the guessing phase.");
@@ -2337,6 +2449,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can continue.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "promptReveal") {
       throw new Error("Guess Who Said It is not ready to continue.");
@@ -2361,6 +2474,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only host can return to setup.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessWhoSaidIt" || game.status !== "roundSummary") {
       throw new Error("Guess Who Said It can only return to setup after the round summary.");
@@ -2421,7 +2535,7 @@ export class SessionService {
     if (!game.votingPrompt) {
       return false;
     }
-    for (const p of session.participants) {
+    for (const p of activeParticipants(session)) {
       const expected = new Set(this.guessWhoExpectedSlotIdsForVoter(game, p.id));
       const vm = game.votes[p.id];
       if (!vm) {
@@ -2445,7 +2559,7 @@ export class SessionService {
       throw new Error("No voting prompt to finalize.");
     }
     const byVoter: GuessWhoPromptRevealSnapshotInternal["byVoter"] = [];
-    for (const voter of session.participants) {
+    for (const voter of activeParticipants(session)) {
       const vm = game.votes[voter.id];
       if (!vm) {
         throw new Error("Missing votes.");
@@ -2517,6 +2631,7 @@ export class SessionService {
     }
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
@@ -2569,6 +2684,7 @@ export class SessionService {
 
   public async startGuessTheImageRound(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
@@ -2633,6 +2749,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only the host can return to setup.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
@@ -2671,6 +2788,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only the host can continue to the next image.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
@@ -2708,8 +2826,13 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only the host can choose who sets up the round.");
     }
-    if (!session.participants.some((p) => p.id === targetParticipantId)) {
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const target = session.participants.find((p) => p.id === targetParticipantId);
+    if (!target) {
       throw new Error("That participant is not in this session.");
+    }
+    if (!participantIsActive(target)) {
+      throw new Error("Setup player must be an active participant.");
     }
     const game = session.games[0];
     if (game?.type !== "guessTheImage" || game.status !== "setup") {
@@ -2747,6 +2870,7 @@ export class SessionService {
     if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
       throw new Error("Only the host can choose whose image to use.");
     }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage" || game.status !== "setup" || game.setupMode !== "everyone") {
       throw new Error("Round image selection is only available during everyone setup.");
@@ -2760,8 +2884,12 @@ export class SessionService {
       await this.persist();
       return;
     }
-    if (!session.participants.some((p) => p.id === targetParticipantId)) {
+    const t = session.participants.find((p) => p.id === targetParticipantId);
+    if (!t) {
       throw new Error("That participant is not in this session.");
+    }
+    if (!participantIsActive(t)) {
+      throw new Error("Round presenter must be an active participant.");
     }
     const slot = game.participantSetups[targetParticipantId];
     if (!slot?.configured) {
@@ -2788,7 +2916,9 @@ export class SessionService {
   }
 
   private guessTheImageGuesserIds(session: SessionInternal, game: GuessTheImageGameInternal): string[] {
-    return session.participants.filter((p) => p.id !== game.setupParticipantId).map((p) => p.id);
+    return activeParticipants(session)
+      .filter((p) => p.id !== game.setupParticipantId)
+      .map((p) => p.id);
   }
 
   private allGuessTheImageGuessersLocked(session: SessionInternal, game: GuessTheImageGameInternal): boolean {
@@ -2809,6 +2939,7 @@ export class SessionService {
     if (!participant) {
       throw new Error("Participant is not in this session.");
     }
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "guessTheImage" || game.status !== "playing") {
       throw new Error("No Guess the image round is open.");
@@ -2947,13 +3078,13 @@ export class SessionService {
     }
     game.scoresApplied = true;
     if (game.outcome === "team") {
-      for (const p of session.participants) {
+      for (const p of activeParticipants(session)) {
         if (p.id !== game.itemSelectorId) {
           p.score += 1;
         }
       }
     } else if (game.outcome === "selector") {
-      const guesserCount = session.participants.filter((p) => p.id !== game.itemSelectorId).length;
+      const guesserCount = activeParticipants(session).filter((p) => p.id !== game.itemSelectorId).length;
       const sel = session.participants.find((p) => p.id === game.itemSelectorId);
       if (sel && guesserCount > 0) {
         sel.score += guesserCount;
@@ -2974,6 +3105,7 @@ export class SessionService {
 
   public async setTwentyQuestionsItem(sessionId: string, participantId: string, text: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twentyQuestions" || game.status !== "waitingForItem") {
       throw new Error("Cannot set the item right now.");
@@ -3001,6 +3133,7 @@ export class SessionService {
     text: string
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twentyQuestions" || game.status !== "playing") {
       throw new Error("Cannot update a question draft right now.");
@@ -3023,6 +3156,7 @@ export class SessionService {
     text: string
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twentyQuestions" || game.status !== "playing") {
       throw new Error("Cannot submit a question right now.");
@@ -3056,6 +3190,7 @@ export class SessionService {
     answer: "yes" | "no"
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twentyQuestions" || game.status !== "playing") {
       throw new Error("Cannot answer right now.");
@@ -3083,6 +3218,7 @@ export class SessionService {
 
   public async twentyQuestionsTeamSolved(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "twentyQuestions" || game.status !== "playing") {
       throw new Error("Cannot mark solved right now.");
@@ -3105,6 +3241,7 @@ export class SessionService {
     newProviderId: string
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     if (!this.isHost(sessionId, participantId)) {
       throw new Error("Only the host can change the image provider.");
     }
@@ -3112,8 +3249,12 @@ export class SessionService {
     if (game?.type !== "captionThis" || game.status !== "waitingForImage") {
       throw new Error("Cannot change the image provider right now.");
     }
-    if (!session.participants.some((p) => p.id === newProviderId)) {
+    const newProvider = session.participants.find((p) => p.id === newProviderId);
+    if (!newProvider) {
       throw new Error("Participant must be in the session.");
+    }
+    if (!participantIsActive(newProvider)) {
+      throw new Error("Image provider must be an active player.");
     }
     game.imageProviderId = newProviderId;
     session.updatedAt = Date.now();
@@ -3126,6 +3267,7 @@ export class SessionService {
     imageFileId: string
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "captionThis" || game.status !== "waitingForImage") {
       throw new Error("Cannot submit an image right now.");
@@ -3145,6 +3287,7 @@ export class SessionService {
 
   public async captionThisSubmitCaption(sessionId: string, participantId: string, text: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "captionThis" || game.status !== "collectingCaptions") {
       throw new Error("Cannot submit a caption right now.");
@@ -3163,6 +3306,7 @@ export class SessionService {
 
   public async captionThisBeginVoting(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     if (!this.isHost(sessionId, participantId)) {
       throw new Error("Only the host can start voting.");
     }
@@ -3170,14 +3314,14 @@ export class SessionService {
     if (game?.type !== "captionThis" || game.status !== "collectingCaptions") {
       throw new Error("Cannot start voting right now.");
     }
-    const allIn = session.participants.every((p) => {
+    const allIn = activeParticipants(session).every((p) => {
       const c = game.captions[p.id];
       return typeof c === "string" && c.trim().length > 0;
     });
     if (!allIn) {
       throw new Error("Not everyone has submitted a caption yet.");
     }
-    const entries: CaptionThisEntryInternal[] = session.participants.map((p) => ({
+    const entries: CaptionThisEntryInternal[] = activeParticipants(session).map((p) => ({
       id: nanoid(10),
       authorId: p.id,
       text: game.captions[p.id]!.trim()
@@ -3192,6 +3336,7 @@ export class SessionService {
 
   public async captionThisVote(sessionId: string, participantId: string, entryId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "captionThis" || game.status !== "voting") {
       throw new Error("Cannot vote right now.");
@@ -3208,7 +3353,7 @@ export class SessionService {
     }
     game.votes[participantId] = entryId;
     session.updatedAt = Date.now();
-    const allVoted = session.participants.every((p) => game.votes[p.id] !== undefined);
+    const allVoted = activeParticipants(session).every((p) => game.votes[p.id] !== undefined);
     if (allVoted) {
       game.status = "results";
     }
@@ -3221,6 +3366,7 @@ export class SessionService {
     nextImageProviderId: string
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     if (!this.isHost(sessionId, participantId)) {
       throw new Error("Only the host can start the next round.");
     }
@@ -3228,8 +3374,12 @@ export class SessionService {
     if (game?.type !== "captionThis" || game.status !== "results") {
       throw new Error("Cannot start the next round right now.");
     }
-    if (!session.participants.some((p) => p.id === nextImageProviderId)) {
+    const nextProv = session.participants.find((p) => p.id === nextImageProviderId);
+    if (!nextProv) {
       throw new Error("Image provider must be in the session.");
+    }
+    if (!participantIsActive(nextProv)) {
+      throw new Error("Image provider must be an active player.");
     }
     if (game.imageFileId) {
       await deleteCaptionThisStoredFile(this.dataDirectory, sessionId, game.imageFileId);
@@ -3409,10 +3559,11 @@ export class SessionService {
     teamAIds: string[],
     teamBIds: string[]
   ): Promise<void> {
-    if (!this.isHost(sessionId, participantId)) {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
       throw new Error("Only the host can set teams.");
     }
-    const session = this.getSessionOrThrow(sessionId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "teamSetup") {
       throw new Error("Teams can only be edited during setup.");
@@ -3425,10 +3576,11 @@ export class SessionService {
   }
 
   public async pictionaryBeginPlay(sessionId: string, participantId: string): Promise<void> {
-    if (!this.isHost(sessionId, participantId)) {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
       throw new Error("Only the host can start play.");
     }
-    const session = this.getSessionOrThrow(sessionId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "teamSetup") {
       throw new Error("Pictionary is not waiting for team setup.");
@@ -3453,6 +3605,7 @@ export class SessionService {
     stroke: PictionaryStrokePayload
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "drawing") {
       throw new Error("Drawing is not active.");
@@ -3479,6 +3632,7 @@ export class SessionService {
 
   public async pictionaryClearCanvas(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "drawing") {
       throw new Error("Drawing is not active.");
@@ -3493,6 +3647,7 @@ export class SessionService {
 
   public async pictionaryTeamGuessed(sessionId: string, participantId: string): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "drawing") {
       throw new Error("Drawing is not active.");
@@ -3504,10 +3659,11 @@ export class SessionService {
   }
 
   public async pictionaryHostSkipRound(sessionId: string, participantId: string): Promise<void> {
-    if (!this.isHost(sessionId, participantId)) {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
       throw new Error("Only the host can skip a round.");
     }
-    const session = this.getSessionOrThrow(sessionId);
     const game = session.games[0];
     if (game?.type !== "pictionary" || game.status !== "drawing") {
       throw new Error("Nothing to skip right now.");
@@ -3521,7 +3677,13 @@ export class SessionService {
       sessionId: session.sessionId,
       sessionName: session.sessionName,
       joinCode: session.joinCode,
-      participants: session.participants
+      participants: session.participants.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        score: p.score,
+        isHost: p.isHost,
+        isActive: participantIsActive(p)
+      }))
     };
 
     if (!game) {
@@ -3679,7 +3841,7 @@ export class SessionService {
         submittedParticipantIds:
           game.status === "idle"
             ? []
-            : session.participants
+            : activeParticipants(session)
                 .filter((p) => {
                   const s = game.privateSubmissions[p.id];
                   return Boolean(s && (s.text.trim().length > 0 || s.imageFileId));
@@ -3833,7 +3995,7 @@ export class SessionService {
           ? `/api/sessions/${session.sessionId}/guess-the-image/file/${encodeURIComponent(game.imageFileId)}`
           : null;
       if (game.status === "setup") {
-        const everyonePeers = session.participants.map((p) => ({
+        const everyonePeers = activeParticipants(session).map((p) => ({
           participantId: p.id,
           configured: Boolean(game.participantSetups[p.id]?.configured)
         }));
@@ -4043,13 +4205,13 @@ export class SessionService {
       }
 
       if (game.status === "collectingCaptions") {
-        const submittedCaptionParticipantIds = session.participants
+        const submittedCaptionParticipantIds = activeParticipants(session)
           .filter((p) => {
             const c = game.captions[p.id];
             return typeof c === "string" && c.trim().length > 0;
           })
           .map((p) => p.id);
-        const allCaptionsIn = session.participants.every((p) => {
+        const allCaptionsIn = activeParticipants(session).every((p) => {
           const c = game.captions[p.id];
           return typeof c === "string" && c.trim().length > 0;
         });
@@ -4082,6 +4244,7 @@ export class SessionService {
             : null;
         const votedParticipantIds = Object.keys(game.votes);
         const hasVoted = Boolean(viewerParticipantId && game.votes[viewerParticipantId] !== undefined);
+        const allVotesIn = activeParticipants(session).every((p) => game.votes[p.id] !== undefined);
         return {
           ...base,
           activeGame: "captionThis",
@@ -4096,7 +4259,7 @@ export class SessionService {
               myEntryId: myEntry,
               votedParticipantIds,
               hasVoted,
-              allVotesIn: false
+              allVotesIn
             }
           }
         };

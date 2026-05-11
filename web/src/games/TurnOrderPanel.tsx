@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from "react";
 import type { ClientEvent, Participant, SessionState } from "../../../shared/contracts";
+import { activeParticipants, participantIsActive } from "../utils/participants";
 
 type Props = {
   session: SessionState;
@@ -18,7 +19,7 @@ export function TurnOrderPanel({
   isHost,
   send
 }: Props): JSX.Element | null {
-  const guessers = session.participants.filter((p) => p.id !== puzzleCreatorId);
+  const guessers = activeParticipants(session.participants).filter((p) => p.id !== puzzleCreatorId);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   if (guessers.length === 0) {
@@ -55,19 +56,37 @@ export function TurnOrderPanel({
     }
     event.preventDefault();
     const fullOrder = session.participants.map((p) => p.id);
-    const fromIndex = fullOrder.indexOf(draggingId);
-    const toIndex = fullOrder.indexOf(targetId);
+    const activeGuesserIds = session.participants
+      .filter((p) => p.id !== puzzleCreatorId && participantIsActive(p))
+      .map((p) => p.id);
+    const fromIndex = activeGuesserIds.indexOf(draggingId);
+    const toIndex = activeGuesserIds.indexOf(targetId);
     if (fromIndex < 0 || toIndex < 0) {
       setDraggingId(null);
       return;
     }
-    const next = [...fullOrder];
-    next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, draggingId);
+    const reorderedGuessers = [...activeGuesserIds];
+    reorderedGuessers.splice(fromIndex, 1);
+    reorderedGuessers.splice(toIndex, 0, draggingId);
+    let guesserIdx = 0;
+    const merged = fullOrder.map((id) => {
+      const p = session.participants.find((x) => x.id === id);
+      if (!p) {
+        return id;
+      }
+      if (id === puzzleCreatorId || !participantIsActive(p)) {
+        return id;
+      }
+      return reorderedGuessers[guesserIdx++]!;
+    });
+    if (guesserIdx !== reorderedGuessers.length) {
+      setDraggingId(null);
+      return;
+    }
     setDraggingId(null);
     send({
       type: "session:reorderParticipants",
-      payload: { participantIds: next }
+      payload: { participantIds: merged }
     });
   };
 

@@ -628,6 +628,63 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           return;
         }
 
+        if (event.type === "session:setParticipantActive") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can change participant activity.");
+          }
+          await sessionService.setParticipantActive(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId,
+            event.payload.isActive
+          );
+          broadcastState(context.sessionId);
+          return;
+        }
+
+        if (event.type === "session:boot") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can remove a player from the session.");
+          }
+          const targetId = event.payload.participantId;
+          if (targetId === context.participantId) {
+            throw new Error("You cannot remove yourself from the session.");
+          }
+          if (sessionService.isHost(context.sessionId, targetId)) {
+            throw new Error("Cannot remove the host from the session.");
+          }
+          const bootPayload: ServerEvent = {
+            type: "session:closed",
+            payload: { sessionId: context.sessionId, reason: "booted" }
+          };
+          const bootedWire = JSON.stringify(bootPayload);
+          const sessionConnections = connections.get(context.sessionId) ?? [];
+          for (const ctx of sessionConnections) {
+            if (ctx.participantId !== targetId) {
+              continue;
+            }
+            try {
+              ctx.socket.send(bootedWire);
+            } catch (error) {
+              app.log.warn({ err: error }, "session:boot: notify failed");
+            }
+            try {
+              ctx.socket.close();
+            } catch {
+              // ignore
+            }
+          }
+          removeConnection(context.sessionId, (ctx) => ctx.participantId === targetId);
+          const result = await sessionService.removeParticipant(context.sessionId, targetId);
+          if (result.sessionDeleted) {
+            broadcastSessionClosed(context.sessionId, "empty");
+          } else {
+            broadcastState(context.sessionId);
+            broadcastActiveSessions();
+          }
+          return;
+        }
+
         if (event.type === "session:close") {
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only the host can close the session.");
@@ -708,19 +765,19 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only host can start trivia.");
           }
-          await sessionService.startTrivia(context.sessionId, event.payload);
+          await sessionService.startTrivia(context.sessionId, context.participantId, event.payload);
         } else if (event.type === "trivia:answer") {
           await sessionService.submitTriviaAnswer(context.sessionId, context.participantId, event.payload.answer);
         } else if (event.type === "trivia:closeQuestion") {
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only host can close a question.");
           }
-          await sessionService.closeTriviaQuestion(context.sessionId);
+          await sessionService.closeTriviaQuestion(context.sessionId, context.participantId);
         } else if (event.type === "trivia:nextQuestion") {
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only host can move to the next question.");
           }
-          await sessionService.nextTriviaQuestion(context.sessionId);
+          await sessionService.nextTriviaQuestion(context.sessionId, context.participantId);
         } else if (event.type === "icebreaker:startRound") {
           await sessionService.startIcebreakerRound(
             context.sessionId,

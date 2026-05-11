@@ -8,9 +8,9 @@ const buildSession = (overrides: Partial<SessionState> = {}): SessionState => ({
   sessionName: "Test",
   joinCode: "BRIGHT-OTTER",
   participants: [
-    { id: "p1", displayName: "Alice", score: 0, isHost: true },
-    { id: "p2", displayName: "Bob", score: 0, isHost: false },
-    { id: "p3", displayName: "Carol", score: 0, isHost: false }
+    { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+    { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: true },
+    { id: "p3", displayName: "Carol", score: 0, isHost: false, isActive: true }
   ],
   activeGame: null,
   gameState: null,
@@ -102,5 +102,26 @@ describe("LobbyScreen", () => {
       type: "lobby:setGamePreference",
       payload: { game: "captionThis" }
     });
+  });
+
+  it("shows bench notice instead of game picker when a game runs and the guest is benched", () => {
+    render(
+      <LobbyScreen
+        session={buildSession({
+          activeGame: "trivia",
+          gameState: null,
+          participants: [
+            { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+            { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: false }
+          ]
+        })}
+        currentParticipantId="p2"
+        isHost={false}
+        send={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Game in progress" })).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Choose a game" })).toBeNull();
   });
 });

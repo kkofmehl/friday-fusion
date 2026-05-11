@@ -6,6 +6,7 @@ import type {
   SessionState
 } from "../../../shared/contracts";
 import { ScoreBoard } from "../components/ScoreBoard";
+import { activeParticipants } from "../utils/participants";
 
 type DrawTool = "pen" | "eraser";
 
@@ -134,6 +135,7 @@ export function PictionaryGame({
   };
 
   if (state.status === "teamSetup") {
+    const roster = activeParticipants(session.participants);
     return (
       <section className="card pictionary-setup-card">
         <header className="card-head">
@@ -143,7 +145,7 @@ export function PictionaryGame({
           Split everyone into two teams. The host saves the lineup, then starts the game.
         </p>
         <ul className="pictionary-team-picks">
-          {session.participants.map((p) => {
+          {roster.map((p) => {
             const onA = draftTeamA.includes(p.id);
             const onB = draftTeamB.includes(p.id);
             return (

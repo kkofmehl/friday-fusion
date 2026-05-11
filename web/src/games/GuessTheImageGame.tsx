@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClipboardEvent } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
+import { activeParticipants } from "../utils/participants";
 
 const clampRevealMs = (seconds: number): number => {
   const s = Number.isFinite(seconds) ? seconds : 60;
@@ -251,6 +252,8 @@ export function GuessTheImageGame({
     return null;
   }
 
+  const roster = activeParticipants(session.participants);
+
   const mySubmitted =
     state.status === "playing" && state.submittedParticipantIds.includes(currentParticipantId);
 
@@ -258,7 +261,7 @@ export function GuessTheImageGame({
     state.status === "playing" && currentParticipantId !== state.setupParticipantId;
   const guesserCount =
     state.status === "playing"
-      ? session.participants.filter((p) => p.id !== state.setupParticipantId).length
+      ? roster.filter((p) => p.id !== state.setupParticipantId).length
       : 0;
 
   const submitLock = () => {
@@ -278,10 +281,10 @@ export function GuessTheImageGame({
     const setupImagePreviewPath =
       everyoneMode && state.everyoneMySetup?.imageUrl ? state.everyoneMySetup.imageUrl : state.imageUrl;
     const presenterCandidates = everyoneBetweenRounds
-      ? session.participants.filter((p) =>
+      ? roster.filter((p) =>
           state.everyonePeers.some((row) => row.participantId === p.id && row.configured)
         )
-      : session.participants;
+      : roster;
     const selectedPresenterConfigured = state.selectedRoundParticipantId
       ? Boolean(
           state.everyonePeers.find((row) => row.participantId === state.selectedRoundParticipantId)?.configured
@@ -323,7 +326,7 @@ export function GuessTheImageGame({
                 send({ type: "guessImage:setSetupParticipant", payload: { participantId: e.target.value } })
               }
             >
-              {session.participants.map((p) => (
+              {roster.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.displayName}
                   {p.isHost ? " (host)" : ""}

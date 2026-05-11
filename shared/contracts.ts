@@ -17,7 +17,9 @@ export const participantSchema = z.object({
   id: z.string(),
   displayName: z.string().min(1),
   score: z.number().int(),
-  isHost: z.boolean()
+  isHost: z.boolean(),
+  /** When false, the player stays in the session but cannot take part in games. */
+  isActive: z.boolean().optional().default(true)
 });
 export type Participant = z.infer<typeof participantSchema>;
 
@@ -584,7 +586,10 @@ export const serverEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:state"), payload: sessionStateSchema }),
   z.object({
     type: z.literal("session:closed"),
-    payload: z.object({ sessionId: z.string(), reason: z.enum(["host_closed", "empty"]) })
+    payload: z.object({
+      sessionId: z.string(),
+      reason: z.enum(["host_closed", "empty", "booted"])
+    })
   }),
   z.object({
     type: z.literal("activeSessions:updated"),
@@ -622,6 +627,14 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({ game: gameTypeSchema })
   }),
   z.object({ type: z.literal("session:leave"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("session:setParticipantActive"),
+    payload: z.object({ participantId: z.string().min(1), isActive: z.boolean() })
+  }),
+  z.object({
+    type: z.literal("session:boot"),
+    payload: z.object({ participantId: z.string().min(1) })
+  }),
   z.object({ type: z.literal("session:close"), payload: z.object({}) }),
   z.object({ type: z.literal("game:end"), payload: z.object({}) }),
   z.object({ type: z.literal("ping"), payload: z.object({ ts: z.number() }) }),

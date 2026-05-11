@@ -6,6 +6,7 @@ import {
   type SessionState
 } from "../../../shared/contracts";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
+import { activeParticipants } from "../utils/participants";
 
 export function CaptionThisGame({
   session,
@@ -51,11 +52,12 @@ export function CaptionThisGame({
   }, [state?.status, state?.status === "collectingCaptions" ? state.roundNumber : 0]);
 
   useEffect(() => {
-    if (session.participants.some((p) => p.id === nextRoundProviderId)) {
+    const roster = activeParticipants(session.participants);
+    if (roster.some((p) => p.id === nextRoundProviderId)) {
       return;
     }
     setNextRoundProviderId(
-      session.participants.find((p) => p.isHost)?.id ?? session.participants[0]?.id ?? currentParticipantId
+      roster.find((p) => p.isHost)?.id ?? roster[0]?.id ?? currentParticipantId
     );
   }, [currentParticipantId, nextRoundProviderId, session.participants]);
 
@@ -112,6 +114,8 @@ export function CaptionThisGame({
     return null;
   }
 
+  const roster = activeParticipants(session.participants);
+
   if (state.status === "waitingForImage") {
     const isProvider = currentParticipantId === state.imageProviderId;
     return (
@@ -139,7 +143,7 @@ export function CaptionThisGame({
                 })
               }
             >
-              {session.participants.map((p) => (
+              {roster.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.displayName}
                   {p.isHost ? " (host)" : ""}
@@ -197,7 +201,7 @@ export function CaptionThisGame({
           <img src={imageSrc(state.imageUrl)} alt="Round image" className="caption-this-main-img" />
         </figure>
         <p className="mode-option-hint">
-          Submitted {state.submittedCaptionParticipantIds.length} / {session.participants.length}
+          Submitted {state.submittedCaptionParticipantIds.length} / {roster.length}
         </p>
         {mineSubmitted ? (
           <p className="game-lede">You’ve submitted your caption. Waiting for others…</p>
@@ -253,7 +257,7 @@ export function CaptionThisGame({
           <img src={imageSrc(state.imageUrl)} alt="Round image" className="caption-this-main-img" />
         </figure>
         <p className="mode-option-hint">
-          Votes in: {state.votedParticipantIds.length} / {session.participants.length}
+          Votes in: {state.votedParticipantIds.length} / {roster.length}
         </p>
         {state.hasVoted ? (
           <p className="game-lede">Thanks — your vote is in.</p>
@@ -326,7 +330,7 @@ export function CaptionThisGame({
             value={nextRoundProviderId}
             onChange={(e) => setNextRoundProviderId(e.target.value)}
           >
-            {session.participants.map((p) => (
+            {roster.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.displayName}
                 {p.isHost ? " (host)" : ""}

@@ -14,7 +14,7 @@ export type RealtimeAuth = {
   participantId: string;
 };
 
-export type SessionClosedReason = "host_closed" | "empty";
+export type SessionClosedReason = "host_closed" | "empty" | "booted";
 
 export type UseRealtimeOptions = {
   apiBase: string;

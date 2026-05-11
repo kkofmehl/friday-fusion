@@ -8,9 +8,9 @@ const buildSession = (overrides: Partial<SessionState["gameState"] & { type: "ha
   sessionName: "Test",
   joinCode: "BRIGHT-OTTER",
   participants: [
-    { id: "p1", displayName: "Alice", score: 0, isHost: true },
-    { id: "p2", displayName: "Bob", score: 0, isHost: false },
-    { id: "p3", displayName: "Carol", score: 0, isHost: false }
+    { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+    { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: true },
+    { id: "p3", displayName: "Carol", score: 0, isHost: false, isActive: true }
   ],
   activeGame: "hangman",
   gameState: {

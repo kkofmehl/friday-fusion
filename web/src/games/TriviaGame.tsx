@@ -5,6 +5,7 @@ import type {
   TriviaCategory,
   TriviaDifficulty
 } from "../../../shared/contracts";
+import { activeParticipants } from "../utils/participants";
 
 const DIFFICULTY_ORDER: TriviaDifficulty[] = ["easy", "medium", "hard"];
 const clampQuestionCount = (value: number): number => {
@@ -40,8 +41,9 @@ export function TriviaGame({
   const state = session.gameState.state;
   const myAnswer = state.answers[currentParticipantId] ?? null;
   const question = state.activeQuestion;
-  const totalParticipants = session.participants.length;
-  const answeredCount = session.participants.filter((participant) => state.answers[participant.id]).length;
+  const roster = activeParticipants(session.participants);
+  const totalParticipants = roster.length;
+  const answeredCount = roster.filter((participant) => state.answers[participant.id]).length;
   const everyoneAnswered = totalParticipants > 0 && answeredCount >= totalParticipants;
 
   const statusLabel =

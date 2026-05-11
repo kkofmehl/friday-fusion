@@ -13,6 +13,7 @@ const bootApp = async (): Promise<{
   tempDir: string;
   hostParticipantId: string;
   sessionId: string;
+  joinCode: string;
   service: SessionService;
 }> => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "fusion-ws-"));
@@ -30,6 +31,7 @@ const bootApp = async (): Promise<{
     tempDir,
     hostParticipantId: created.participantId,
     sessionId: created.sessionId,
+    joinCode: created.joinCode,
     service
   };
 };
@@ -187,5 +189,59 @@ describe("WebSocket integration", () => {
     );
     expect(second.payload.sessions.length).toBeGreaterThanOrEqual(2);
     lobby.close();
+  });
+
+  it("host boot sends session:closed booted to target only and removes them from state", async () => {
+    if (!context) throw new Error("no context");
+    const guestJoined = await context.service.joinSession(context.joinCode, "Guest");
+    const hostSocket = new WebSocket(`ws://127.0.0.1:${context.port}/ws`);
+    const guestSocket = new WebSocket(`ws://127.0.0.1:${context.port}/ws`);
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        hostSocket.once("open", () => resolve());
+        hostSocket.once("error", reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        guestSocket.once("open", () => resolve());
+        guestSocket.once("error", reject);
+      })
+    ]);
+    hostSocket.send(
+      JSON.stringify({
+        type: "session:hello",
+        payload: { sessionId: context.sessionId, participantId: context.hostParticipantId }
+      })
+    );
+    guestSocket.send(
+      JSON.stringify({
+        type: "session:hello",
+        payload: { sessionId: context.sessionId, participantId: guestJoined.participantId }
+      })
+    );
+    await nextServerEvent(hostSocket, (event) => event.type === "session:state");
+    await nextServerEvent(guestSocket, (event) => event.type === "session:state");
+
+    hostSocket.send(
+      JSON.stringify({
+        type: "session:boot",
+        payload: { participantId: guestJoined.participantId }
+      })
+    );
+
+    const closed = await nextServerEvent(
+      guestSocket,
+      (event) => event.type === "session:closed" && event.payload.reason === "booted"
+    );
+    expect(closed.payload.sessionId).toBe(context.sessionId);
+
+    const hostUpdate = await nextServerEvent(
+      hostSocket,
+      (event) =>
+        event.type === "session:state" && event.payload.participants.length === 1
+    );
+    expect(hostUpdate.payload.participants.map((p: { id: string }) => p.id)).toEqual([context.hostParticipantId]);
+
+    hostSocket.close();
+    guestSocket.close();
   });
 });

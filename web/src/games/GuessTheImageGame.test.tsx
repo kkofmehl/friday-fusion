@@ -24,8 +24,8 @@ const baseSession = (overrides: Partial<SessionState> = {}): SessionState => ({
   sessionName: "Test",
   joinCode: "BRIGHT-OTTER",
   participants: [
-    { id: "p1", displayName: "Alice", score: 0, isHost: true },
-    { id: "p2", displayName: "Bob", score: 0, isHost: false }
+    { id: "p1", displayName: "Alice", score: 0, isHost: true, isActive: true },
+    { id: "p2", displayName: "Bob", score: 0, isHost: false, isActive: true }
   ],
   activeGame: "guessTheImage",
   gameState: {
