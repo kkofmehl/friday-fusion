@@ -202,6 +202,63 @@ describe("GuessTheImageGame", () => {
     expect(send).toHaveBeenCalledWith({ type: "guessImage:backToSetup", payload: {} });
   });
 
+  it("everyone mode: another player saving does not clear this player's unsaved setup form", () => {
+    const everyoneSession = (peerConfigured: [boolean, boolean]): SessionState =>
+      baseSession({
+        gameState: {
+          type: "guessTheImage",
+          state: {
+            status: "setup",
+            setupMode: "everyone",
+            everyoneBetweenRounds: false,
+            selectedRoundParticipantId: null,
+            everyonePeers: [
+              { participantId: "p1", configured: peerConfigured[0]! },
+              { participantId: "p2", configured: peerConfigured[1]! }
+            ],
+            everyoneMySetup: {
+              imageUrl: null,
+              descriptions: ["", "", "", ""],
+              correctIndex: 0,
+              revealDurationMs: 60_000,
+              configured: false
+            },
+            everyoneAllConfigured: false,
+            setupParticipantId: "p1",
+            imageUrl: null,
+            descriptions: ["", "", "", ""],
+            correctIndex: 0,
+            revealDurationMs: 60_000,
+            configured: false
+          }
+        }
+      });
+
+    const { rerender } = render(
+      <GuessTheImageGame
+        session={everyoneSession([false, false])}
+        currentParticipantId="p2"
+        isHost={false}
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+    fireEvent.change(screen.getByLabelText("Option 1"), { target: { value: "Draft option" } });
+    expect((screen.getByLabelText("Option 1") as HTMLInputElement).value).toBe("Draft option");
+
+    rerender(
+      <GuessTheImageGame
+        session={everyoneSession([true, false])}
+        currentParticipantId="p2"
+        isHost={false}
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    expect((screen.getByLabelText("Option 1") as HTMLInputElement).value).toBe("Draft option");
+  });
+
   it("sends lock with display index for a player", () => {
     const send = vi.fn();
     const session = baseSession({

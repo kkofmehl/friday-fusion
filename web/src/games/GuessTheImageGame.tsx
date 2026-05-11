@@ -131,6 +131,8 @@ export function GuessTheImageGame({
     state?.status === "setup" && state.setupMode === "everyone" && state.everyoneMySetup
       ? `${state.everyoneMySetup.configured}:${state.everyoneMySetup.imageUrl ?? ""}:${state.everyoneMySetup.descriptions.join("\u0000")}:${state.everyoneMySetup.correctIndex}:${state.everyoneMySetup.revealDurationMs}`
       : "";
+  // Sync only when *this* viewer's server-backed setup changes — not on every `session` object
+  // (other players' saves broadcast new state and would otherwise wipe unsaved local drafts).
   useEffect(() => {
     if (!everyoneMySetupKey || !state || state.status !== "setup" || state.setupMode !== "everyone" || !state.everyoneMySetup) {
       return;
@@ -141,7 +143,8 @@ export function GuessTheImageGame({
     setRevealSeconds(secondsFromMs(my.revealDurationMs));
     setLastFileId(guessImageFileIdFromImageUrl(my.imageUrl));
     setPendingFile(null);
-  }, [everyoneMySetupKey, state]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit `state`; see comment above.
+  }, [everyoneMySetupKey]);
 
   const imageSrc = (path: string): string => `${apiBase}${path}`;
 
