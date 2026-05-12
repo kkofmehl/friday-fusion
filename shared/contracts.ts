@@ -10,7 +10,8 @@ export const gameTypeSchema = z.enum([
   "twentyQuestions",
   "captionThis",
   "pictionary",
-  "applesToApples"
+  "applesToApples",
+  "uno"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -589,6 +590,58 @@ export const applesToApplesStateSchema = z.discriminatedUnion("status", [
 ]);
 export type ApplesToApplesState = z.infer<typeof applesToApplesStateSchema>;
 
+export const UNO_HAND_SIZE = 7;
+export const UNO_DECK_SIZE = 108;
+
+export const unoColorSchema = z.enum(["red", "yellow", "green", "blue", "wild"]);
+export type UnoColor = z.infer<typeof unoColorSchema>;
+
+export const unoActiveColorSchema = z.enum(["red", "yellow", "green", "blue"]);
+export type UnoActiveColor = z.infer<typeof unoActiveColorSchema>;
+
+export const unoRankSchema = z.union([
+  z.number().int().min(0).max(9),
+  z.literal("skip"),
+  z.literal("reverse"),
+  z.literal("drawTwo"),
+  z.literal("wild"),
+  z.literal("wildDrawFour")
+]);
+export type UnoRank = z.infer<typeof unoRankSchema>;
+
+export const unoCardSchema = z.object({
+  id: z.string().min(1),
+  color: unoColorSchema,
+  rank: unoRankSchema
+});
+export type UnoCard = z.infer<typeof unoCardSchema>;
+
+export const unoStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("playing"),
+    currentPlayerId: z.string(),
+    direction: z.union([z.literal(1), z.literal(-1)]),
+    activeColor: unoActiveColorSchema,
+    topDiscard: unoCardSchema,
+    /** Opponent hand sizes only (includes viewer for consistency). */
+    handCounts: z.record(z.string(), z.number().int().nonnegative()),
+    myHand: z.array(unoCardSchema),
+    drawPileCount: z.number().int().nonnegative(),
+    /** Player who played down to one card without declaring UNO yet; catch window open until next player's first action. */
+    unoCatchOpenFor: z.string().nullable(),
+    /** Epoch ms (server clock) after which other players may call missed UNO; null when no catch window. */
+    unoCatchAllowedAfterMs: z.number().int().nullable(),
+    /** Last player who pressed UNO; shown in UI until they win or hold more than one card. */
+    unoAnnouncedParticipantId: z.string().nullable(),
+    currentHasDrawn: z.boolean()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    winnerParticipantId: z.string()
+  })
+]);
+export type UnoState = z.infer<typeof unoStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -629,6 +682,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("applesToApples"),
     state: applesToApplesStateSchema
+  }),
+  z.object({
+    type: z.literal("uno"),
+    state: unoStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -866,7 +923,25 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("applesToApples:judgePick"),
     payload: z.object({ entryId: z.string().min(1) })
   }),
-  z.object({ type: z.literal("applesToApples:beginNextRound"), payload: z.object({}) })
+  z.object({ type: z.literal("applesToApples:beginNextRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("uno:playCard"),
+    payload: z.object({
+      cardId: z.string().min(1),
+      /** Required when playing Wild or Wild Draw Four. */
+      chosenColor: unoActiveColorSchema.optional()
+    })
+  }),
+  z.object({ type: z.literal("uno:draw"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("uno:passAfterDraw"),
+    payload: z.object({})
+  }),
+  z.object({ type: z.literal("uno:declareUno"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("uno:catchPlayer"),
+    payload: z.object({ targetParticipantId: z.string().min(1) })
+  })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

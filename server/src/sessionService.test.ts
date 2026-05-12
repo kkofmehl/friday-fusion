@@ -1798,4 +1798,55 @@ describe("SessionService", () => {
       setup.service.setLobbyGamePreference(host.sessionId, guest.participantId, "trivia")
     ).rejects.toThrow("Inactive players cannot set a game preference.");
   });
+
+  it("UNO: requires two players to start", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(setup.service.startGame(host.sessionId, "uno")).rejects.toThrow(
+      "UNO needs at least two active players."
+    );
+  });
+
+  it("UNO: deals seven cards and playing state", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const p2 = await setup.service.joinSession(host.joinCode, "Two");
+    await setup.service.startGame(host.sessionId, "uno");
+    const a = setup.service.getState(host.sessionId, host.participantId);
+    const b = setup.service.getState(host.sessionId, p2.participantId);
+    expect(a.gameState?.type).toBe("uno");
+    expect(b.gameState?.type).toBe("uno");
+    if (a.gameState?.type !== "uno" || a.gameState.state.status !== "playing") {
+      throw new Error("expected uno playing for host view");
+    }
+    if (b.gameState?.type !== "uno" || b.gameState.state.status !== "playing") {
+      throw new Error("expected uno playing for guest view");
+    }
+    expect(a.gameState.state.myHand.length).toBe(7);
+    expect(b.gameState.state.myHand.length).toBe(7);
+    expect(a.gameState.state.drawPileCount).toBe(108 - 7 * 2 - 1);
+    expect(a.gameState.state.topDiscard.id).toBeTruthy();
+  });
+
+  it("UNO: rejects play out of turn", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const p2 = await setup.service.joinSession(host.joinCode, "Two");
+    await setup.service.startGame(host.sessionId, "uno");
+    const hostView = setup.service.getState(host.sessionId, host.participantId);
+    if (hostView.gameState?.type !== "uno" || hostView.gameState.state.status !== "playing") {
+      throw new Error("expected uno");
+    }
+    const { currentPlayerId } = hostView.gameState.state;
+    const otherId = currentPlayerId === host.participantId ? p2.participantId : host.participantId;
+    const otherView = setup.service.getState(host.sessionId, otherId);
+    if (otherView.gameState?.type !== "uno" || otherView.gameState.state.status !== "playing") {
+      throw new Error("expected uno other");
+    }
+    const card = otherView.gameState.state.myHand[0]!;
+    await expect(setup.service.unoPlayCard(host.sessionId, otherId, card.id)).rejects.toThrow("Not your turn.");
+  });
 });

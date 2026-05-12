@@ -953,6 +953,25 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "applesToApples:beginNextRound") {
           await sessionService.applesToApplesBeginNextRound(context.sessionId, context.participantId);
+        } else if (event.type === "uno:playCard") {
+          await sessionService.unoPlayCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId,
+            event.payload.chosenColor
+          );
+        } else if (event.type === "uno:draw") {
+          await sessionService.unoDraw(context.sessionId, context.participantId);
+        } else if (event.type === "uno:passAfterDraw") {
+          await sessionService.unoPassAfterDraw(context.sessionId, context.participantId);
+        } else if (event.type === "uno:declareUno") {
+          await sessionService.unoDeclareUno(context.sessionId, context.participantId);
+        } else if (event.type === "uno:catchPlayer") {
+          await sessionService.unoCatchPlayer(
+            context.sessionId,
+            context.participantId,
+            event.payload.targetParticipantId
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

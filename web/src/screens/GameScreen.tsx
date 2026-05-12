@@ -11,6 +11,7 @@ import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
 import { CaptionThisGame } from "../games/CaptionThisGame";
 import { PictionaryGame } from "../games/PictionaryGame";
 import { ApplesToApplesGame } from "../games/ApplesToApplesGame";
+import { UnoGame } from "../games/UnoGame";
 
 export function GameScreen({
   session,
@@ -87,6 +88,8 @@ export function GameScreen({
           options: { applesToApplesMode: session.gameState.state.mode }
         }
       }
+    : session.gameState?.type === "uno"
+    ? { type: "game:start", payload: { game: "uno" } }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
 
   const renderGame = () => {
@@ -174,6 +177,17 @@ export function GameScreen({
     if (session.gameState?.type === "applesToApples") {
       return (
         <ApplesToApplesGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "uno") {
+      return (
+        <UnoGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   APPLES_TO_APPLES_FINITE_ROUNDS,
   APPLES_TO_APPLES_HAND_SIZE,
+  UNO_HAND_SIZE,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
   PICTORY_MAX_STROKES_PER_ROUND,
@@ -19,7 +20,9 @@ import {
   type PictionaryStrokePayload,
   type SessionState,
   type TriviaLoadingState,
-  type TriviaQuestion
+  type TriviaQuestion,
+  type UnoActiveColor,
+  type UnoCard
 } from "../../shared/contracts";
 import { pickPictionaryClue } from "./pictionaryClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
@@ -42,6 +45,16 @@ import {
   pickApplesTopic,
   shuffledResponseCardIds
 } from "./applesToApplesCardLoader";
+import { shuffledUnoDeck } from "./unoDeck";
+import {
+  advanceTurnAfterPlay,
+  isColoredNumberCard,
+  normPlayerIndex,
+  peekNextParticipantId,
+  refillUnoDrawPileFromDiscard,
+  shuffleUnoCardsInPlace,
+  unoCanPlayCard
+} from "./unoGameHelpers";
 import { FileStore } from "./storage/fileStore";
 import {
   createTriviaQuestionLoader,
@@ -310,6 +323,29 @@ type ApplesToApplesGameInternal = {
   roundWinningText: string | null;
 };
 
+type UnoGameInternal = {
+  id: string;
+  type: "uno";
+  status: "playing" | "finished";
+  playerOrder: string[];
+  hands: Record<string, UnoCard[]>;
+  drawPile: UnoCard[];
+  discardPile: UnoCard[];
+  currentPlayerIndex: number;
+  direction: 1 | -1;
+  activeColor: UnoActiveColor;
+  winnerParticipantId: string | null;
+  scoresApplied: boolean;
+  /** Player with one card who has not declared UNO; catchable until next player's first action. */
+  unoCatchOpenFor: string | null;
+  /** First moment (epoch ms) a missed-UNO call is allowed after `unoCatchOpenFor` is set. */
+  unoCatchAllowedAfterMs: number | null;
+  /** Shown in clients until that player wins or no longer has exactly one card (e.g. drew back up). */
+  unoAnnouncedParticipantId: string | null;
+  /** After drawing one card on a turn, only this card id may be played (or pass). */
+  pendingDrawnCardId: string | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -320,7 +356,8 @@ type GameInternal =
   | TwentyQuestionsGameInternal
   | CaptionThisGameInternal
   | PictionaryGameInternal
-  | ApplesToApplesGameInternal;
+  | ApplesToApplesGameInternal
+  | UnoGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -665,8 +702,38 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
           : "collecting"
     };
   }
+  if (game.type === "uno") {
+    const g = game as UnoGameInternal;
+    const ac = g.activeColor;
+    const activeColor: UnoActiveColor =
+      ac === "red" || ac === "yellow" || ac === "green" || ac === "blue" ? ac : "red";
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      playerOrder: Array.isArray(g.playerOrder) ? g.playerOrder : [],
+      hands: g.hands && typeof g.hands === "object" ? g.hands : {},
+      drawPile: Array.isArray(g.drawPile) ? g.drawPile : [],
+      discardPile: Array.isArray(g.discardPile) ? g.discardPile : [],
+      currentPlayerIndex: Math.max(0, Number(g.currentPlayerIndex) || 0),
+      direction: g.direction === -1 ? -1 : 1,
+      activeColor,
+      winnerParticipantId: g.winnerParticipantId ?? null,
+      scoresApplied: g.scoresApplied === true,
+      unoCatchOpenFor: g.unoCatchOpenFor ?? null,
+      unoCatchAllowedAfterMs:
+        typeof g.unoCatchAllowedAfterMs === "number" && Number.isFinite(g.unoCatchAllowedAfterMs)
+          ? g.unoCatchAllowedAfterMs
+          : null,
+      unoAnnouncedParticipantId: g.unoAnnouncedParticipantId ?? null,
+      pendingDrawnCardId: g.pendingDrawnCardId ?? null,
+      status: g.status === "finished" || g.status === "playing" ? g.status : "playing"
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
+
+/** Delay before others may call missed UNO after someone plays down to one card without declaring. */
+const UNO_MISS_CATCH_DELAY_MS = 2000;
 
 const shuffleEntryIds = (ids: string[]): string[] => {
   const a = [...ids];
@@ -1405,6 +1472,55 @@ export class SessionService {
         roundWinnerParticipantId: null,
         roundWinningText: null
       };
+    } else if (game === "uno") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("UNO needs at least two active players.");
+      }
+      const playerOrder = actives.map((p) => p.id);
+      const deck = shuffledUnoDeck();
+      const hands: Record<string, UnoCard[]> = {};
+      for (const pid of playerOrder) {
+        hands[pid] = [];
+      }
+      for (let h = 0; h < UNO_HAND_SIZE; h += 1) {
+        for (const pid of playerOrder) {
+          hands[pid].push(deck.pop()!);
+        }
+      }
+      let guard = 0;
+      while (deck.length > 0 && guard < 200) {
+        guard += 1;
+        const top = deck[deck.length - 1]!;
+        if (isColoredNumberCard(top)) {
+          break;
+        }
+        deck.unshift(deck.pop()!);
+      }
+      if (deck.length === 0) {
+        throw new Error("Could not find a valid UNO starter card.");
+      }
+      const starter = deck.pop()!;
+      const discardPile: UnoCard[] = [starter];
+      const activeColor = starter.color as UnoActiveColor;
+      next = {
+        id: nanoid(6),
+        type: "uno",
+        status: "playing",
+        playerOrder,
+        hands,
+        drawPile: deck,
+        discardPile,
+        currentPlayerIndex: normPlayerIndex(0 + 1, playerOrder.length),
+        direction: 1,
+        activeColor,
+        winnerParticipantId: null,
+        scoresApplied: false,
+        unoCatchOpenFor: null,
+        unoCatchAllowedAfterMs: null,
+        unoAnnouncedParticipantId: null,
+        pendingDrawnCardId: null
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -1564,6 +1680,11 @@ export class SessionService {
 
     const activeApples = session.games[0];
     if (activeApples?.type === "applesToApples") {
+      session.games = [];
+    }
+
+    const activeUno = session.games[0];
+    if (activeUno?.type === "uno") {
       session.games = [];
     }
   }
@@ -3657,6 +3778,243 @@ export class SessionService {
     await this.persist();
   }
 
+  /** Clear UNO shout banner when the announcer wins or no longer holds exactly one card. */
+  private unoSyncAnnouncementBanner(game: UnoGameInternal): void {
+    const pid = game.unoAnnouncedParticipantId;
+    if (!pid) {
+      return;
+    }
+    const hand = game.hands[pid];
+    const len = hand?.length ?? 0;
+    if (len !== 1) {
+      game.unoAnnouncedParticipantId = null;
+    }
+  }
+
+  private unoDrawNCards(game: UnoGameInternal, participantId: string, n: number): void {
+    const hand = game.hands[participantId];
+    if (!hand) {
+      return;
+    }
+    for (let i = 0; i < n; i += 1) {
+      refillUnoDrawPileFromDiscard(game.drawPile, game.discardPile);
+      if (game.drawPile.length === 0) {
+        break;
+      }
+      hand.push(game.drawPile.pop()!);
+    }
+  }
+
+  /** When the current turn holder acts, close the UNO catch window without penalty. */
+  private unoMaybeClearCatchWindow(game: UnoGameInternal, actorId: string): void {
+    const currentId = game.playerOrder[game.currentPlayerIndex];
+    if (actorId !== currentId) {
+      return;
+    }
+    if (game.unoCatchOpenFor !== null && actorId !== game.unoCatchOpenFor) {
+      game.unoCatchOpenFor = null;
+      game.unoCatchAllowedAfterMs = null;
+    }
+  }
+
+  public async unoPlayCard(
+    sessionId: string,
+    participantId: string,
+    cardId: string,
+    chosenColor?: UnoActiveColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "uno" || g.status !== "playing") {
+      throw new Error("UNO is not active.");
+    }
+    this.unoMaybeClearCatchWindow(g, participantId);
+    const currentId = g.playerOrder[g.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    const hand = g.hands[participantId];
+    if (!hand) {
+      throw new Error("No hand.");
+    }
+    const cardIdx = hand.findIndex((c) => c.id === cardId);
+    if (cardIdx < 0) {
+      throw new Error("Card not in hand.");
+    }
+    const played = hand[cardIdx]!;
+    if (g.pendingDrawnCardId !== null && played.id !== g.pendingDrawnCardId) {
+      throw new Error("You must play the drawn card or pass.");
+    }
+    const top = g.discardPile[g.discardPile.length - 1]!;
+    if (!unoCanPlayCard(played, top, g.activeColor, hand)) {
+      throw new Error("Illegal play.");
+    }
+    if (
+      (played.rank === "wild" || played.rank === "wildDrawFour") &&
+      (chosenColor === undefined ||
+        !["red", "yellow", "green", "blue"].includes(chosenColor))
+    ) {
+      throw new Error("Choose a color for Wild.");
+    }
+
+    hand.splice(cardIdx, 1);
+    g.discardPile.push(played);
+    g.pendingDrawnCardId = null;
+
+    if (played.rank === "wild" || played.rank === "wildDrawFour") {
+      g.activeColor = chosenColor!;
+    } else if (played.color !== "wild") {
+      g.activeColor = played.color;
+    }
+
+    if (played.rank === "drawTwo") {
+      const victim = peekNextParticipantId(g.playerOrder, g.currentPlayerIndex, g.direction, 1);
+      this.unoDrawNCards(g, victim, 2);
+    }
+    if (played.rank === "wildDrawFour") {
+      const victim = peekNextParticipantId(g.playerOrder, g.currentPlayerIndex, g.direction, 1);
+      this.unoDrawNCards(g, victim, 4);
+    }
+
+    if (hand.length === 0) {
+      g.status = "finished";
+      g.winnerParticipantId = participantId;
+      if (!g.scoresApplied) {
+        g.scoresApplied = true;
+        const pts = Math.max(0, activeParticipants(session).length - 1);
+        const winner = session.participants.find((p) => p.id === participantId);
+        if (winner) {
+          winner.score += pts;
+        }
+      }
+      this.unoSyncAnnouncementBanner(g);
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+
+    if (hand.length === 1) {
+      g.unoCatchOpenFor = participantId;
+      g.unoCatchAllowedAfterMs = Date.now() + UNO_MISS_CATCH_DELAY_MS;
+    }
+
+    const adv = advanceTurnAfterPlay(g.playerOrder, g.currentPlayerIndex, g.direction, played.rank);
+    g.currentPlayerIndex = adv.currentPlayerIndex;
+    g.direction = adv.direction;
+
+    this.unoSyncAnnouncementBanner(g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async unoDraw(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "uno" || g.status !== "playing") {
+      throw new Error("UNO is not active.");
+    }
+    this.unoMaybeClearCatchWindow(g, participantId);
+    const currentId = g.playerOrder[g.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (g.pendingDrawnCardId !== null) {
+      throw new Error("Already drew this turn.");
+    }
+    const hand = g.hands[participantId];
+    if (!hand) {
+      throw new Error("No hand.");
+    }
+    refillUnoDrawPileFromDiscard(g.drawPile, g.discardPile);
+    if (g.drawPile.length === 0) {
+      throw new Error("No cards to draw.");
+    }
+    const c = g.drawPile.pop()!;
+    hand.push(c);
+    g.pendingDrawnCardId = c.id;
+    this.unoSyncAnnouncementBanner(g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async unoPassAfterDraw(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "uno" || g.status !== "playing") {
+      throw new Error("UNO is not active.");
+    }
+    this.unoMaybeClearCatchWindow(g, participantId);
+    const currentId = g.playerOrder[g.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (g.pendingDrawnCardId === null) {
+      throw new Error("Nothing to pass.");
+    }
+    const n = g.playerOrder.length;
+    g.currentPlayerIndex = normPlayerIndex(g.currentPlayerIndex + g.direction, n);
+    g.pendingDrawnCardId = null;
+    this.unoSyncAnnouncementBanner(g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async unoDeclareUno(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "uno" || g.status !== "playing") {
+      throw new Error("UNO is not active.");
+    }
+    const hand = g.hands[participantId];
+    if (!hand || hand.length !== 1) {
+      throw new Error("You can only declare UNO with exactly one card.");
+    }
+    if (g.unoCatchOpenFor === participantId) {
+      g.unoCatchOpenFor = null;
+      g.unoCatchAllowedAfterMs = null;
+    }
+    g.unoAnnouncedParticipantId = participantId;
+    this.unoSyncAnnouncementBanner(g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async unoCatchPlayer(
+    sessionId: string,
+    callerParticipantId: string,
+    targetParticipantId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, callerParticipantId);
+    const g = session.games[0];
+    if (g?.type !== "uno" || g.status !== "playing") {
+      throw new Error("UNO is not active.");
+    }
+    if (callerParticipantId === targetParticipantId) {
+      throw new Error("Cannot catch yourself.");
+    }
+    if (g.unoCatchOpenFor !== targetParticipantId) {
+      throw new Error("That player is not missing UNO.");
+    }
+    if (
+      typeof g.unoCatchAllowedAfterMs === "number" &&
+      Number.isFinite(g.unoCatchAllowedAfterMs) &&
+      Date.now() < g.unoCatchAllowedAfterMs
+    ) {
+      throw new Error("Wait before calling out missed UNO.");
+    }
+    this.unoDrawNCards(g, targetParticipantId, 2);
+    g.unoCatchOpenFor = null;
+    g.unoCatchAllowedAfterMs = null;
+    this.unoSyncAnnouncementBanner(g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -4721,6 +5079,51 @@ export class SessionService {
             submittedNonJudgeIds: submitted,
             allSubmissionsIn: submitted.length === nonJudges.length && nonJudges.length > 0,
             myHand: isJudge ? null : myHand
+          }
+        }
+      };
+    }
+
+    if (game.type === "uno") {
+      const viewerId = viewerParticipantId ?? "";
+      if (game.status === "finished") {
+        return {
+          ...base,
+          activeGame: "uno",
+          gameState: {
+            type: "uno",
+            state: {
+              status: "finished",
+              winnerParticipantId: game.winnerParticipantId ?? ""
+            }
+          }
+        };
+      }
+      const topDiscard = game.discardPile[game.discardPile.length - 1]!;
+      const currentPlayerId = game.playerOrder[game.currentPlayerIndex] ?? "";
+      const handCounts: Record<string, number> = {};
+      for (const pid of game.playerOrder) {
+        handCounts[pid] = (game.hands[pid] ?? []).length;
+      }
+      const myHand = viewerId ? [...(game.hands[viewerId] ?? [])] : [];
+      return {
+        ...base,
+        activeGame: "uno",
+        gameState: {
+          type: "uno",
+          state: {
+            status: "playing",
+            currentPlayerId,
+            direction: game.direction,
+            activeColor: game.activeColor,
+            topDiscard,
+            handCounts,
+            myHand,
+            drawPileCount: game.drawPile.length,
+            unoCatchOpenFor: game.unoCatchOpenFor,
+            unoCatchAllowedAfterMs: game.unoCatchAllowedAfterMs,
+            unoAnnouncedParticipantId: game.unoAnnouncedParticipantId,
+            currentHasDrawn: game.pendingDrawnCardId !== null
           }
         }
       };

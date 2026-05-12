@@ -90,6 +90,12 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Waiting for judge", tone: "voter" };
     }
   }
+  if (session.gameState.type === "uno") {
+    const st = session.gameState.state;
+    if (st.status === "playing" && st.currentPlayerId === participantId) {
+      return { label: "Your turn", tone: "answerer" };
+    }
+  }
   return null;
 };
 
@@ -141,6 +147,21 @@ export function PlayerList({
                 {turnTag && <span className={`tag tag-turn tag-${turnTag.tone}`}>{turnTag.label}</span>}
                 {isLeader && <span className="tag tag-leader">Leader</span>}
               </div>
+              {session.gameState?.type === "uno" && session.gameState.state.status === "playing" && (
+                <div
+                  className="uno-hand-silhouette"
+                  aria-label={`${session.gameState.state.handCounts[participant.id] ?? 0} cards`}
+                >
+                  {Array.from(
+                    {
+                      length: Math.min(18, session.gameState.state.handCounts[participant.id] ?? 0)
+                    },
+                    (_, i) => (
+                      <span key={i} className="uno-hand-slab" />
+                    )
+                  )}
+                </div>
+              )}
             </div>
             <div className="player-row-right">
               {!hideScores && <span className="player-score">{participant.score}</span>}

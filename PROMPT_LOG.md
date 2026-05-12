@@ -132,3 +132,15 @@
 63. User reported **Guess the image — everyone mode**: when one player saved setup, others’ in-progress forms cleared; fixed by syncing `everyoneMySetup` into local React state only when that server-derived key changes (not on every `session` broadcast), plus a regression test.
 
 64. User requested **Apples to Apples**–style game (plan): rotating judge, topic + anonymous response submissions from hands of six, judge picks winner (+1 score), **Standard** (redraw to six) vs **Finite** (no redraw, exactly six table rounds); stock **topics** and **responses** in `server/src/data/applesToApples*.json` + `applesToApplesCardLoader.ts`; implemented `applesToApples` in shared contracts, `SessionService` + WS handlers, lobby mode picker, `ApplesToApplesGame` + `PlayerList` tags + styles, server/web tests, and prompt log update.
+
+## 2026-05-11
+
+65. User requested **UNO** (plan): standard 108-card deck, draw/discard piles, match color or rank, wild color choice, skip/reverse/draw-two/wild-draw-four behavior, declare UNO and catch missed UNO (draw 2), opponent hand silhouettes, winner scores **activePlayerCount − 1** once per hand; assistant added `unoDeck.ts` + `unoGameHelpers.ts`, extended `shared/contracts`, `SessionService` + WS routes, `UnoGame` + lobby + `GameScreen` + `PlayerList` + styles, server/web tests, and prompt log update.  
+    Prompt: *"Add Uno to Friday Fusion — Implement the plan as specified… Mark todos… Don't stop until you have completed all the to-dos."*
+
+66. User requested UNO UX: **banner** at top of the game when a player declares UNO (stays until they win or hold more than two cards), and a **2-second delay** before anyone can call missed UNO after a player is vulnerable at one card; implemented in `shared/contracts`, `SessionService`, `UnoGame`, styles, web tests, and prompt log.
+
+67. User reported the UNO callout banner did not clear when a player **drew back above one card**; fixed `unoSyncAnnouncementBanner` to clear whenever the announcer’s hand size is **not exactly one** (win → 0, or draw/play → 2+), and updated field comments.
+
+68. User reported UNO **game over** crashed the app (white screen); fixed **Rules of Hooks** in `UnoGame.tsx` by running the missed-UNO interval effect on every render (deps from optional playing state), added a **winner banner**, winner score line, and host **Deal new hand** CTA (`game:start` uno), plus styles and tests.  
+    Prompt: *"Looks like the game over event crashes the app. When someone one the uno game, the screen just went all white. What should happen is a banner declaring the winner and then updating the score. The host is then prompted to deal a new game."*

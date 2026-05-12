@@ -81,6 +81,12 @@ const GAMES: GameOption[] = [
     description:
       "Rotating judge, topic card, and hidden responses—stock phrases in JSON (original content, easy to expand).",
     emoji: "🍎"
+  },
+  {
+    id: "uno",
+    title: "UNO",
+    description: "Classic color and number matching—skip, reverse, wilds, declare UNO, and catch missed calls.",
+    emoji: "🃏"
   }
 ];
 
