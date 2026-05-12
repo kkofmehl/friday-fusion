@@ -119,6 +119,10 @@ export function UnoGame({
     );
   }
 
+  if (!playing) {
+    return null;
+  }
+
   const isMyTurn = playing.currentPlayerId === currentParticipantId;
   const catchName = catchTargetId ? nameFor(catchTargetId) : null;
   const canCatch = Boolean(catchTargetId && catchTargetId !== currentParticipantId && canPlay);

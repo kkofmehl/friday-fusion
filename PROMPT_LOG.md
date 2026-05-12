@@ -156,3 +156,5 @@
 73. User requested removing the BS challenge-phase “Believed so far” text to avoid swaying decisions; assistant removed that UI line from `BsGame` and verified BS web tests still pass.
 
 74. User requested a running discard-pile total in BS to increase pressure; assistant added a live discard counter to the BS game header and verified BS web tests/lints.
+
+75. User reported `npm run build` failure; assistant reproduced the TypeScript nullability error in `web/src/games/UnoGame.tsx` (`playing` possibly null), added a narrow guard before `playing` usage, and verified full root build succeeds.
