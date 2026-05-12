@@ -144,3 +144,15 @@
 
 68. User reported UNO **game over** crashed the app (white screen); fixed **Rules of Hooks** in `UnoGame.tsx` by running the missed-UNO interval effect on every render (deps from optional playing state), added a **winner banner**, winner score line, and host **Deal new hand** CTA (`game:start` uno), plus styles and tests.  
     Prompt: *"Looks like the game over event crashes the app. When someone one the uno game, the screen just went all white. What should happen is a banner declaring the winner and then updating the score. The host is then prompted to deal a new game."*
+
+69. User requested adding the **BS** card game with turn declarations from A through K, 1–4 card plays, believe/BS challenge flow, host truth/BS resolution, discard-pile penalty transfers, and elimination scoring where first out gets points equal to player count and last two get 0; assistant implemented `bs` contracts/events, `bsDeck`, `SessionService` BS lifecycle and scoring, WS handlers, `BsGame` UI, lobby/game/player-list wiring, BS tests, and prompt log update.
+
+70. User requested BS card UX enhancements: add suit-color styling (red hearts/diamonds, black clubs/spades), display dealt hand cards left-to-right in ascending sorted order, and raise selected cards while queued for play; assistant added BS hand sorting/rendering, suit-specific card styles, selected-card lift interaction, and updated BS UI tests.
+
+71. User reported a BS rules correction for two-player rounds: only end with two remaining when the game started with more than two players; in two-player games, end when one player runs out and award that player exactly 1 point. Assistant updated server BS scoring/end conditions and added a SessionService regression test.
+
+72. User clarified that two-player BS should be disallowed; assistant updated BS to require at least three active players on start, removed two-player BS test coverage in favor of a min-player validation test, and updated BS UI to always show each player their own hand throughout active phases so bluff decisions can be made.
+
+73. User requested removing the BS challenge-phase “Believed so far” text to avoid swaying decisions; assistant removed that UI line from `BsGame` and verified BS web tests still pass.
+
+74. User requested a running discard-pile total in BS to increase pressure; assistant added a live discard counter to the BS game header and verified BS web tests/lints.

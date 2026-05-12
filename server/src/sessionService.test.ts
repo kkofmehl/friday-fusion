@@ -1849,4 +1849,83 @@ describe("SessionService", () => {
     const card = otherView.gameState.state.myHand[0]!;
     await expect(setup.service.unoPlayCard(host.sessionId, otherId, card.id)).rejects.toThrow("Not your turn.");
   });
+
+  it("BS: starts with dealt hands and advances when everyone believes", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    const guestTwo = await setup.service.joinSession(host.joinCode, "Guest 2");
+    await setup.service.startGame(host.sessionId, "bs");
+
+    const hostStart = setup.service.getState(host.sessionId, host.participantId);
+    if (hostStart.gameState?.type !== "bs" || hostStart.gameState.state.status !== "playing") {
+      throw new Error("expected bs playing");
+    }
+    expect(hostStart.gameState.state.currentRank).toBe("A");
+    const totalCards = Object.values(hostStart.gameState.state.handCounts).reduce((sum, count) => sum + count, 0);
+    expect(totalCards).toBe(52);
+    const firstCardId = hostStart.gameState.state.myHand[0]!.id;
+
+    await setup.service.bsPlayCards(host.sessionId, host.participantId, [firstCardId]);
+    let mid = setup.service.getState(host.sessionId, guest.participantId);
+    if (mid.gameState?.type !== "bs" || mid.gameState.state.status !== "challenging") {
+      throw new Error("expected bs challenging");
+    }
+    expect(mid.gameState.state.playedCount).toBe(1);
+
+    await setup.service.bsBelieve(host.sessionId, guest.participantId);
+    await setup.service.bsBelieve(host.sessionId, guestTwo.participantId);
+    mid = setup.service.getState(host.sessionId, host.participantId);
+    if (mid.gameState?.type !== "bs" || mid.gameState.state.status !== "playing") {
+      throw new Error("expected bs playing after belief");
+    }
+    expect(mid.gameState.state.currentRank).toBe("2");
+    expect(mid.gameState.state.currentPlayerId).toBe(guest.participantId);
+  });
+
+  it("BS: requires at least three players to start", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await expect(setup.service.startGame(host.sessionId, "bs")).rejects.toThrow(
+      "BS needs at least three active players."
+    );
+  });
+
+  it("BS: reveals challenged cards and host resolution assigns discard pile", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest1");
+    await setup.service.joinSession(host.joinCode, "Guest2");
+    await setup.service.startGame(host.sessionId, "bs");
+
+    const before = setup.service.getState(host.sessionId, host.participantId);
+    if (before.gameState?.type !== "bs" || before.gameState.state.status !== "playing") {
+      throw new Error("expected bs playing");
+    }
+    const playIds = before.gameState.state.myHand.slice(0, 2).map((card) => card.id);
+    const hostHandBefore = before.gameState.state.myHand.length;
+
+    await setup.service.bsPlayCards(host.sessionId, host.participantId, playIds);
+    await setup.service.bsCallBS(host.sessionId, g1.participantId);
+
+    const challenged = setup.service.getState(host.sessionId, g1.participantId);
+    if (challenged.gameState?.type !== "bs" || challenged.gameState.state.status !== "challenged") {
+      throw new Error("expected challenged state");
+    }
+    expect(challenged.gameState.state.revealedCards).toHaveLength(2);
+    expect(challenged.gameState.state.calledBsParticipantId).toBe(g1.participantId);
+
+    await setup.service.bsResolveChallenge(host.sessionId, host.participantId, false);
+    const after = setup.service.getState(host.sessionId, host.participantId);
+    if (after.gameState?.type !== "bs" || after.gameState.state.status !== "playing") {
+      throw new Error("expected playing state after resolve");
+    }
+    expect(after.gameState.state.myHand.length).toBe(hostHandBefore);
+    expect(after.gameState.state.currentRank).toBe("2");
+  });
+
 });

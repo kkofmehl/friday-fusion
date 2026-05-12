@@ -3014,6 +3014,61 @@ label {
   gap: 0.4rem;
 }
 
+/* BS cards */
+.bs-hand-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: flex-end;
+}
+
+.bs-my-hand {
+  margin-bottom: 0.9rem;
+}
+
+.bs-card {
+  min-width: 3.1rem;
+  min-height: 4.2rem;
+  border-radius: 0.45rem;
+  border: 2px solid var(--slate-800);
+  background: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.bs-card--clubs,
+.bs-card--spades {
+  color: #111827;
+}
+
+.bs-card--hearts,
+.bs-card--diamonds {
+  color: #dc2626;
+}
+
+.bs-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.bs-card--selected {
+  transform: translateY(-8px);
+  box-shadow: 0 10px 16px -10px rgba(15, 23, 42, 0.45);
+}
+
+.bs-card:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .uno-hand-silhouette {
   display: flex;
   gap: 1px;

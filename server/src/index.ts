@@ -972,6 +972,22 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.targetParticipantId
           );
+        } else if (event.type === "bs:playCards") {
+          await sessionService.bsPlayCards(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardIds
+          );
+        } else if (event.type === "bs:believe") {
+          await sessionService.bsBelieve(context.sessionId, context.participantId);
+        } else if (event.type === "bs:callBS") {
+          await sessionService.bsCallBS(context.sessionId, context.participantId);
+        } else if (event.type === "bs:resolveChallenge") {
+          await sessionService.bsResolveChallenge(
+            context.sessionId,
+            context.participantId,
+            event.payload.truth
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

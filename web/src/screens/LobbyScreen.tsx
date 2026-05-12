@@ -87,6 +87,12 @@ const GAMES: GameOption[] = [
     title: "UNO",
     description: "Classic color and number matching—skip, reverse, wilds, declare UNO, and catch missed calls.",
     emoji: "🃏"
+  },
+  {
+    id: "bs",
+    title: "BS",
+    description: "Bluff your way through A-to-K declarations—others can believe you or call BS.",
+    emoji: "🂠"
   }
 ];
 

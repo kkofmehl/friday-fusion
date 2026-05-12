@@ -11,7 +11,8 @@ export const gameTypeSchema = z.enum([
   "captionThis",
   "pictionary",
   "applesToApples",
-  "uno"
+  "uno",
+  "bs"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -593,6 +594,52 @@ export type ApplesToApplesState = z.infer<typeof applesToApplesStateSchema>;
 export const UNO_HAND_SIZE = 7;
 export const UNO_DECK_SIZE = 108;
 
+export const bsSuitSchema = z.enum(["clubs", "diamonds", "hearts", "spades"]);
+export type BsSuit = z.infer<typeof bsSuitSchema>;
+
+export const bsRankSchema = z.enum(["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]);
+export type BsRank = z.infer<typeof bsRankSchema>;
+
+export const bsCardSchema = z.object({
+  id: z.string().min(1),
+  suit: bsSuitSchema,
+  rank: bsRankSchema
+});
+export type BsCard = z.infer<typeof bsCardSchema>;
+
+const bsPlayingBaseSchema = z.object({
+  currentPlayerId: z.string(),
+  currentRank: bsRankSchema,
+  handCounts: z.record(z.string(), z.number().int().nonnegative()),
+  myHand: z.array(bsCardSchema),
+  discardCount: z.number().int().nonnegative(),
+  finishedPlayerIds: z.array(z.string())
+});
+
+export const bsStateSchema = z.discriminatedUnion("status", [
+  bsPlayingBaseSchema.extend({
+    status: z.literal("playing")
+  }),
+  bsPlayingBaseSchema.extend({
+    status: z.literal("challenging"),
+    playedCount: z.number().int().min(1).max(4),
+    believedParticipantIds: z.array(z.string()),
+    calledBsParticipantId: z.null()
+  }),
+  bsPlayingBaseSchema.extend({
+    status: z.literal("challenged"),
+    playedCount: z.number().int().min(1).max(4),
+    believedParticipantIds: z.array(z.string()),
+    calledBsParticipantId: z.string(),
+    revealedCards: z.array(bsCardSchema).min(1).max(4)
+  }),
+  z.object({
+    status: z.literal("finished"),
+    scores: z.record(z.string(), z.number().int())
+  })
+]);
+export type BsState = z.infer<typeof bsStateSchema>;
+
 export const unoColorSchema = z.enum(["red", "yellow", "green", "blue", "wild"]);
 export type UnoColor = z.infer<typeof unoColorSchema>;
 
@@ -686,6 +733,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("uno"),
     state: unoStateSchema
+  }),
+  z.object({
+    type: z.literal("bs"),
+    state: bsStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -941,6 +992,18 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("uno:catchPlayer"),
     payload: z.object({ targetParticipantId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("bs:playCards"),
+    payload: z.object({
+      cardIds: z.array(z.string().min(1)).min(1).max(4)
+    })
+  }),
+  z.object({ type: z.literal("bs:believe"), payload: z.object({}) }),
+  z.object({ type: z.literal("bs:callBS"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("bs:resolveChallenge"),
+    payload: z.object({ truth: z.boolean() })
   })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;

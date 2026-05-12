@@ -96,6 +96,15 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Your turn", tone: "answerer" };
     }
   }
+  if (session.gameState.type === "bs") {
+    const st = session.gameState.state;
+    if ((st.status === "playing" || st.status === "challenging" || st.status === "challenged") && st.currentPlayerId === participantId) {
+      return { label: "Your turn", tone: "answerer" };
+    }
+    if (st.status === "challenging" || st.status === "challenged") {
+      return { label: "Challenging", tone: "voter" };
+    }
+  }
   return null;
 };
 

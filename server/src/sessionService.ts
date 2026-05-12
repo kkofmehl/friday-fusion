@@ -21,6 +21,8 @@ import {
   type SessionState,
   type TriviaLoadingState,
   type TriviaQuestion,
+  type BsCard,
+  type BsRank,
   type UnoActiveColor,
   type UnoCard
 } from "../../shared/contracts";
@@ -45,6 +47,7 @@ import {
   pickApplesTopic,
   shuffledResponseCardIds
 } from "./applesToApplesCardLoader";
+import { shuffledBsDeck } from "./bsDeck";
 import { shuffledUnoDeck } from "./unoDeck";
 import {
   advanceTurnAfterPlay,
@@ -346,6 +349,23 @@ type UnoGameInternal = {
   pendingDrawnCardId: string | null;
 };
 
+type BsGameInternal = {
+  id: string;
+  type: "bs";
+  status: "playing" | "challenging" | "challenged" | "finished";
+  playerOrder: string[];
+  hands: Record<string, BsCard[]>;
+  discardPile: BsCard[];
+  currentPlayerIndex: number;
+  currentRankIndex: number;
+  pendingPlayerId: string | null;
+  pendingPlayedCards: BsCard[];
+  believedParticipantIds: string[];
+  calledBsParticipantId: string | null;
+  finishedPlayerIds: string[];
+  finalScores: Record<string, number>;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -357,7 +377,8 @@ type GameInternal =
   | CaptionThisGameInternal
   | PictionaryGameInternal
   | ApplesToApplesGameInternal
-  | UnoGameInternal;
+  | UnoGameInternal
+  | BsGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -729,11 +750,36 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       status: g.status === "finished" || g.status === "playing" ? g.status : "playing"
     };
   }
+  if (game.type === "bs") {
+    const g = game as BsGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      playerOrder: Array.isArray(g.playerOrder) ? g.playerOrder : [],
+      hands: g.hands && typeof g.hands === "object" ? g.hands : {},
+      discardPile: Array.isArray(g.discardPile) ? g.discardPile : [],
+      currentPlayerIndex: Math.max(0, Number(g.currentPlayerIndex) || 0),
+      currentRankIndex: Math.max(0, Number(g.currentRankIndex) || 0) % 13,
+      pendingPlayerId: g.pendingPlayerId ?? null,
+      pendingPlayedCards: Array.isArray(g.pendingPlayedCards) ? g.pendingPlayedCards : [],
+      believedParticipantIds: Array.isArray(g.believedParticipantIds) ? g.believedParticipantIds : [],
+      calledBsParticipantId: g.calledBsParticipantId ?? null,
+      finishedPlayerIds: Array.isArray(g.finishedPlayerIds) ? g.finishedPlayerIds : [],
+      finalScores: g.finalScores && typeof g.finalScores === "object" ? g.finalScores : {},
+      status:
+        g.status === "playing" || g.status === "challenging" || g.status === "challenged" || g.status === "finished"
+          ? g.status
+          : "playing"
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
 /** Delay before others may call missed UNO after someone plays down to one card without declaring. */
 const UNO_MISS_CATCH_DELAY_MS = 2000;
+const BS_RANKS: BsRank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+const bsCurrentRank = (game: BsGameInternal): BsRank => BS_RANKS[game.currentRankIndex % BS_RANKS.length]!;
 
 const shuffleEntryIds = (ids: string[]): string[] => {
   const a = [...ids];
@@ -1521,6 +1567,37 @@ export class SessionService {
         unoAnnouncedParticipantId: null,
         pendingDrawnCardId: null
       };
+    } else if (game === "bs") {
+      const actives = activeParticipants(session);
+      if (actives.length < 3) {
+        throw new Error("BS needs at least three active players.");
+      }
+      const playerOrder = actives.map((p) => p.id);
+      const deck = shuffledBsDeck();
+      const hands: Record<string, BsCard[]> = {};
+      for (const pid of playerOrder) {
+        hands[pid] = [];
+      }
+      for (let i = 0; i < deck.length; i += 1) {
+        const pid = playerOrder[i % playerOrder.length]!;
+        hands[pid]!.push(deck[i]!);
+      }
+      next = {
+        id: nanoid(6),
+        type: "bs",
+        status: "playing",
+        playerOrder,
+        hands,
+        discardPile: [],
+        currentPlayerIndex: 0,
+        currentRankIndex: 0,
+        pendingPlayerId: null,
+        pendingPlayedCards: [],
+        believedParticipantIds: [],
+        calledBsParticipantId: null,
+        finishedPlayerIds: [],
+        finalScores: {}
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -1685,6 +1762,11 @@ export class SessionService {
 
     const activeUno = session.games[0];
     if (activeUno?.type === "uno") {
+      session.games = [];
+    }
+
+    const activeBs = session.games[0];
+    if (activeBs?.type === "bs") {
       session.games = [];
     }
   }
@@ -4015,6 +4097,192 @@ export class SessionService {
     await this.persist();
   }
 
+  private bsClearPending(game: BsGameInternal): void {
+    game.pendingPlayerId = null;
+    game.pendingPlayedCards = [];
+    game.believedParticipantIds = [];
+    game.calledBsParticipantId = null;
+  }
+
+  private bsAdvanceToNextActivePlayer(game: BsGameInternal): void {
+    const n = game.playerOrder.length;
+    if (n === 0) {
+      return;
+    }
+    for (let step = 1; step <= n; step += 1) {
+      const idx = (game.currentPlayerIndex + step) % n;
+      const pid = game.playerOrder[idx]!;
+      if (!game.finishedPlayerIds.includes(pid)) {
+        game.currentPlayerIndex = idx;
+        return;
+      }
+    }
+  }
+
+  private bsChallengerIds(game: BsGameInternal): string[] {
+    const pendingPlayerId = game.pendingPlayerId;
+    return game.playerOrder.filter((pid) => pid !== pendingPlayerId && !game.finishedPlayerIds.includes(pid));
+  }
+
+  private bsAwardFinishPoints(session: SessionInternal, game: BsGameInternal, participantId: string): void {
+    if (game.finishedPlayerIds.includes(participantId)) {
+      return;
+    }
+    const hand = game.hands[participantId] ?? [];
+    if (hand.length !== 0) {
+      return;
+    }
+    const activeCount = game.playerOrder.length;
+    const points = Math.max(0, activeCount - game.finishedPlayerIds.length);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (participant) {
+      participant.score += points;
+    }
+    game.finishedPlayerIds.push(participantId);
+  }
+
+  private bsFinalizeGameIfNeeded(session: SessionInternal, game: BsGameInternal): boolean {
+    const remaining = game.playerOrder.filter((pid) => !game.finishedPlayerIds.includes(pid));
+    if (remaining.length > 2) {
+      return false;
+    }
+    for (const pid of remaining) {
+      if (!game.finishedPlayerIds.includes(pid)) {
+        game.finishedPlayerIds.push(pid);
+      }
+    }
+    const scores: Record<string, number> = {};
+    for (const p of session.participants) {
+      scores[p.id] = p.score;
+    }
+    game.finalScores = scores;
+    game.status = "finished";
+    this.bsClearPending(game);
+    return true;
+  }
+
+  private bsCompleteTurn(session: SessionInternal, game: BsGameInternal): void {
+    const pendingPlayerId = game.pendingPlayerId;
+    if (!pendingPlayerId) {
+      throw new Error("No BS turn is awaiting resolution.");
+    }
+    this.bsAwardFinishPoints(session, game, pendingPlayerId);
+    if (this.bsFinalizeGameIfNeeded(session, game)) {
+      return;
+    }
+    game.currentRankIndex = (game.currentRankIndex + 1) % BS_RANKS.length;
+    this.bsAdvanceToNextActivePlayer(game);
+    game.status = "playing";
+    this.bsClearPending(game);
+  }
+
+  public async bsPlayCards(sessionId: string, participantId: string, cardIds: string[]): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "bs" || g.status !== "playing") {
+      throw new Error("BS is not in a playable state.");
+    }
+    const currentPlayerId = g.playerOrder[g.currentPlayerIndex];
+    if (currentPlayerId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (cardIds.length < 1 || cardIds.length > 4) {
+      throw new Error("Play between 1 and 4 cards.");
+    }
+    const uniqueCardIds = new Set(cardIds);
+    if (uniqueCardIds.size !== cardIds.length) {
+      throw new Error("Cannot play duplicate cards.");
+    }
+    const hand = g.hands[participantId] ?? [];
+    const playedCards: BsCard[] = [];
+    for (const cardId of cardIds) {
+      const idx = hand.findIndex((card) => card.id === cardId);
+      if (idx < 0) {
+        throw new Error("Card not in hand.");
+      }
+      const [removed] = hand.splice(idx, 1);
+      playedCards.push(removed!);
+    }
+    g.discardPile.push(...playedCards);
+    g.pendingPlayerId = participantId;
+    g.pendingPlayedCards = playedCards;
+    g.believedParticipantIds = [];
+    g.calledBsParticipantId = null;
+    g.status = "challenging";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async bsBelieve(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "bs" || g.status !== "challenging") {
+      throw new Error("BS is not waiting for belief votes.");
+    }
+    const challengers = this.bsChallengerIds(g);
+    if (!challengers.includes(participantId)) {
+      throw new Error("Only opponents can vote on this challenge.");
+    }
+    if (g.believedParticipantIds.includes(participantId)) {
+      throw new Error("You already voted.");
+    }
+    g.believedParticipantIds.push(participantId);
+    if (g.believedParticipantIds.length === challengers.length) {
+      this.bsCompleteTurn(session, g);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async bsCallBS(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const g = session.games[0];
+    if (g?.type !== "bs" || g.status !== "challenging") {
+      throw new Error("BS cannot be called right now.");
+    }
+    const challengers = this.bsChallengerIds(g);
+    if (!challengers.includes(participantId)) {
+      throw new Error("Only opponents can call BS.");
+    }
+    if (g.believedParticipantIds.includes(participantId)) {
+      throw new Error("You already voted.");
+    }
+    g.calledBsParticipantId = participantId;
+    g.status = "challenged";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async bsResolveChallenge(sessionId: string, participantId: string, truth: boolean): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can resolve BS challenges.");
+    }
+    const g = session.games[0];
+    if (g?.type !== "bs" || g.status !== "challenged") {
+      throw new Error("BS challenge is not awaiting host resolution.");
+    }
+    const pendingPlayerId = g.pendingPlayerId;
+    const callerId = g.calledBsParticipantId;
+    if (!pendingPlayerId || !callerId) {
+      throw new Error("Challenge state is invalid.");
+    }
+    const recipientId = truth ? callerId : pendingPlayerId;
+    const recipientHand = g.hands[recipientId];
+    if (!recipientHand) {
+      throw new Error("Challenge recipient has no hand.");
+    }
+    recipientHand.push(...g.discardPile);
+    g.discardPile = [];
+    this.bsCompleteTurn(session, g);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -5079,6 +5347,80 @@ export class SessionService {
             submittedNonJudgeIds: submitted,
             allSubmissionsIn: submitted.length === nonJudges.length && nonJudges.length > 0,
             myHand: isJudge ? null : myHand
+          }
+        }
+      };
+    }
+
+    if (game.type === "bs") {
+      const viewerId = viewerParticipantId ?? "";
+      if (game.status === "finished") {
+        return {
+          ...base,
+          activeGame: "bs",
+          gameState: {
+            type: "bs",
+            state: {
+              status: "finished",
+              scores: game.finalScores
+            }
+          }
+        };
+      }
+      const currentPlayerId = game.playerOrder[game.currentPlayerIndex] ?? "";
+      const handCounts: Record<string, number> = {};
+      for (const pid of game.playerOrder) {
+        handCounts[pid] = (game.hands[pid] ?? []).length;
+      }
+      const commonState = {
+        currentPlayerId,
+        currentRank: bsCurrentRank(game),
+        handCounts,
+        myHand: viewerId ? [...(game.hands[viewerId] ?? [])] : [],
+        discardCount: game.discardPile.length,
+        finishedPlayerIds: [...game.finishedPlayerIds]
+      };
+      if (game.status === "playing") {
+        return {
+          ...base,
+          activeGame: "bs",
+          gameState: {
+            type: "bs",
+            state: {
+              status: "playing",
+              ...commonState
+            }
+          }
+        };
+      }
+      if (game.status === "challenging") {
+        return {
+          ...base,
+          activeGame: "bs",
+          gameState: {
+            type: "bs",
+            state: {
+              status: "challenging",
+              ...commonState,
+              playedCount: game.pendingPlayedCards.length,
+              believedParticipantIds: [...game.believedParticipantIds],
+              calledBsParticipantId: null
+            }
+          }
+        };
+      }
+      return {
+        ...base,
+        activeGame: "bs",
+        gameState: {
+          type: "bs",
+          state: {
+            status: "challenged",
+            ...commonState,
+            playedCount: game.pendingPlayedCards.length,
+            believedParticipantIds: [...game.believedParticipantIds],
+            calledBsParticipantId: game.calledBsParticipantId ?? "",
+            revealedCards: [...game.pendingPlayedCards]
           }
         }
       };
