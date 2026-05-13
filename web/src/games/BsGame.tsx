@@ -117,6 +117,18 @@ export function BsGame({
     return sortBsCards(state.myHand);
   }, [state]);
 
+  const challengedRevealUi = useMemo(() => {
+    if (state.status !== "challenged") {
+      return null;
+    }
+    const allRevealedMatchCall = state.revealedCards.every((c) => c.rank === state.currentRank);
+    return {
+      allRevealedMatchCall,
+      revealedText: state.revealedCards.map((card) => cardLabel(card)).join(", "),
+      callRank: state.currentRank
+    };
+  }, [state]);
+
   const canSelectCards = state.status === "playing" && isCurrentPlayer && canPlay;
 
   useEffect(() => {
@@ -141,113 +153,124 @@ export function BsGame({
         </div>
       </header>
 
-      {state.status !== "finished" && (
-        <div className="bs-my-hand" aria-label="Your hand">
-          <h3 className="uno-hand-title">Your cards</h3>
-          <ul className="bs-hand-list">
-            {sortedMyHand.map((card) => {
-              const selected = selectedCardIds.includes(card.id);
-              return (
-                <li key={card.id}>
+      {state.status !== "finished" ? (
+        <div
+          className={`game-area-turn${
+            state.status === "playing" && isCurrentPlayer ? " game-area-turn--active" : ""
+          }`}
+        >
+          <div className="bs-my-hand" aria-label="Your hand">
+            <h3 className="uno-hand-title">Your cards</h3>
+            <ul className="bs-hand-list">
+              {sortedMyHand.map((card) => {
+                const selected = selectedCardIds.includes(card.id);
+                return (
+                  <li key={card.id}>
+                    <button
+                      type="button"
+                      className={`bs-card bs-card--${card.suit}${selected ? " bs-card--selected" : ""}`}
+                      onClick={() => toggleCard(card.id)}
+                      disabled={!canSelectCards}
+                    >
+                      {cardLabel(card)}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {state.status === "playing" && (
+            <>
+              <p>
+                Current call is <strong>{state.currentRank}</strong>. The active player verbally says what they played.
+              </p>
+              {isCurrentPlayer ? (
+                <>
+                  <p>Select 1-4 cards from your hand, then click Play.</p>
                   <button
                     type="button"
-                    className={`bs-card bs-card--${card.suit}${selected ? " bs-card--selected" : ""}`}
-                    onClick={() => toggleCard(card.id)}
-                    disabled={!canSelectCards}
+                    className="btn btn-primary"
+                    disabled={!canSelectCards || selectedCardIds.length < 1 || selectedCardIds.length > 4}
+                    onClick={playSelected}
                   >
-                    {cardLabel(card)}
+                    Play selected cards
                   </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {state.status === "playing" && (
-        <>
-          <p>
-            Current call is <strong>{state.currentRank}</strong>. The active player verbally says what they played.
-          </p>
-          {isCurrentPlayer ? (
-            <>
-              <p>Select 1-4 cards from your hand, then click Play.</p>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!canSelectCards || selectedCardIds.length < 1 || selectedCardIds.length > 4}
-                onClick={playSelected}
-              >
-                Play selected cards
-              </button>
+                </>
+              ) : (
+                <p>Waiting for {nameFor(state.currentPlayerId)} to play cards.</p>
+              )}
             </>
-          ) : (
-            <p>Waiting for {nameFor(state.currentPlayerId)} to play cards.</p>
           )}
-        </>
-      )}
 
-      {state.status === "challenging" && (
-        <>
-          <p>
-            {nameFor(state.currentPlayerId)} played <strong>{state.playedCount}</strong> card
-            {state.playedCount === 1 ? "" : "s"} as <strong>{state.currentRank}</strong>.
-          </p>
-          {isCurrentPlayer ? (
-            <p>Waiting for other players to believe or call BS.</p>
-          ) : (
-            <div className="card-footer card-footer-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!canPlay || myVote !== null}
-                onClick={() => send({ type: "bs:believe", payload: {} })}
-              >
-                I believe them
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!canPlay || myVote !== null}
-                onClick={() => send({ type: "bs:callBS", payload: {} })}
-              >
-                That&apos;s BS!
-              </button>
-            </div>
+          {state.status === "challenging" && (
+            <>
+              <p>
+                {nameFor(state.currentPlayerId)} played <strong>{state.playedCount}</strong> card
+                {state.playedCount === 1 ? "" : "s"} as <strong>{state.currentRank}</strong>.
+              </p>
+              {isCurrentPlayer ? (
+                <p>Waiting for other players to believe or call BS.</p>
+              ) : (
+                <div className="card-footer card-footer-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!canPlay || myVote !== null}
+                    onClick={() => send({ type: "bs:believe", payload: {} })}
+                  >
+                    I believe them
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!canPlay || myVote !== null}
+                    onClick={() => send({ type: "bs:callBS", payload: {} })}
+                  >
+                    That&apos;s BS!
+                  </button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
 
-      {state.status === "challenged" && (
-        <>
-          <p>
-            {nameFor(state.calledBsParticipantId)} called BS on {nameFor(state.currentPlayerId)}.
-          </p>
-          <p>Revealed cards: {state.revealedCards.map((card) => cardLabel(card)).join(", ")}</p>
-          {isHost ? (
-            <div className="card-footer card-footer-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => send({ type: "bs:resolveChallenge", payload: { truth: true } })}
-              >
-                Truth was told
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => send({ type: "bs:resolveChallenge", payload: { truth: false } })}
-              >
-                That was BS
-              </button>
-            </div>
-          ) : (
-            <p>Waiting for host to resolve this challenge.</p>
+          {state.status === "challenged" && challengedRevealUi && (
+            <>
+              <p>
+                {nameFor(state.calledBsParticipantId)} called BS on {nameFor(state.currentPlayerId)}.
+              </p>
+              <p>
+                Call was <strong>{challengedRevealUi.callRank}</strong>, revealed cards:{" "}
+                {challengedRevealUi.revealedText}
+              </p>
+              {isHost ? (
+                <div className="card-footer card-footer-actions">
+                  <button
+                    type="button"
+                    className={`btn btn-secondary${
+                      challengedRevealUi.allRevealedMatchCall ? " bs-host-resolve-btn--suggested" : ""
+                    }`}
+                    onClick={() => send({ type: "bs:resolveChallenge", payload: { truth: true } })}
+                  >
+                    Truth was told
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-primary${
+                      challengedRevealUi.allRevealedMatchCall ? "" : " bs-host-resolve-btn--suggested"
+                    }`}
+                    onClick={() => send({ type: "bs:resolveChallenge", payload: { truth: false } })}
+                  >
+                    That was BS
+                  </button>
+                </div>
+              ) : (
+                <p>Waiting for host to resolve this challenge.</p>
+              )}
+            </>
           )}
-        </>
-      )}
-
-      {state.status === "finished" && (
+        </div>
+      ) : (
         <>
           <p>The game is over. Last two players receive 0 points.</p>
           <ul className="players-list" aria-label="Final scores">

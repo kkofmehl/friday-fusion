@@ -333,13 +333,19 @@ export const guessTheImageStateSchema = z.discriminatedUnion("status", [
     /** Present for Guess the image finished state (distinguishes everyone vs single post-round actions). */
     setupMode: z.enum(["single", "everyone"]),
     setupParticipantId: z.string(),
-    /** Cleared after the round ends (image file is removed from server storage). */
+    /** Present while the results screen is shown; cleared when the host starts the next setup flow. */
     imageUrl: z.string().nullable(),
     options: z.array(z.string()).length(4),
     correctDisplayIndex: z.number().int().min(0).max(3),
     results: z.array(guessTheImageResultEntrySchema),
     revealDurationMs: z.number().int().positive(),
-    roundStartedAt: z.number().int()
+    roundStartedAt: z.number().int(),
+    /** Everyone mode only: lets players save the next setup while the host still shows this round’s summary image. */
+    everyoneBetweenRounds: z.boolean().optional(),
+    selectedRoundParticipantId: z.string().nullable().optional(),
+    everyonePeers: z.array(guessTheImageEveryonePeerSchema).optional(),
+    everyoneMySetup: guessTheImageEveryoneMySetupSchema.nullable().optional(),
+    everyoneAllConfigured: z.boolean().optional()
   })
 ]);
 export type GuessTheImageState = z.infer<typeof guessTheImageStateSchema>;
@@ -563,14 +569,13 @@ export const applesToApplesStateSchema = z.discriminatedUnion("status", [
   }),
   applesToApplesRoundBaseSchema.extend({
     status: z.literal("judging"),
-    anonymousOptions: z
-      .array(
-        z.object({
-          entryId: z.string(),
-          text: z.string()
-        })
-      )
-      .nullable(),
+    /** Shuffled submissions; everyone can read text while only the judge can pick a winner. */
+    anonymousOptions: z.array(
+      z.object({
+        entryId: z.string(),
+        text: z.string()
+      })
+    ),
     waitingForJudge: z.boolean()
   }),
   z.object({
@@ -581,6 +586,14 @@ export const applesToApplesStateSchema = z.discriminatedUnion("status", [
     winnerParticipantId: z.string(),
     winningText: z.string(),
     roundNumber: z.number().int().min(1),
+    /** Same shuffle order as judging; includes author ids for the reveal. */
+    revealedSubmissions: z.array(
+      z.object({
+        entryId: z.string(),
+        participantId: z.string(),
+        text: z.string()
+      })
+    ),
     /** When false (finite mode after round 6), host `beginNextRound` ends the game. */
     canContinue: z.boolean()
   }),

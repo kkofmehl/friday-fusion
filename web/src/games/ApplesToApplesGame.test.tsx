@@ -52,6 +52,35 @@ describe("ApplesToApplesGame", () => {
     });
   });
 
+  it("shows all submitted cards to non-judges while the judge decides", () => {
+    const session: SessionState = {
+      ...baseSession(),
+      gameState: {
+        type: "applesToApples",
+        state: {
+          status: "judging",
+          mode: "standard",
+          topicText: "Absurd",
+          topicId: "t1",
+          judgeId: "p1",
+          roundNumber: 1,
+          isJudge: false,
+          anonymousOptions: [
+            { entryId: "e1", text: "Rubber duck" },
+            { entryId: "e2", text: "Elevator music" }
+          ],
+          waitingForJudge: true
+        }
+      }
+    };
+    render(
+      <ApplesToApplesGame session={session} currentParticipantId="p2" isHost={false} canPlay send={vi.fn()} />
+    );
+    expect(screen.getByText("Rubber duck")).toBeTruthy();
+    expect(screen.getByText("Elevator music")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Rubber duck/i })).toBeNull();
+  });
+
   it("sends judgePick when the judge selects an anonymous option", () => {
     const send = vi.fn();
     const session: SessionState = {
@@ -104,6 +133,10 @@ describe("ApplesToApplesGame", () => {
           winnerParticipantId: "p2",
           winningText: "Rubber duck",
           roundNumber: 2,
+          revealedSubmissions: [
+            { entryId: "e1", participantId: "p2", text: "Rubber duck" },
+            { entryId: "e2", participantId: "p3", text: "Elevator music" }
+          ],
           canContinue: true
         }
       }

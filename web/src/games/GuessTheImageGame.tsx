@@ -128,13 +128,22 @@ export function GuessTheImageGame({
   }, [state]);
 
   const everyoneMySetupKey =
-    state?.status === "setup" && state.setupMode === "everyone" && state.everyoneMySetup
-      ? `${state.everyoneMySetup.configured}:${state.everyoneMySetup.imageUrl ?? ""}:${state.everyoneMySetup.descriptions.join("\u0000")}:${state.everyoneMySetup.correctIndex}:${state.everyoneMySetup.revealDurationMs}`
+    state &&
+    (state.status === "setup" || state.status === "finished") &&
+    state.setupMode === "everyone" &&
+    state.everyoneMySetup
+      ? `${state.status}:${state.everyoneMySetup.configured}:${state.everyoneMySetup.imageUrl ?? ""}:${state.everyoneMySetup.descriptions.join("\u0000")}:${state.everyoneMySetup.correctIndex}:${state.everyoneMySetup.revealDurationMs}`
       : "";
   // Sync only when *this* viewer's server-backed setup changes — not on every `session` object
   // (other players' saves broadcast new state and would otherwise wipe unsaved local drafts).
   useEffect(() => {
-    if (!everyoneMySetupKey || !state || state.status !== "setup" || state.setupMode !== "everyone" || !state.everyoneMySetup) {
+    if (
+      !everyoneMySetupKey
+      || !state
+      || (state.status !== "setup" && state.status !== "finished")
+      || state.setupMode !== "everyone"
+      || !state.everyoneMySetup
+    ) {
       return;
     }
     const my = state.everyoneMySetup;
@@ -178,7 +187,12 @@ export function GuessTheImageGame({
   }, [state, tickOpacity]);
 
   const saveSetup = async () => {
-    if (state?.status !== "setup") {
+    if (!state) {
+      return;
+    }
+    const canSaveSetup =
+      state.status === "setup" || (state.status === "finished" && state.setupMode === "everyone");
+    if (!canSaveSetup) {
       return;
     }
     const everyoneMode = state.setupMode === "everyone";
@@ -233,7 +247,12 @@ export function GuessTheImageGame({
 
   const handlePasteImage = useCallback(
     (event: ClipboardEvent) => {
-      if (!state || state.status !== "setup" || setupBusy) {
+      if (!state || setupBusy) {
+        return;
+      }
+      const canPasteHere =
+        state.status === "setup" || (state.status === "finished" && state.setupMode === "everyone");
+      if (!canPasteHere) {
         return;
       }
       const canPaste =
@@ -570,6 +589,84 @@ export function GuessTheImageGame({
           );
         })}
       </ul>
+      {state.setupMode === "everyone" ? (
+        <div className="guess-image-setup" onPasteCapture={handlePasteImage}>
+          <p className="guess-image-hint">
+            Save your next image and captions here while the room still shows this round’s summary. The host advances when
+            everyone is ready.
+          </p>
+          {state.everyoneMySetup?.configured ? (
+            <p className="guess-image-hint">
+              <span className="pill pill-muted">Your next setup is saved</span>
+            </p>
+          ) : null}
+          <label className="guess-image-label" htmlFor="guess-image-file-results">
+            Image
+          </label>
+          <input
+            id="guess-image-file-results"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
+          />
+          <p className="guess-image-paste-hint">
+            JPEG, PNG, GIF, or WebP — choose a file or paste an image (⌘V / Ctrl+V) anywhere in this form.
+          </p>
+          {previewUrl ? (
+            <img className="guess-image-preview" src={previewUrl} alt="" />
+          ) : state.everyoneMySetup?.imageUrl ? (
+            <img className="guess-image-preview" src={imageSrc(state.everyoneMySetup.imageUrl)} alt="" />
+          ) : null}
+          <p className="guess-image-hint">Enter four descriptions in order, then mark which one is correct.</p>
+          {[0, 1, 2, 3].map((i) => (
+            <label key={i} className="guess-image-field" htmlFor={`guess-opt-results-${i}`}>
+              <span className="guess-image-label">Option {i + 1}</span>
+              <input
+                id={`guess-opt-results-${i}`}
+                type="text"
+                value={descriptions[i]}
+                onChange={(e) => {
+                  const next = [...descriptions] as [string, string, string, string];
+                  next[i] = e.target.value;
+                  setDescriptions(next);
+                }}
+              />
+            </label>
+          ))}
+          <fieldset className="guess-image-field">
+            <legend className="guess-image-label">Correct option</legend>
+            <div className="guess-image-radio-row">
+              {[0, 1, 2, 3].map((i) => (
+                <label key={i} className="mode-option">
+                  <input
+                    type="radio"
+                    name="guess-correct-results"
+                    checked={correctIndex === i}
+                    onChange={() => setCorrectIndex(i)}
+                  />
+                  <span>#{i + 1}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="guess-image-field" htmlFor="guess-reveal-sec-results">
+            <span className="guess-image-label">Reveal duration (seconds)</span>
+            <input
+              id="guess-reveal-sec-results"
+              type="number"
+              min={10}
+              max={120}
+              value={revealSeconds}
+              onChange={(e) => setRevealSeconds(Number(e.target.value))}
+            />
+          </label>
+          <div className="card-footer card-footer-actions">
+            <button type="button" className="btn btn-primary" disabled={setupBusy} onClick={() => void saveSetup()}>
+              {setupBusy ? "Uploading…" : "Save setup"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {isHost && (
         <div className="card-footer card-footer-actions">
           {state.setupMode === "everyone" ? (

@@ -171,7 +171,7 @@ export function UnoGame({
         <span className="pill pill-muted">{isMyTurn ? "Your turn" : `${nameFor(playing.currentPlayerId)}'s turn`}</span>
       </header>
 
-      <div className="uno-table">
+      <div className={`uno-table${isMyTurn ? " game-area-turn game-area-turn--active" : ""}`} aria-label={isMyTurn ? "Main table — your turn" : "Main table"}>
         {announceId ? (
           <div className="uno-announce-banner" role="status">
             <strong>{nameFor(announceId)}</strong> called UNO!

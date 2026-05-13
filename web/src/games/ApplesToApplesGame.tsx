@@ -54,6 +54,28 @@ export function ApplesToApplesGame({
         <p>
           Winner: <strong>{nameFor(state.winnerParticipantId)}</strong>
         </p>
+        {state.revealedSubmissions.length > 0 ? (
+          <>
+            <p className="mode-option-hint">Who played what this round:</p>
+            <ul className="apples-reveal-grid" aria-label="All submissions this round">
+              {state.revealedSubmissions.map((row) => {
+                const isWinner = row.entryId === state.winningEntryId;
+                return (
+                  <li
+                    key={row.entryId}
+                    className={`apples-reveal-card${isWinner ? " apples-reveal-card--winner" : ""}`}
+                  >
+                    <p className="apples-reveal-text">{row.text}</p>
+                    <p className="apples-reveal-author">
+                      {isWinner ? "Winner — " : ""}
+                      {nameFor(row.participantId)}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
         {isHost && (
           <div className="card-footer card-footer-actions">
             <button
@@ -86,7 +108,7 @@ export function ApplesToApplesGame({
           <>
             <p>Choose the response you like best (authors are hidden):</p>
             <ul className="apples-option-list">
-              {state.anonymousOptions?.map((opt) => (
+              {state.anonymousOptions.map((opt) => (
                 <li key={opt.entryId}>
                   <button
                     type="button"
@@ -103,7 +125,18 @@ export function ApplesToApplesGame({
             </ul>
           </>
         ) : (
-          <p className="mode-option-hint">Waiting for {nameFor(state.judgeId)} to pick a winner…</p>
+          <>
+            <p className="mode-option-hint">
+              Everyone has submitted. {nameFor(state.judgeId)} is picking a winner.
+            </p>
+            <ul className="apples-judge-wait-list" aria-label="Submitted responses">
+              {state.anonymousOptions.map((opt) => (
+                <li key={opt.entryId} className="apples-judge-wait-card">
+                  {opt.text}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     );

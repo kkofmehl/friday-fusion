@@ -3,6 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../../shared/contracts";
 import { BsGame } from "./BsGame";
 
+/** Avoid matching outer containers that also contain this copy in `textContent`. */
+function revealSummaryParagraphIncludes(
+  substring: string | RegExp
+): (content: string, el: Element | null) => boolean {
+  return (_content, el) => {
+    if (!el || el.tagName !== "P") {
+      return false;
+    }
+    const t = el.textContent ?? "";
+    if (!t.includes("Call was") || !t.includes("revealed cards:")) {
+      return false;
+    }
+    return typeof substring === "string" ? t.includes(substring) : substring.test(t);
+  };
+}
+
 const baseSession = (overrides: Partial<SessionState> = {}): SessionState => ({
   sessionId: "s1",
   sessionName: "Test",
@@ -40,6 +56,13 @@ describe("BsGame", () => {
     expect(screen.getByText("Your turn")).toBeTruthy();
     expect(screen.getByText("Discard pile: 0")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Play selected cards/i })).toBeTruthy();
+  });
+
+  it("highlights the play area when it is your turn in playing state", () => {
+    const { container } = render(
+      <BsGame session={baseSession()} currentParticipantId="a" isHost canPlay send={vi.fn()} />
+    );
+    expect(container.querySelector(".game-area-turn--active")).toBeTruthy();
   });
 
   it("shows challenge controls for non-current players", () => {
@@ -98,8 +121,74 @@ describe("BsGame", () => {
     render(
       <BsGame session={session} currentParticipantId="a" isHost canPlay send={send} />
     );
-    expect(screen.getByRole("button", { name: /Truth was told/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /That was BS/i })).toBeTruthy();
+    const summary = screen.getByText(revealSummaryParagraphIncludes("A♥"));
+    expect(summary.textContent).toContain("5♦");
+
+    const truthBtn = screen.getByRole("button", { name: /Truth was told/i });
+    const bsBtn = screen.getByRole("button", { name: /That was BS/i });
+    expect(truthBtn.className).not.toContain("bs-host-resolve-btn--suggested");
+    expect(bsBtn.className).toContain("bs-host-resolve-btn--suggested");
+  });
+
+  it("when challenged and all revealed cards match the call, suggests Truth was told for host", () => {
+    const send = vi.fn();
+    const session = baseSession({
+      gameState: {
+        type: "bs",
+        state: {
+          status: "challenged",
+          currentPlayerId: "a",
+          currentRank: "7",
+          handCounts: { a: 16, b: 17, c: 17 },
+          myHand: [{ id: "hearts-7", suit: "hearts", rank: "7" }],
+          discardCount: 2,
+          finishedPlayerIds: [],
+          playedCount: 2,
+          believedParticipantIds: ["c"],
+          calledBsParticipantId: "b",
+          revealedCards: [
+            { id: "hearts-7", suit: "hearts", rank: "7" },
+            { id: "clubs-7", suit: "clubs", rank: "7" }
+          ]
+        }
+      }
+    });
+    render(
+      <BsGame session={session} currentParticipantId="a" isHost canPlay send={send} />
+    );
+    const summary = screen.getByText(revealSummaryParagraphIncludes("7♥"));
+    expect(summary.textContent).toContain("7♣");
+
+    const truthBtn = screen.getByRole("button", { name: /Truth was told/i });
+    const bsBtn = screen.getByRole("button", { name: /That was BS/i });
+    expect(truthBtn.className).toContain("bs-host-resolve-btn--suggested");
+    expect(bsBtn.className).not.toContain("bs-host-resolve-btn--suggested");
+  });
+
+  it("shows call and revealed cards to non-host while challenged", () => {
+    const session = baseSession({
+      gameState: {
+        type: "bs",
+        state: {
+          status: "challenged",
+          currentPlayerId: "a",
+          currentRank: "K",
+          handCounts: { a: 16, b: 17, c: 17 },
+          myHand: [{ id: "spades-2", suit: "spades", rank: "2" }],
+          discardCount: 2,
+          finishedPlayerIds: [],
+          playedCount: 1,
+          believedParticipantIds: [],
+          calledBsParticipantId: "b",
+          revealedCards: [{ id: "hearts-K", suit: "hearts", rank: "K" }]
+        }
+      }
+    });
+    render(
+      <BsGame session={session} currentParticipantId="c" isHost={false} canPlay send={vi.fn()} />
+    );
+    expect(screen.getByText(revealSummaryParagraphIncludes("K♥"))).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Truth was told/i })).toBeNull();
   });
 
   it("renders final scores in finished state", () => {

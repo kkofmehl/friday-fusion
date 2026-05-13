@@ -259,6 +259,82 @@ describe("GuessTheImageGame", () => {
     expect((screen.getByLabelText("Option 1") as HTMLInputElement).value).toBe("Draft option");
   });
 
+  it("everyone mode finished: save setup sends configure using my slot image id", () => {
+    const send = vi.fn();
+    const session = baseSession({
+      gameState: {
+        type: "guessTheImage",
+        state: {
+          status: "finished",
+          setupMode: "everyone",
+          setupParticipantId: "p2",
+          imageUrl: "/api/sessions/s1/guess-the-image/file/g.png",
+          options: ["G1", "G2", "G3", "G4"],
+          correctDisplayIndex: 0,
+          results: [],
+          revealDurationMs: 50_000,
+          roundStartedAt: Date.now() - 50_000,
+          everyoneBetweenRounds: false,
+          selectedRoundParticipantId: null,
+          everyonePeers: [
+            { participantId: "p1", configured: true },
+            { participantId: "p2", configured: true }
+          ],
+          everyoneMySetup: {
+            imageUrl: "/api/sessions/s1/guess-the-image/file/h.png",
+            descriptions: ["H1", "H2", "H3", "H4"],
+            correctIndex: 0,
+            revealDurationMs: 60_000,
+            configured: true
+          },
+          everyoneAllConfigured: true
+        }
+      }
+    });
+    render(
+      <GuessTheImageGame session={session} currentParticipantId="p1" isHost send={send} apiBase="http://localhost:3000" />
+    );
+    fireEvent.change(screen.getByLabelText("Option 1"), { target: { value: "N1" } });
+    fireEvent.change(screen.getByLabelText("Option 2"), { target: { value: "N2" } });
+    fireEvent.change(screen.getByLabelText("Option 3"), { target: { value: "N3" } });
+    fireEvent.change(screen.getByLabelText("Option 4"), { target: { value: "N4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save setup" }));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "guessImage:configure",
+        payload: expect.objectContaining({
+          imageFileId: "h.png",
+          descriptions: ["N1", "N2", "N3", "N4"]
+        })
+      })
+    );
+  });
+
+  it("shows the round image on the finished results screen", () => {
+    const session = baseSession({
+      gameState: {
+        type: "guessTheImage",
+        state: {
+          status: "finished",
+          setupMode: "single",
+          setupParticipantId: "p1",
+          imageUrl: "/api/sessions/s1/guess-the-image/file/pic.png",
+          options: ["A", "B", "C", "D"],
+          correctDisplayIndex: 0,
+          results: [],
+          revealDurationMs: 60_000,
+          roundStartedAt: Date.now() - 60_000
+        }
+      }
+    });
+    const { container } = render(
+      <GuessTheImageGame session={session} currentParticipantId="p2" isHost={false} send={vi.fn()} apiBase="http://localhost:3000" />
+    );
+    const img = container.querySelector(".guess-image-photo") as HTMLImageElement | null;
+    expect(img).toBeTruthy();
+    expect(img?.src).toContain("guess-the-image");
+  });
+
   it("sends lock with display index for a player", () => {
     const send = vi.fn();
     const session = baseSession({

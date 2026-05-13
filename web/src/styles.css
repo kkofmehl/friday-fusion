@@ -2728,6 +2728,21 @@ label {
   color: var(--slate-700);
 }
 
+/* Shared “your turn” emphasis for turn-based card games */
+.game-area-turn {
+  border-radius: 0.65rem;
+  padding: 0.25rem;
+  border: 3px solid transparent;
+  background-color: transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.game-area-turn--active {
+  border-color: rgba(22, 163, 74, 0.85);
+  background-color: rgba(22, 163, 74, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.12);
+}
+
 /* Apples to Apples */
 .apples-topic {
   font-size: 1.05rem;
@@ -2763,6 +2778,61 @@ label {
   text-align: left;
   white-space: normal;
   line-height: 1.35;
+}
+
+.apples-judge-wait-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.apples-judge-wait-card {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  color: var(--slate-800);
+  line-height: 1.35;
+}
+
+.apples-reveal-grid {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.apples-reveal-card {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--slate-200);
+  background: var(--slate-50);
+}
+
+.apples-reveal-card--winner {
+  border-color: rgba(22, 163, 74, 0.75);
+  background: rgba(22, 163, 74, 0.12);
+  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.15);
+}
+
+.apples-reveal-text {
+  margin: 0;
+  font-weight: 600;
+  color: var(--slate-900);
+  line-height: 1.35;
+}
+
+.apples-reveal-author {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--slate-600);
 }
 
 /* UNO */
@@ -3067,6 +3137,11 @@ label {
 .bs-card:disabled {
   opacity: 0.62;
   cursor: not-allowed;
+}
+
+/* BS host challenge: suggested resolution (rank vs revealed cards) */
+.bs-host-resolve-btn--suggested {
+  box-shadow: 0 0 0 2px var(--indigo-400), 0 8px 20px -6px rgba(79, 70, 229, 0.45);
 }
 
 .uno-hand-silhouette {

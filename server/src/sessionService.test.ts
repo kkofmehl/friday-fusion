@@ -977,7 +977,7 @@ describe("SessionService", () => {
     if (final.gameState?.type !== "guessTheImage" || final.gameState.state.status !== "finished") {
       throw new Error("expected finished guessTheImage");
     }
-    expect(final.gameState.state.imageUrl).toBeNull();
+    expect(final.gameState.state.imageUrl).toMatch(/guess-the-image\/file\//);
     expect(final.gameState.state.correctDisplayIndex).toBe(correctSlot);
     expect(final.participants.find((p) => p.id === fast.participantId)?.score).toBe(3);
     expect(final.participants.find((p) => p.id === slow.participantId)?.score).toBe(1);
@@ -1257,6 +1257,95 @@ describe("SessionService", () => {
     expect(play2.gameState.state.setupParticipantId).toBe(host.participantId);
   });
 
+  it("everyone mode: host can reconfigure their slot while the round is finished (summary image unchanged)", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage", { guessImageSetupMode: "everyone" });
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h.png",
+      descriptions: ["H1", "H2", "H3", "H4"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.configureGuessTheImage(host.sessionId, guest.participantId, {
+      imageFileId: "g.png",
+      descriptions: ["G1", "G2", "G3", "G4"],
+      correctIndex: 0,
+      revealDurationMs: 50_000
+    });
+    await setup.service.setGuessTheImageRoundPresenter(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId, host.participantId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const correctIdx = playing.gameState.state.options.indexOf("G1");
+    t += 1000;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, host.participantId, correctIdx);
+    spy.mockRestore();
+
+    const fin = setup.service.getState(host.sessionId, host.participantId);
+    if (fin.gameState?.type !== "guessTheImage" || fin.gameState.state.status !== "finished") {
+      throw new Error("expected finished");
+    }
+    const roundImageUrl = fin.gameState.state.imageUrl;
+    expect(roundImageUrl).toMatch(/g\.png/);
+
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "h2.png",
+      descriptions: ["N1", "N2", "N3", "N4"],
+      correctIndex: 1,
+      revealDurationMs: 55_000
+    });
+
+    const after = setup.service.getState(host.sessionId, host.participantId);
+    if (after.gameState?.type !== "guessTheImage" || after.gameState.state.status !== "finished") {
+      throw new Error("expected still finished");
+    }
+    expect(after.gameState.state.imageUrl).toBe(roundImageUrl);
+    expect(after.gameState.state.everyoneMySetup?.imageUrl).toMatch(/h2\.png/);
+    expect(after.gameState.state.everyoneMySetup?.descriptions).toEqual(["N1", "N2", "N3", "N4"]);
+    expect(after.gameState.state.everyoneMySetup?.correctIndex).toBe(1);
+  });
+
+  it("rejects configure during finished for single-preparer mode", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    let t = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => t);
+    await setup.service.startGame(host.sessionId, "guessTheImage");
+    await setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+      imageFileId: "a.png",
+      descriptions: ["A", "B", "C", "D"],
+      correctIndex: 0,
+      revealDurationMs: 60_000
+    });
+    await setup.service.startGuessTheImageRound(host.sessionId, host.participantId);
+    const playing = setup.service.getState(host.sessionId, guest.participantId);
+    if (playing.gameState?.type !== "guessTheImage" || playing.gameState.state.status !== "playing") {
+      throw new Error("expected playing");
+    }
+    const idx = playing.gameState.state.options.indexOf("A");
+    t += 500;
+    await setup.service.lockGuessTheImageAnswer(host.sessionId, guest.participantId, idx);
+    spy.mockRestore();
+
+    await expect(
+      setup.service.configureGuessTheImage(host.sessionId, host.participantId, {
+        imageFileId: "b.png",
+        descriptions: ["A", "B", "C", "D"],
+        correctIndex: 0,
+        revealDurationMs: 60_000
+      })
+    ).rejects.toThrow("Configure is only available during setup.");
+  });
+
   it("rejects begin next round selection before a round has finished", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;
@@ -1514,12 +1603,17 @@ describe("SessionService", () => {
     const card3 = stP3.myHand![0]!.id;
     await setup.service.applesToApplesSubmitCard(host.sessionId, p2.participantId, card2);
     await setup.service.applesToApplesSubmitCard(host.sessionId, p3.participantId, card3);
+    const p2Judging = setup.service.getState(host.sessionId, p2.participantId);
+    if (p2Judging.gameState?.type !== "applesToApples" || p2Judging.gameState.state.status !== "judging") {
+      throw new Error("expected p2 judging view");
+    }
+    expect(p2Judging.gameState.state.anonymousOptions.length).toBeGreaterThanOrEqual(1);
     const judgeView = setup.service.getState(host.sessionId, host.participantId);
     if (judgeView.gameState?.type !== "applesToApples" || judgeView.gameState.state.status !== "judging") {
       throw new Error("expected judging");
     }
     const opts = judgeView.gameState.state.anonymousOptions;
-    if (!opts?.[0]) {
+    if (!opts[0]) {
       throw new Error("expected options");
     }
     await setup.service.applesToApplesJudgePick(host.sessionId, host.participantId, opts[0].entryId);
@@ -1528,6 +1622,7 @@ describe("SessionService", () => {
       throw new Error("expected roundResult");
     }
     expect([p2.participantId, p3.participantId]).toContain(winnerId.gameState.state.winnerParticipantId);
+    expect(winnerId.gameState.state.revealedSubmissions.length).toBe(2);
     await setup.service.applesToApplesBeginNextRound(host.sessionId, host.participantId);
     const p3Next = setup.service.getState(host.sessionId, p3.participantId);
     if (p3Next.gameState?.type !== "applesToApples" || p3Next.gameState.state.status !== "collecting") {
@@ -1572,7 +1667,7 @@ describe("SessionService", () => {
         throw new Error("expected judging");
       }
       const opts = judgeSnap.gameState.state.anonymousOptions;
-      if (!opts?.[0]) {
+      if (!opts[0]) {
         throw new Error("options");
       }
       await setup.service.applesToApplesJudgePick(host.sessionId, judgeId, opts[0].entryId);

@@ -51,6 +51,13 @@ describe("UnoGame", () => {
     expect(screen.getByRole("button", { name: /Draw a card/i })).toBeTruthy();
   });
 
+  it("highlights the main table when it is your turn", () => {
+    const { container } = render(
+      <UnoGame session={baseSession()} currentParticipantId="a" isHost canPlay send={vi.fn()} />
+    );
+    expect(container.querySelector(".game-area-turn--active")).toBeTruthy();
+  });
+
   it("shows UNO announcement banner", () => {
     const send = vi.fn();
     const session = baseSession({

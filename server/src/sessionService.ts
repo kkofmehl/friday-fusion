@@ -324,6 +324,8 @@ type ApplesToApplesGameInternal = {
   roundWinnerEntryId: string | null;
   roundWinnerParticipantId: string | null;
   roundWinningText: string | null;
+  /** Snapshot for round-result reveal (display order); cleared when the next round starts. */
+  roundResultReveal: { entryId: string; authorId: string; text: string }[] | null;
 };
 
 type UnoGameInternal = {
@@ -714,6 +716,7 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       roundWinnerEntryId: g.roundWinnerEntryId ?? null,
       roundWinnerParticipantId: g.roundWinnerParticipantId ?? null,
       roundWinningText: g.roundWinningText ?? null,
+      roundResultReveal: Array.isArray(g.roundResultReveal) ? g.roundResultReveal : null,
       status:
         g.status === "collecting" ||
         g.status === "judging" ||
@@ -1007,7 +1010,7 @@ export class SessionService {
       throw new Error("Participant is not in this session.");
     }
     if (game.setupMode === "everyone") {
-      if (game.status !== "setup") {
+      if (game.status !== "setup" && game.status !== "finished") {
         throw new Error("Cannot upload outside setup.");
       }
       return;
@@ -1516,7 +1519,8 @@ export class SessionService {
         displayOrder: [],
         roundWinnerEntryId: null,
         roundWinnerParticipantId: null,
-        roundWinningText: null
+        roundWinningText: null,
+        roundResultReveal: null
       };
     } else if (game === "uno") {
       const actives = activeParticipants(session);
@@ -2957,7 +2961,10 @@ export class SessionService {
   }
 
   private guessTheImageCorrectDisplayIndex(game: GuessTheImageGameInternal): number {
-    const perm = game.displayPerm!;
+    const perm = game.displayPerm;
+    if (!perm) {
+      return game.canonicalCorrectIndex;
+    }
     return perm.findIndex((canonicalSlot) => canonicalSlot === game.canonicalCorrectIndex);
   }
 
@@ -2977,7 +2984,9 @@ export class SessionService {
     if (game?.type !== "guessTheImage") {
       throw new Error("Guess the image is not active.");
     }
-    if (game.status !== "setup") {
+    const canConfigureEveryoneSlot =
+      game.setupMode === "everyone" && (game.status === "setup" || game.status === "finished");
+    if (!canConfigureEveryoneSlot && game.status !== "setup") {
       throw new Error("Configure is only available during setup.");
     }
     if (game.setupMode === "everyone") {
@@ -3141,9 +3150,17 @@ export class SessionService {
       throw new Error("Choose the next image only after a round has finished.");
     }
     this.clearGuessImageTimer(sessionId);
+    const presenterId = game.setupParticipantId;
+    const fid = game.imageFileId;
+    if (fid && presenterId) {
+      await deleteGuessTheImageStoredFile(this.dataDirectory, sessionId, fid);
+      if (game.participantSetups[presenterId]) {
+        game.participantSetups[presenterId] = freshGuessImageParticipantSlot();
+      }
+    }
+    game.imageFileId = null;
     game.status = "setup";
     game.everyoneBetweenRounds = true;
-    game.imageFileId = null;
     game.displayPerm = null;
     game.roundStartedAt = null;
     game.locks = {};
@@ -3388,28 +3405,16 @@ export class SessionService {
     });
 
     const everyone = game.setupMode === "everyone";
-    const playedFileId = game.imageFileId;
-    const presenterId = game.setupParticipantId;
 
     game.status = "finished";
     game.results = results;
-    game.imageFileId = null;
 
     if (everyone) {
       game.selectedRoundParticipantId = null;
-      if (playedFileId) {
-        await deleteGuessTheImageStoredFile(this.dataDirectory, sessionId, playedFileId);
-      }
-      if (presenterId && game.participantSetups[presenterId]) {
-        game.participantSetups[presenterId] = freshGuessImageParticipantSlot();
-      }
     }
 
     session.updatedAt = Date.now();
     await this.persist();
-    if (!everyone) {
-      await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
-    }
     this.onSessionUpdated?.(sessionId);
   }
 
@@ -3798,6 +3803,20 @@ export class SessionService {
     const winningEntryId = entry.entryId;
     const winningText = getApplesResponseText(entry.cardId) ?? "";
     const winnerParticipantId = entry.authorId;
+    const byEntryIdForReveal = new Map(game.entries.map((e) => [e.entryId, e] as const));
+    game.roundResultReveal = game.displayOrder
+      .map((eid) => {
+        const row = byEntryIdForReveal.get(eid);
+        if (!row) {
+          return null;
+        }
+        return {
+          entryId: row.entryId,
+          authorId: row.authorId,
+          text: getApplesResponseText(row.cardId) ?? ""
+        };
+      })
+      .filter((row): row is { entryId: string; authorId: string; text: string } => row !== null);
     for (const [, cid] of Object.entries(game.submissions)) {
       game.discardPile.push(cid);
     }
@@ -3855,6 +3874,7 @@ export class SessionService {
     game.roundWinnerEntryId = null;
     game.roundWinnerParticipantId = null;
     game.roundWinningText = null;
+    game.roundResultReveal = null;
     game.status = "collecting";
     session.updatedAt = Date.now();
     await this.persist();
@@ -4980,27 +5000,75 @@ export class SessionService {
       }
       const options = this.guessTheImageOptionsFrom(game);
       const correctDisplayIndex = this.guessTheImageCorrectDisplayIndex(game);
+      const everyoneFinished = game.setupMode === "everyone";
+      const finishedResults = (game.results ?? []).map((r) => ({
+        participantId: r.participantId,
+        choiceDisplayIndex: r.choiceDisplayIndex,
+        correct: r.correct,
+        elapsedMs: r.elapsedMs,
+        pointsAwarded: r.pointsAwarded
+      }));
+      const finishedBase = {
+        status: "finished" as const,
+        setupMode: everyoneFinished ? ("everyone" as const) : ("single" as const),
+        setupParticipantId: game.setupParticipantId,
+        imageUrl,
+        options: [...options],
+        correctDisplayIndex,
+        results: finishedResults,
+        revealDurationMs: game.revealDurationMs,
+        roundStartedAt: game.roundStartedAt ?? 0
+      };
+      if (!everyoneFinished) {
+        return {
+          ...base,
+          activeGame: "guessTheImage",
+          gameState: {
+            type: "guessTheImage",
+            state: finishedBase
+          }
+        };
+      }
+      const everyonePeers = activeParticipants(session).map((p) => ({
+        participantId: p.id,
+        configured: Boolean(game.participantSetups[p.id]?.configured)
+      }));
+      const everyoneAllConfigured = guessImageEveryoneAllConfigured(session, game);
+      let everyoneMySetup: {
+        imageUrl: string | null;
+        descriptions: [string, string, string, string];
+        correctIndex: number;
+        revealDurationMs: number;
+        configured: boolean;
+      } | null = null;
+      if (
+        viewerParticipantId
+        && session.participants.some((participant) => participant.id === viewerParticipantId)
+      ) {
+        const mine =
+          game.participantSetups[viewerParticipantId] ?? freshGuessImageParticipantSlot();
+        everyoneMySetup = {
+          imageUrl: mine.imageFileId
+            ? `/api/sessions/${session.sessionId}/guess-the-image/file/${encodeURIComponent(mine.imageFileId)}`
+            : null,
+          descriptions: [...mine.canonicalDescriptions],
+          correctIndex: mine.canonicalCorrectIndex,
+          revealDurationMs: mine.revealDurationMs,
+          configured: mine.configured
+        };
+      }
       return {
         ...base,
         activeGame: "guessTheImage",
         gameState: {
           type: "guessTheImage",
           state: {
-            status: "finished",
-            setupMode: game.setupMode === "everyone" ? "everyone" : "single",
-            setupParticipantId: game.setupParticipantId,
-            imageUrl,
-            options: [...options],
-            correctDisplayIndex,
-            results: (game.results ?? []).map((r) => ({
-              participantId: r.participantId,
-              choiceDisplayIndex: r.choiceDisplayIndex,
-              correct: r.correct,
-              elapsedMs: r.elapsedMs,
-              pointsAwarded: r.pointsAwarded
-            })),
-            revealDurationMs: game.revealDurationMs,
-            roundStartedAt: game.roundStartedAt ?? 0
+            ...finishedBase,
+            everyoneBetweenRounds: game.everyoneBetweenRounds === true,
+            selectedRoundParticipantId: game.selectedRoundParticipantId ?? null,
+            everyonePeers,
+            everyoneMySetup,
+            everyoneAllConfigured
           }
         }
       };
@@ -5271,6 +5339,11 @@ export class SessionService {
         const canContinue = !(
           game.mode === "finite" && game.roundNumber >= APPLES_TO_APPLES_FINITE_ROUNDS
         );
+        const revealedSubmissions = (game.roundResultReveal ?? []).map((row) => ({
+          entryId: row.entryId,
+          participantId: row.authorId,
+          text: row.text
+        }));
         return {
           ...base,
           activeGame: "applesToApples",
@@ -5284,6 +5357,7 @@ export class SessionService {
               winnerParticipantId: game.roundWinnerParticipantId ?? "",
               winningText: game.roundWinningText ?? "",
               roundNumber: game.roundNumber,
+              revealedSubmissions,
               canContinue
             }
           }
@@ -5313,7 +5387,7 @@ export class SessionService {
               judgeId,
               roundNumber: game.roundNumber,
               isJudge,
-              anonymousOptions: isJudge ? options : null,
+              anonymousOptions: options,
               waitingForJudge: !isJudge
             }
           }
