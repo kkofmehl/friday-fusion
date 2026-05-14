@@ -988,6 +988,16 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.truth
           );
+        } else if (event.type === "madlibs:submitWord") {
+          await sessionService.madlibsSubmitWord(
+            context.sessionId,
+            context.participantId,
+            event.payload.word
+          );
+        } else if (event.type === "madlibs:passRead") {
+          await sessionService.madlibsPassRead(context.sessionId, context.participantId);
+        } else if (event.type === "madlibs:nextRound") {
+          await sessionService.madlibsNextRound(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

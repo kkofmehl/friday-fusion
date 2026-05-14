@@ -22,6 +22,7 @@ import {
   type TriviaLoadingState,
   type TriviaQuestion,
   type BsCard,
+  type MadlibsBlankPrompt,
   type BsRank,
   type UnoActiveColor,
   type UnoCard
@@ -48,6 +49,12 @@ import {
   shuffledResponseCardIds
 } from "./applesToApplesCardLoader";
 import { shuffledBsDeck } from "./bsDeck";
+import {
+  fillMadlibTemplate,
+  madlibBlankCount,
+  pickMadlibTemplate,
+  type MadlibTemplate
+} from "./madlibsTemplates";
 import { shuffledUnoDeck } from "./unoDeck";
 import {
   advanceTurnAfterPlay,
@@ -368,6 +375,18 @@ type BsGameInternal = {
   finalScores: Record<string, number>;
 };
 
+type MadlibsGameInternal = {
+  id: string;
+  type: "madlibs";
+  status: "filling" | "reading";
+  template: MadlibTemplate;
+  usedTemplateIds: string[];
+  currentBlankIndex: number;
+  fillerParticipantIds: string[];
+  words: Array<string | null>;
+  readerParticipantId: string | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -380,7 +399,8 @@ type GameInternal =
   | PictionaryGameInternal
   | ApplesToApplesGameInternal
   | UnoGameInternal
-  | BsGameInternal;
+  | BsGameInternal
+  | MadlibsGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -775,6 +795,30 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
           : "playing"
     };
   }
+  if (game.type === "madlibs") {
+    const g = game as MadlibsGameInternal;
+    const template = g.template ?? pickMadlibTemplate([]);
+    const blankCount = madlibBlankCount(template);
+    const words =
+      Array.isArray(g.words) && g.words.length === blankCount
+        ? g.words.map((word) => (typeof word === "string" ? word : null))
+        : Array.from({ length: blankCount }, () => null);
+    const fillerParticipantIds =
+      Array.isArray(g.fillerParticipantIds) && g.fillerParticipantIds.length === blankCount
+        ? g.fillerParticipantIds
+        : Array.from({ length: blankCount }, () => "");
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      template,
+      status: g.status === "reading" ? "reading" : "filling",
+      currentBlankIndex: Math.max(0, Math.min(blankCount, Number(g.currentBlankIndex) || 0)),
+      words,
+      fillerParticipantIds,
+      readerParticipantId: g.readerParticipantId ?? null,
+      usedTemplateIds: Array.isArray(g.usedTemplateIds) ? g.usedTemplateIds : []
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -783,6 +827,30 @@ const UNO_MISS_CATCH_DELAY_MS = 2000;
 const BS_RANKS: BsRank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
 const bsCurrentRank = (game: BsGameInternal): BsRank => BS_RANKS[game.currentRankIndex % BS_RANKS.length]!;
+
+const madlibsBlankPrompts = (template: MadlibTemplate): MadlibsBlankPrompt[] =>
+  template.segments
+    .filter((segment): segment is { kind: "blank"; prompt: MadlibsBlankPrompt } => segment.kind === "blank")
+    .map((segment) => segment.prompt);
+
+const madlibsRotateFillers = (participantIds: string[], blankCount: number): string[] => {
+  if (participantIds.length === 0) {
+    return [];
+  }
+  return Array.from({ length: blankCount }, (_unused, index) => participantIds[index % participantIds.length]!);
+};
+
+const madlibsPickReader = (participantIds: string[], avoidParticipantId: string | null = null): string | null => {
+  if (participantIds.length === 0) {
+    return null;
+  }
+  const preferred =
+    avoidParticipantId && participantIds.length > 1
+      ? participantIds.filter((participantId) => participantId !== avoidParticipantId)
+      : participantIds;
+  const pool = preferred.length > 0 ? preferred : participantIds;
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+};
 
 const shuffleEntryIds = (ids: string[]): string[] => {
   const a = [...ids];
@@ -1602,6 +1670,25 @@ export class SessionService {
         finishedPlayerIds: [],
         finalScores: {}
       };
+    } else if (game === "madlibs") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Madlibs needs at least two active players.");
+      }
+      const template = pickMadlibTemplate([]);
+      const blankCount = madlibBlankCount(template);
+      const participantIds = actives.map((participant) => participant.id);
+      next = {
+        id: nanoid(6),
+        type: "madlibs",
+        status: "filling",
+        template,
+        usedTemplateIds: [template.id],
+        currentBlankIndex: 0,
+        fillerParticipantIds: madlibsRotateFillers(participantIds, blankCount),
+        words: Array.from({ length: blankCount }, () => null),
+        readerParticipantId: null
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -1771,6 +1858,11 @@ export class SessionService {
 
     const activeBs = session.games[0];
     if (activeBs?.type === "bs") {
+      session.games = [];
+    }
+
+    const activeMadlibs = session.games[0];
+    if (activeMadlibs?.type === "madlibs") {
       session.games = [];
     }
   }
@@ -4303,6 +4395,79 @@ export class SessionService {
     await this.persist();
   }
 
+  public async madlibsSubmitWord(sessionId: string, participantId: string, word: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "madlibs" || game.status !== "filling") {
+      throw new Error("Madlibs is not waiting for a submission.");
+    }
+    const nextIndex = game.currentBlankIndex;
+    if (nextIndex >= game.words.length) {
+      throw new Error("All Madlibs blanks are already filled.");
+    }
+    const expectedParticipantId = game.fillerParticipantIds[nextIndex];
+    if (expectedParticipantId !== participantId) {
+      throw new Error("It is not your turn to submit a word.");
+    }
+    const trimmedWord = word.trim();
+    if (!trimmedWord) {
+      throw new Error("Please enter a word.");
+    }
+    game.words[nextIndex] = trimmedWord;
+    game.currentBlankIndex += 1;
+    if (game.currentBlankIndex >= game.words.length) {
+      game.status = "reading";
+      const participants = activeParticipants(session).map((entry) => entry.id);
+      game.readerParticipantId = madlibsPickReader(participants);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async madlibsPassRead(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "madlibs" || game.status !== "reading") {
+      throw new Error("Madlibs is not in reading mode.");
+    }
+    if (game.readerParticipantId !== participantId) {
+      throw new Error("Only the current reader can pass.");
+    }
+    const participants = activeParticipants(session).map((entry) => entry.id);
+    game.readerParticipantId = madlibsPickReader(participants, participantId);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async madlibsNextRound(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((participant) => participant.id === participantId && participant.isHost)) {
+      throw new Error("Only the host can start the next Madlibs round.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "madlibs" || game.status !== "reading") {
+      throw new Error("Madlibs is not ready for the next round.");
+    }
+    const participants = activeParticipants(session).map((entry) => entry.id);
+    if (participants.length < 2) {
+      throw new Error("Madlibs needs at least two active players.");
+    }
+    const nextTemplate = pickMadlibTemplate(game.usedTemplateIds);
+    const blankCount = madlibBlankCount(nextTemplate);
+    game.status = "filling";
+    game.template = nextTemplate;
+    game.usedTemplateIds = [...game.usedTemplateIds, nextTemplate.id];
+    game.currentBlankIndex = 0;
+    game.fillerParticipantIds = madlibsRotateFillers(participants, blankCount);
+    game.words = Array.from({ length: blankCount }, () => null);
+    game.readerParticipantId = null;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -5421,6 +5586,56 @@ export class SessionService {
             submittedNonJudgeIds: submitted,
             allSubmissionsIn: submitted.length === nonJudges.length && nonJudges.length > 0,
             myHand: isJudge ? null : myHand
+          }
+        }
+      };
+    }
+
+    if (game.type === "madlibs") {
+      const prompts = madlibsBlankPrompts(game.template);
+      if (game.status === "filling") {
+        const currentPrompt = prompts[game.currentBlankIndex];
+        const currentFillerId = game.fillerParticipantIds[game.currentBlankIndex];
+        return {
+          ...base,
+          activeGame: "madlibs",
+          gameState: {
+            type: "madlibs",
+            state: {
+              status: "filling",
+              templateId: game.template.id,
+              templateTitle: game.template.title,
+              blankCount: prompts.length,
+              currentBlankIndex: game.currentBlankIndex,
+              currentPrompt: currentPrompt ?? "noun",
+              currentFillerId: currentFillerId ?? "",
+              filledCount: game.words.filter((word) => typeof word === "string" && word.trim().length > 0).length
+            }
+          }
+        };
+      }
+
+      const filledWords = game.words.map((word) => word ?? "");
+      const submissions = prompts.map((prompt, index) => ({
+        participantId: game.fillerParticipantIds[index] ?? "",
+        prompt,
+        word: filledWords[index] ?? ""
+      }));
+      const activeIds = activeParticipants(session).map((participant) => participant.id);
+      const readerParticipantId = game.readerParticipantId ?? activeIds[0] ?? "";
+      const canViewStory = Boolean(viewerParticipantId && viewerParticipantId === readerParticipantId);
+      return {
+        ...base,
+        activeGame: "madlibs",
+        gameState: {
+          type: "madlibs",
+          state: {
+            status: "reading",
+            templateId: game.template.id,
+            templateTitle: game.template.title,
+            filledStory: canViewStory ? fillMadlibTemplate(game.template, filledWords) : null,
+            readerParticipantId,
+            submissions: canViewStory ? submissions : []
           }
         }
       };

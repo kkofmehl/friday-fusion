@@ -13,6 +13,7 @@ import { PictionaryGame } from "../games/PictionaryGame";
 import { ApplesToApplesGame } from "../games/ApplesToApplesGame";
 import { UnoGame } from "../games/UnoGame";
 import { BsGame } from "../games/BsGame";
+import { MadlibsGame } from "../games/MadlibsGame";
 
 export function GameScreen({
   session,
@@ -93,6 +94,8 @@ export function GameScreen({
     ? { type: "game:start", payload: { game: "uno" } }
     : session.gameState?.type === "bs"
     ? { type: "game:start", payload: { game: "bs" } }
+    : session.gameState?.type === "madlibs"
+    ? { type: "game:start", payload: { game: "madlibs" } }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
 
   const renderGame = () => {
@@ -206,6 +209,16 @@ export function GameScreen({
           currentParticipantId={currentParticipantId}
           isHost={isHost}
           canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "madlibs") {
+      return (
+        <MadlibsGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
           send={send}
         />
       );

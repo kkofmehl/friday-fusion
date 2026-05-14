@@ -93,6 +93,12 @@ const GAMES: GameOption[] = [
     title: "BS",
     description: "Bluff your way through A-to-K declarations—others can believe you or call BS.",
     emoji: "🂠"
+  },
+  {
+    id: "madlibs",
+    title: "Madlibs",
+    description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",
+    emoji: "📝"
   }
 ];
 

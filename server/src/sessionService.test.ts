@@ -2023,4 +2023,134 @@ describe("SessionService", () => {
     expect(after.gameState.state.currentRank).toBe("2");
   });
 
+  it("Madlibs: requires at least two players to start", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(setup.service.startGame(host.sessionId, "madlibs")).rejects.toThrow(
+      "Madlibs needs at least two active players."
+    );
+  });
+
+  it("Madlibs: rotates fillers, reveals story, supports pass and next round", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    const g2 = await setup.service.joinSession(host.joinCode, "Guest 2");
+    await setup.service.startGame(host.sessionId, "madlibs");
+
+    let state = setup.service.getState(host.sessionId, host.participantId);
+    if (state.gameState?.type !== "madlibs" || state.gameState.state.status !== "filling") {
+      throw new Error("expected madlibs filling");
+    }
+
+    let submissionIndex = 0;
+    while (state.gameState.state.status === "filling") {
+      const currentFillerId = state.gameState.state.currentFillerId;
+      await setup.service.madlibsSubmitWord(host.sessionId, currentFillerId, `word-${submissionIndex}`);
+      submissionIndex += 1;
+      state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "madlibs") {
+        throw new Error("expected madlibs game state");
+      }
+    }
+
+    if (state.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading");
+    }
+
+    const participants = new Set([host.participantId, g1.participantId, g2.participantId]);
+    const initialReader = state.gameState.state.readerParticipantId;
+    expect(participants.has(initialReader)).toBe(true);
+    const readerView = setup.service.getState(host.sessionId, initialReader);
+    if (readerView.gameState?.type !== "madlibs" || readerView.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading for initial reader");
+    }
+    expect(readerView.gameState.state.filledStory).toContain("word-0");
+    expect(readerView.gameState.state.submissions.length).toBeGreaterThan(0);
+
+    const nonReader = [host.participantId, g1.participantId, g2.participantId].find((id) => id !== initialReader)!;
+    const hiddenView = setup.service.getState(host.sessionId, nonReader);
+    if (hiddenView.gameState?.type !== "madlibs" || hiddenView.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading for non-reader");
+    }
+    expect(hiddenView.gameState.state.filledStory).toBeNull();
+    expect(hiddenView.gameState.state.submissions).toEqual([]);
+
+    await setup.service.madlibsPassRead(host.sessionId, initialReader);
+    state = setup.service.getState(host.sessionId, host.participantId);
+    if (state.gameState?.type !== "madlibs" || state.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading after pass");
+    }
+    expect(state.gameState.state.readerParticipantId).not.toBe(initialReader);
+
+    const oldReaderView = setup.service.getState(host.sessionId, initialReader);
+    if (oldReaderView.gameState?.type !== "madlibs" || oldReaderView.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading for old reader");
+    }
+    expect(oldReaderView.gameState.state.filledStory).toBeNull();
+
+    const newReaderView = setup.service.getState(host.sessionId, state.gameState.state.readerParticipantId);
+    if (newReaderView.gameState?.type !== "madlibs" || newReaderView.gameState.state.status !== "reading") {
+      throw new Error("expected madlibs reading for new reader");
+    }
+    expect(newReaderView.gameState.state.filledStory).toContain("word-0");
+
+    const beforeTemplateId = state.gameState.state.templateId;
+    await setup.service.madlibsNextRound(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId, host.participantId);
+    if (state.gameState?.type !== "madlibs" || state.gameState.state.status !== "filling") {
+      throw new Error("expected madlibs filling after next round");
+    }
+    expect(state.gameState.state.templateId).not.toBe(beforeTemplateId);
+    expect(state.gameState.state.currentBlankIndex).toBe(0);
+    expect(state.gameState.state.filledCount).toBe(0);
+  });
+
+  it("Madlibs: rejects submit/pass/next-round from wrong participant", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    const g2 = await setup.service.joinSession(host.joinCode, "Guest 2");
+    await setup.service.startGame(host.sessionId, "madlibs");
+
+    let state = setup.service.getState(host.sessionId, host.participantId);
+    if (state.gameState?.type !== "madlibs" || state.gameState.state.status !== "filling") {
+      throw new Error("expected madlibs filling");
+    }
+    const currentFillerId = state.gameState.state.currentFillerId;
+    const wrongSubmitter = [host.participantId, g1.participantId, g2.participantId].find((id) => id !== currentFillerId)!;
+    await expect(setup.service.madlibsSubmitWord(host.sessionId, wrongSubmitter, "bad")).rejects.toThrow(
+      "It is not your turn to submit a word."
+    );
+
+    while (state.gameState.state.status === "filling") {
+      await setup.service.madlibsSubmitWord(
+        host.sessionId,
+        state.gameState.state.currentFillerId,
+        `ok-${state.gameState.state.currentBlankIndex}`
+      );
+      state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "madlibs") {
+        throw new Error("expected madlibs");
+      }
+    }
+
+    if (state.gameState.state.status !== "reading") {
+      throw new Error("expected reading");
+    }
+    const readingState = state.gameState.state;
+    const nonReader = [host.participantId, g1.participantId, g2.participantId].find(
+      (id) => id !== readingState.readerParticipantId
+    )!;
+    await expect(setup.service.madlibsPassRead(host.sessionId, nonReader)).rejects.toThrow(
+      "Only the current reader can pass."
+    );
+    await expect(setup.service.madlibsNextRound(host.sessionId, g1.participantId)).rejects.toThrow(
+      "Only the host can start the next Madlibs round."
+    );
+  });
+
 });

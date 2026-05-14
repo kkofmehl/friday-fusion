@@ -12,7 +12,8 @@ export const gameTypeSchema = z.enum([
   "pictionary",
   "applesToApples",
   "uno",
-  "bs"
+  "bs",
+  "madlibs"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -653,6 +654,57 @@ export const bsStateSchema = z.discriminatedUnion("status", [
 ]);
 export type BsState = z.infer<typeof bsStateSchema>;
 
+export const madlibsBlankPromptSchema = z.enum([
+  "noun",
+  "plural noun",
+  "adjective",
+  "verb",
+  "past tense verb",
+  "adverb",
+  "place",
+  "animal",
+  "person",
+  "body part",
+  "food",
+  "number",
+  "emotion",
+  "silly word",
+  "occupation",
+  "color"
+]);
+export type MadlibsBlankPrompt = z.infer<typeof madlibsBlankPromptSchema>;
+
+export const madlibsSubmissionSchema = z.object({
+  participantId: z.string(),
+  prompt: madlibsBlankPromptSchema,
+  word: z.string().min(1)
+});
+export type MadlibsSubmission = z.infer<typeof madlibsSubmissionSchema>;
+
+export const madlibsStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("filling"),
+    templateId: z.string(),
+    templateTitle: z.string(),
+    blankCount: z.number().int().positive(),
+    currentBlankIndex: z.number().int().nonnegative(),
+    currentPrompt: madlibsBlankPromptSchema,
+    currentFillerId: z.string(),
+    filledCount: z.number().int().nonnegative()
+  }),
+  z.object({
+    status: z.literal("reading"),
+    templateId: z.string(),
+    templateTitle: z.string(),
+    /** Only visible to the current reader. */
+    filledStory: z.string().min(1).nullable(),
+    readerParticipantId: z.string(),
+    /** Only populated for the current reader. */
+    submissions: z.array(madlibsSubmissionSchema)
+  })
+]);
+export type MadlibsState = z.infer<typeof madlibsStateSchema>;
+
 export const unoColorSchema = z.enum(["red", "yellow", "green", "blue", "wild"]);
 export type UnoColor = z.infer<typeof unoColorSchema>;
 
@@ -750,6 +802,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("bs"),
     state: bsStateSchema
+  }),
+  z.object({
+    type: z.literal("madlibs"),
+    state: madlibsStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1017,7 +1073,13 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("bs:resolveChallenge"),
     payload: z.object({ truth: z.boolean() })
-  })
+  }),
+  z.object({
+    type: z.literal("madlibs:submitWord"),
+    payload: z.object({ word: z.string().trim().min(1).max(60) })
+  }),
+  z.object({ type: z.literal("madlibs:passRead"), payload: z.object({}) }),
+  z.object({ type: z.literal("madlibs:nextRound"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

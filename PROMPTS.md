@@ -38,3 +38,7 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-13:** BS game after a BS call: when UI shows revealed cards, also show current call in the same summary (e.g. call rank + revealed cards); host settlement hints—highlight “That was BS” if any revealed rank ≠ declared `currentRank`, else highlight “Truth was told”; Vitest in `BsGame.test.tsx`; minimal CSS.
 
 **2026-05-13:** Guess the image: host cannot save settings (investigate/fix).
+
+**2026-05-13:** Madlibs for Friday Fusion — implement attached plan end-to-end: new `madlibs` game type, ~20 templates, server rotation/submission/reveal/pass/next-round flow, lobby/game wiring, UI + styles, and tests; do not edit the plan file.
+
+**2026-05-14:** Madlibs bug fix: in reading mode, the filled story should only be visible to the active reader; when pass is used, move reading to a different player (not the one who just passed) and show story only to the new reader.

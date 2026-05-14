@@ -2417,6 +2417,57 @@ label {
   font-weight: 600;
 }
 
+/* Madlibs */
+.madlibs-turn-line {
+  margin: 0;
+  color: var(--slate-700);
+}
+
+.madlibs-form {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.madlibs-waiting {
+  margin-top: 0.75rem;
+  color: var(--slate-600);
+}
+
+.madlibs-reader {
+  margin: 0.25rem 0 0.65rem;
+  color: var(--slate-700);
+}
+
+.madlibs-story {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  line-height: 1.45;
+  color: var(--slate-900);
+}
+
+.madlibs-submissions {
+  margin: 0.85rem 0 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.madlibs-submissions li span {
+  color: var(--slate-600);
+}
+
+.madlibs-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 /* ============================================================
    Caption This
    ============================================================ */
