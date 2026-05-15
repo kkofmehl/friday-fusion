@@ -135,6 +135,18 @@ export function PictionaryGame({
   };
 
   if (state.status === "teamSetup") {
+    if (!isHost) {
+      return (
+        <section className="card pictionary-setup-card">
+          <header className="card-head">
+            <h2>Pictionary — teams</h2>
+          </header>
+          <p className="pictionary-setup-lead">
+            Only the host can assign teams and start drawing. Wait here until the round begins.
+          </p>
+        </section>
+      );
+    }
     const roster = activeParticipants(session.participants);
     return (
       <section className="card pictionary-setup-card">
@@ -154,55 +166,47 @@ export function PictionaryGame({
                   {p.displayName}
                   {p.isHost ? " (host)" : ""}
                 </span>
-                {isHost ? (
-                  <div className="pictionary-team-pick-actions" role="group" aria-label={`Team for ${p.displayName}`}>
-                    <label className="pictionary-team-radio">
-                      <input
-                        type="radio"
-                        name={`team-${p.id}`}
-                        checked={onA}
-                        onChange={() => setPlayerTeam(p.id, "A")}
-                      />
-                      Team A
-                    </label>
-                    <label className="pictionary-team-radio">
-                      <input
-                        type="radio"
-                        name={`team-${p.id}`}
-                        checked={onB}
-                        onChange={() => setPlayerTeam(p.id, "B")}
-                      />
-                      Team B
-                    </label>
-                    <label className="pictionary-team-radio">
-                      <input
-                        type="radio"
-                        name={`team-${p.id}`}
-                        checked={!onA && !onB}
-                        onChange={() => setPlayerTeam(p.id, "none")}
-                      />
-                      Unassigned
-                    </label>
-                  </div>
-                ) : (
-                  <span className="pictionary-team-pick-hint">
-                    {onA ? "Team A" : onB ? "Team B" : "Not assigned yet"}
-                  </span>
-                )}
+                <div className="pictionary-team-pick-actions" role="group" aria-label={`Team for ${p.displayName}`}>
+                  <label className="pictionary-team-radio">
+                    <input
+                      type="radio"
+                      name={`team-${p.id}`}
+                      checked={onA}
+                      onChange={() => setPlayerTeam(p.id, "A")}
+                    />
+                    Team A
+                  </label>
+                  <label className="pictionary-team-radio">
+                    <input
+                      type="radio"
+                      name={`team-${p.id}`}
+                      checked={onB}
+                      onChange={() => setPlayerTeam(p.id, "B")}
+                    />
+                    Team B
+                  </label>
+                  <label className="pictionary-team-radio">
+                    <input
+                      type="radio"
+                      name={`team-${p.id}`}
+                      checked={!onA && !onB}
+                      onChange={() => setPlayerTeam(p.id, "none")}
+                    />
+                    Unassigned
+                  </label>
+                </div>
               </li>
             );
           })}
         </ul>
-        {isHost && (
-          <div className="pictionary-setup-actions">
-            <button type="button" className="btn btn-secondary" onClick={saveTeams}>
-              Save team lineup
-            </button>
-            <button type="button" className="btn btn-primary" onClick={beginPlay}>
-              Start drawing
-            </button>
-          </div>
-        )}
+        <div className="pictionary-setup-actions">
+          <button type="button" className="btn btn-secondary" onClick={saveTeams}>
+            Save team lineup
+          </button>
+          <button type="button" className="btn btn-primary" onClick={beginPlay}>
+            Start drawing
+          </button>
+        </div>
       </section>
     );
   }

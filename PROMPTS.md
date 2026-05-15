@@ -42,3 +42,15 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-13:** Madlibs for Friday Fusion — implement attached plan end-to-end: new `madlibs` game type, ~20 templates, server rotation/submission/reveal/pass/next-round flow, lobby/game wiring, UI + styles, and tests; do not edit the plan file.
 
 **2026-05-14:** Madlibs bug fix: in reading mode, the filled story should only be visible to the active reader; when pass is used, move reading to a different player (not the one who just passed) and show story only to the new reader.
+
+**2026-05-14:** Catch Phrase in Friday Fusion — implement the attached plan without editing the plan file: add a two-team (min 4 players) game with alternating device passing, hidden random timer (20–90s), buzzer scoring to the non-holding team (+1 per member plus +1 team score), post-buzzer handoff to next logical player on the other team with holder tap to start next word, and three-stage slow/medium/fast beep + subtle blink signal support.
+
+**2026-05-14:** Catch Phrase team setup bug: assigning 2+2 in the UI but clicking Start without Save first made the server reject beginPlay (empty persisted teams). Fix Start so it always sends the current draft with `catchPhrase:setTeams` before `catchPhrase:beginPlay`; clarify copy; add `CatchPhraseGame.test.tsx`.
+
+**2026-05-14:** Team assignment screen should only be available to the host (Catch Phrase and Pictionary team-setup phases).
+
+**2026-05-14:** Catch Phrase: timer/beep should speed up over a round (not reset every pass); make pass button very large full-width; green background when device holder’s turn like BS/Uno; optional sound off toggle; fix visual pulse for beeping.
+
+**2026-05-14:** Catch Phrase: refactor timer into three explicit random-length phases (phase 1 slow beeps 20–45s, phase 2 medium 20–45s, phase 3 fast 8–20s) instead of one total timer with percentage thresholds; make phase-1 pulse circle green for contrast.
+
+**2026-05-14:** Catch Phrase: double-check buzzer scoring — confirm non–clue-giving team gets points (code was already correct; clarify naming + test that holder team scores stay flat).

@@ -1828,6 +1828,194 @@ describe("SessionService", () => {
     expect(fin.participants.every((p) => p.score === 0)).toBe(true);
   });
 
+  it("Catch Phrase: requires four active players to start", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest 1");
+    await setup.service.joinSession(host.joinCode, "Guest 2");
+    await expect(setup.service.startGame(host.sessionId, "catchPhrase")).rejects.toThrow(
+      "Catch Phrase needs at least four active players."
+    );
+  });
+
+  it("Catch Phrase: only holder can start/pass and only holder sees phrase", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    const g2 = await setup.service.joinSession(host.joinCode, "Guest 2");
+    const g3 = await setup.service.joinSession(host.joinCode, "Guest 3");
+
+    await setup.service.startGame(host.sessionId, "catchPhrase");
+    await expect(
+      setup.service.catchPhraseSetTeams(host.sessionId, host.participantId, [host.participantId], [
+        g1.participantId,
+        g2.participantId,
+        g3.participantId
+      ])
+    ).rejects.toThrow("Catch Phrase needs at least two players on each team.");
+
+    await setup.service.catchPhraseSetTeams(
+      host.sessionId,
+      host.participantId,
+      [host.participantId, g2.participantId],
+      [g1.participantId, g3.participantId]
+    );
+    await setup.service.catchPhraseBeginPlay(host.sessionId, host.participantId);
+    const waiting = setup.service.getState(host.sessionId);
+    if (waiting.gameState?.type !== "catchPhrase" || waiting.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase playing");
+    }
+    if (waiting.gameState.state.roundPhase !== "awaitingRoundStart") {
+      throw new Error("expected awaiting round start");
+    }
+    const holderId = waiting.gameState.state.holderId;
+    const nonHolderId = [host.participantId, g1.participantId, g2.participantId, g3.participantId].find(
+      (id) => id !== holderId
+    );
+    if (!nonHolderId) {
+      throw new Error("expected non-holder id");
+    }
+    await expect(setup.service.catchPhraseStartRound(host.sessionId, nonHolderId)).rejects.toThrow(
+      "Only the current holder can start this round."
+    );
+    await setup.service.catchPhraseStartRound(host.sessionId, holderId);
+
+    const holderView = setup.service.getState(host.sessionId, holderId);
+    const otherView = setup.service.getState(host.sessionId, nonHolderId);
+    if (holderView.gameState?.type !== "catchPhrase" || holderView.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase holder view");
+    }
+    if (otherView.gameState?.type !== "catchPhrase" || otherView.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase other view");
+    }
+    if (holderView.gameState.state.roundPhase !== "live" || otherView.gameState.state.roundPhase !== "live") {
+      throw new Error("expected live round");
+    }
+    expect(holderView.gameState.state.myPhrase).toBeTruthy();
+    expect(otherView.gameState.state.myPhrase).toBeNull();
+
+    const liveHolder = holderView.gameState.state;
+    if (liveHolder.roundPhase !== "live") {
+      throw new Error("expected live for phase check");
+    }
+    const phase1Ms = liveHolder.slowPhaseEndsAt - liveHolder.roundStartedAt;
+    const phase2Ms = liveHolder.mediumPhaseEndsAt - liveHolder.slowPhaseEndsAt;
+    const phase3Ms = liveHolder.roundEndsAt - liveHolder.mediumPhaseEndsAt;
+    expect(phase1Ms).toBeGreaterThanOrEqual(20_000);
+    expect(phase1Ms).toBeLessThanOrEqual(45_000);
+    expect(phase2Ms).toBeGreaterThanOrEqual(20_000);
+    expect(phase2Ms).toBeLessThanOrEqual(45_000);
+    expect(phase3Ms).toBeGreaterThanOrEqual(8_000);
+    expect(phase3Ms).toBeLessThanOrEqual(20_000);
+
+    await expect(setup.service.catchPhraseGuessed(host.sessionId, nonHolderId)).rejects.toThrow(
+      "Only the current holder can pass."
+    );
+    const firstRoundEndsAt = holderView.gameState.state.roundEndsAt;
+    const firstRoundStartedAt = holderView.gameState.state.roundStartedAt;
+    const firstSlowEndsAt = holderView.gameState.state.slowPhaseEndsAt;
+    const firstMediumEndsAt = holderView.gameState.state.mediumPhaseEndsAt;
+    await setup.service.catchPhraseGuessed(host.sessionId, holderId);
+    const afterPass = setup.service.getState(host.sessionId);
+    if (afterPass.gameState?.type !== "catchPhrase" || afterPass.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase after pass");
+    }
+    if (afterPass.gameState.state.roundPhase !== "live") {
+      throw new Error("expected live after pass");
+    }
+    expect(afterPass.gameState.state.holderId).not.toBe(holderId);
+    expect(afterPass.gameState.state.roundEndsAt).toBe(firstRoundEndsAt);
+    expect(afterPass.gameState.state.roundStartedAt).toBe(firstRoundStartedAt);
+    expect(afterPass.gameState.state.slowPhaseEndsAt).toBe(firstSlowEndsAt);
+    expect(afterPass.gameState.state.mediumPhaseEndsAt).toBe(firstMediumEndsAt);
+  });
+
+  it("Catch Phrase: buzzer scores non-holding team and waits for next holder tap", async () => {
+    vi.useFakeTimers();
+    try {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+      const g2 = await setup.service.joinSession(host.joinCode, "Guest 2");
+      const g3 = await setup.service.joinSession(host.joinCode, "Guest 3");
+
+      await setup.service.startGame(host.sessionId, "catchPhrase");
+      await setup.service.catchPhraseSetTeams(
+        host.sessionId,
+        host.participantId,
+        [host.participantId, g2.participantId],
+        [g1.participantId, g3.participantId]
+      );
+      await setup.service.catchPhraseBeginPlay(host.sessionId, host.participantId);
+      const beforeStart = setup.service.getState(host.sessionId);
+      if (beforeStart.gameState?.type !== "catchPhrase" || beforeStart.gameState.state.status !== "playing") {
+        throw new Error("expected catchPhrase before start");
+      }
+      const initialHolderId = beforeStart.gameState.state.holderId;
+      await setup.service.catchPhraseStartRound(host.sessionId, initialHolderId);
+      const liveState = setup.service.getState(host.sessionId);
+      if (liveState.gameState?.type !== "catchPhrase" || liveState.gameState.state.status !== "playing") {
+        throw new Error("expected catchPhrase live");
+      }
+      if (liveState.gameState.state.roundPhase !== "live") {
+        throw new Error("expected live phase");
+      }
+      const scoringTeamIds =
+        liveState.gameState.state.teamAIds.includes(initialHolderId)
+          ? liveState.gameState.state.teamBIds
+          : liveState.gameState.state.teamAIds;
+      const holderTeamIds = liveState.gameState.state.teamAIds.includes(initialHolderId)
+        ? liveState.gameState.state.teamAIds
+        : liveState.gameState.state.teamBIds;
+      const scoringTeam: "A" | "B" = liveState.gameState.state.teamAIds.includes(initialHolderId) ? "B" : "A";
+      const holderTeam: "A" | "B" = liveState.gameState.state.teamAIds.includes(initialHolderId) ? "A" : "B";
+      const beforeScores = new Map(liveState.participants.map((p) => [p.id, p.score]));
+      const delay = Math.max(0, liveState.gameState.state.roundEndsAt - Date.now()) + 10;
+      await vi.advanceTimersByTimeAsync(delay);
+      await vi.runOnlyPendingTimersAsync();
+
+      const timedOut = setup.service.getState(host.sessionId);
+      if (timedOut.gameState?.type !== "catchPhrase" || timedOut.gameState.state.status !== "playing") {
+        throw new Error("expected catchPhrase after timeout");
+      }
+      if (timedOut.gameState.state.roundPhase !== "awaitingRoundStart") {
+        throw new Error("expected awaiting phase after timeout");
+      }
+      for (const id of scoringTeamIds) {
+        const after = timedOut.participants.find((p) => p.id === id)?.score ?? 0;
+        expect(after).toBe((beforeScores.get(id) ?? 0) + 1);
+      }
+      for (const id of holderTeamIds) {
+        const after = timedOut.participants.find((p) => p.id === id)?.score ?? 0;
+        expect(after).toBe(beforeScores.get(id) ?? 0);
+      }
+      expect(timedOut.gameState.state.teamScores[scoringTeam]).toBe(1);
+      expect(timedOut.gameState.state.teamScores[holderTeam]).toBe(0);
+
+      const nextHolder = timedOut.gameState.state.holderId;
+      const someoneElse = [host.participantId, g1.participantId, g2.participantId, g3.participantId].find(
+        (id) => id !== nextHolder
+      );
+      if (!someoneElse) {
+        throw new Error("expected someoneElse");
+      }
+      await expect(setup.service.catchPhraseStartRound(host.sessionId, someoneElse)).rejects.toThrow(
+        "Only the current holder can start this round."
+      );
+      await setup.service.catchPhraseStartRound(host.sessionId, nextHolder);
+      const restarted = setup.service.getState(host.sessionId);
+      if (restarted.gameState?.type !== "catchPhrase" || restarted.gameState.state.status !== "playing") {
+        throw new Error("expected restarted catchPhrase");
+      }
+      expect(restarted.gameState.state.roundPhase).toBe("live");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("host can bench a guest and inactive guests cannot submit trivia answers", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

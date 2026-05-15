@@ -2779,6 +2779,190 @@ label {
   color: var(--slate-700);
 }
 
+/* Catch Phrase */
+.catchphrase-setup-card {
+  max-width: 42rem;
+}
+
+.catchphrase-setup-lead {
+  margin: 0 0 1rem;
+  color: var(--slate-600);
+}
+
+.catchphrase-team-summary {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  color: var(--slate-700);
+}
+
+.catchphrase-card {
+  max-width: 44rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.catchphrase-card--playing {
+  max-width: none;
+  width: 100%;
+  align-self: stretch;
+  flex: 1;
+  min-height: min(70vh, 36rem);
+}
+
+.catchphrase-card-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.catchphrase-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--slate-600);
+  cursor: pointer;
+  user-select: none;
+}
+
+.catchphrase-sound-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--sky-600);
+}
+
+.catchphrase-play-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.catchphrase-play-surface.game-area-turn {
+  padding: 0.55rem 0.65rem 0.85rem;
+}
+
+.catchphrase-score {
+  display: flex;
+  gap: 1rem;
+  font-weight: 700;
+  color: var(--slate-700);
+}
+
+.catchphrase-meta {
+  margin: 0;
+}
+
+.catchphrase-meta-subtle {
+  font-size: 0.92rem;
+  color: var(--slate-600);
+}
+
+.catchphrase-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.catchphrase-signal {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+}
+
+.catchphrase-signal--slow {
+  background: var(--emerald-600);
+  animation: catchphrase-signal-breathe 2s ease-in-out infinite;
+}
+
+.catchphrase-signal--medium {
+  background: var(--amber-500);
+  animation: catchphrase-signal-breathe 1s ease-in-out infinite;
+}
+
+.catchphrase-signal--fast {
+  background: var(--rose-500);
+  animation: catchphrase-signal-breathe 0.35s ease-in-out infinite;
+}
+
+@keyframes catchphrase-signal-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+.catchphrase-signal-label {
+  font-size: 0.9rem;
+  color: var(--slate-600);
+}
+
+.catchphrase-help {
+  margin: 0;
+  color: var(--slate-700);
+}
+
+.catchphrase-phrase-wrap {
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  background: var(--slate-50);
+}
+
+.catchphrase-phrase {
+  margin: 0.6rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--slate-900);
+}
+
+.catchphrase-phrase.is-hidden {
+  color: var(--slate-500);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.catchphrase-actions {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  margin-top: auto;
+  width: 100%;
+}
+
+.catchphrase-actions .btn {
+  width: 100%;
+}
+
+.catchphrase-pass-wide {
+  width: 100%;
+  min-height: 5.25rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.catchphrase-winner {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
 /* Shared “your turn” emphasis for turn-based card games */
 .game-area-turn {
   border-radius: 0.65rem;

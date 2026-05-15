@@ -2,6 +2,14 @@ import { nanoid } from "nanoid";
 import {
   APPLES_TO_APPLES_FINITE_ROUNDS,
   APPLES_TO_APPLES_HAND_SIZE,
+  CATCH_PHRASE_MIN_PLAYERS,
+  CATCH_PHRASE_PHASE1_MAX_MS,
+  CATCH_PHRASE_PHASE1_MIN_MS,
+  CATCH_PHRASE_PHASE2_MAX_MS,
+  CATCH_PHRASE_PHASE2_MIN_MS,
+  CATCH_PHRASE_PHASE3_MAX_MS,
+  CATCH_PHRASE_PHASE3_MIN_MS,
+  CATCH_PHRASE_WIN_SCORE,
   UNO_HAND_SIZE,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
@@ -28,6 +36,7 @@ import {
   type UnoCard
 } from "../../shared/contracts";
 import { pickPictionaryClue } from "./pictionaryClues";
+import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { pickGuessWhoSaidItQuestions } from "./guessWhoSaidItQuestionLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
@@ -387,6 +396,26 @@ type MadlibsGameInternal = {
   readerParticipantId: string | null;
 };
 
+type CatchPhraseGameInternal = {
+  id: string;
+  type: "catchPhrase";
+  status: "teamSetup" | "playing" | "finished";
+  roundPhase: "awaitingRoundStart" | "live" | null;
+  teamAIds: string[];
+  teamBIds: string[];
+  teamScores: { A: number; B: number };
+  passOrder: string[];
+  holderIndex: number | null;
+  usedClueIds: string[];
+  currentClueId: string | null;
+  currentPhrase: string | null;
+  roundStartedAt: number | null;
+  slowPhaseEndsAt: number | null;
+  mediumPhaseEndsAt: number | null;
+  roundEndsAt: number | null;
+  winnerTeam: "A" | "B" | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -400,7 +429,8 @@ type GameInternal =
   | ApplesToApplesGameInternal
   | UnoGameInternal
   | BsGameInternal
-  | MadlibsGameInternal;
+  | MadlibsGameInternal
+  | CatchPhraseGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -819,6 +849,45 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       usedTemplateIds: Array.isArray(g.usedTemplateIds) ? g.usedTemplateIds : []
     };
   }
+  if (game.type === "catchPhrase") {
+    const g = game as CatchPhraseGameInternal;
+    const roundStartedAt = g.roundStartedAt ?? null;
+    const roundEndsAt = g.roundEndsAt ?? null;
+    let slowPhaseEndsAt = typeof g.slowPhaseEndsAt === "number" ? g.slowPhaseEndsAt : null;
+    let mediumPhaseEndsAt = typeof g.mediumPhaseEndsAt === "number" ? g.mediumPhaseEndsAt : null;
+    if (
+      roundStartedAt !== null
+      && roundEndsAt !== null
+      && roundEndsAt > roundStartedAt
+      && (slowPhaseEndsAt === null || mediumPhaseEndsAt === null)
+    ) {
+      const span = roundEndsAt - roundStartedAt;
+      slowPhaseEndsAt = roundStartedAt + Math.floor(span / 3);
+      mediumPhaseEndsAt = roundStartedAt + Math.floor((2 * span) / 3);
+    }
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      status: g.status === "teamSetup" || g.status === "playing" || g.status === "finished" ? g.status : "teamSetup",
+      roundPhase: g.roundPhase === "awaitingRoundStart" || g.roundPhase === "live" ? g.roundPhase : null,
+      teamAIds: Array.isArray(g.teamAIds) ? g.teamAIds : [],
+      teamBIds: Array.isArray(g.teamBIds) ? g.teamBIds : [],
+      teamScores: {
+        A: Math.max(0, Number(g.teamScores?.A) || 0),
+        B: Math.max(0, Number(g.teamScores?.B) || 0)
+      },
+      passOrder: Array.isArray(g.passOrder) ? g.passOrder : [],
+      holderIndex: typeof g.holderIndex === "number" ? g.holderIndex : null,
+      usedClueIds: Array.isArray(g.usedClueIds) ? g.usedClueIds : [],
+      currentClueId: g.currentClueId ?? null,
+      currentPhrase: g.currentPhrase ?? null,
+      roundStartedAt,
+      slowPhaseEndsAt,
+      mediumPhaseEndsAt,
+      roundEndsAt,
+      winnerTeam: g.winnerTeam === "A" || g.winnerTeam === "B" ? g.winnerTeam : null
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -972,6 +1041,101 @@ const validatePictionaryTeamRoster = (
   }
 };
 
+const validateCatchPhraseTeamRoster = (
+  session: SessionInternal,
+  teamAIds: string[],
+  teamBIds: string[]
+): void => {
+  const activeIds = new Set(activeParticipants(session).map((p) => p.id));
+  const a = new Set(teamAIds);
+  const b = new Set(teamBIds);
+  if (activeIds.size < CATCH_PHRASE_MIN_PLAYERS) {
+    throw new Error("Catch Phrase needs at least four active players.");
+  }
+  if (teamAIds.length < 2 || teamBIds.length < 2) {
+    throw new Error("Catch Phrase needs at least two players on each team.");
+  }
+  for (const id of teamAIds) {
+    if (b.has(id)) {
+      throw new Error("A player cannot be on both teams.");
+    }
+  }
+  if (a.size !== teamAIds.length || b.size !== teamBIds.length) {
+    throw new Error("Duplicate players on a team are not allowed.");
+  }
+  const union = new Set([...teamAIds, ...teamBIds]);
+  if (union.size !== activeIds.size || ![...activeIds].every((id) => union.has(id))) {
+    throw new Error("Each active player must be assigned to exactly one team.");
+  }
+};
+
+const catchPhraseTeamForParticipant = (game: CatchPhraseGameInternal, participantId: string): "A" | "B" | null => {
+  if (game.teamAIds.includes(participantId)) {
+    return "A";
+  }
+  if (game.teamBIds.includes(participantId)) {
+    return "B";
+  }
+  return null;
+};
+
+const buildCatchPhrasePassOrder = (
+  session: SessionInternal,
+  teamAIds: string[],
+  teamBIds: string[]
+): string[] => {
+  const activeOrder = activeParticipants(session).map((p) => p.id);
+  const setA = new Set(teamAIds);
+  const setB = new Set(teamBIds);
+  const orderedA = activeOrder.filter((id) => setA.has(id));
+  const orderedB = activeOrder.filter((id) => setB.has(id));
+  const out: string[] = [];
+  const maxLen = Math.max(orderedA.length, orderedB.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    if (orderedA[i]) {
+      out.push(orderedA[i]);
+    }
+    if (orderedB[i]) {
+      out.push(orderedB[i]);
+    }
+  }
+  return out;
+};
+
+const catchPhraseRandomInclusiveMs = (minMs: number, maxMs: number): number =>
+  minMs + Math.floor(Math.random() * (maxMs - minMs + 1));
+
+const catchPhraseRandomPhaseBoundaries = (
+  now: number
+): { roundStartedAt: number; slowPhaseEndsAt: number; mediumPhaseEndsAt: number; roundEndsAt: number } => {
+  const d1 = catchPhraseRandomInclusiveMs(CATCH_PHRASE_PHASE1_MIN_MS, CATCH_PHRASE_PHASE1_MAX_MS);
+  const d2 = catchPhraseRandomInclusiveMs(CATCH_PHRASE_PHASE2_MIN_MS, CATCH_PHRASE_PHASE2_MAX_MS);
+  const d3 = catchPhraseRandomInclusiveMs(CATCH_PHRASE_PHASE3_MIN_MS, CATCH_PHRASE_PHASE3_MAX_MS);
+  const roundStartedAt = now;
+  const slowPhaseEndsAt = now + d1;
+  const mediumPhaseEndsAt = now + d1 + d2;
+  const roundEndsAt = now + d1 + d2 + d3;
+  return { roundStartedAt, slowPhaseEndsAt, mediumPhaseEndsAt, roundEndsAt };
+};
+
+const nextCatchPhraseHolderOnTeam = (
+  game: CatchPhraseGameInternal,
+  startIndex: number,
+  team: "A" | "B"
+): number | null => {
+  if (game.passOrder.length === 0) {
+    return null;
+  }
+  for (let step = 1; step <= game.passOrder.length; step += 1) {
+    const idx = (startIndex + step) % game.passOrder.length;
+    const pid = game.passOrder[idx]!;
+    if (catchPhraseTeamForParticipant(game, pid) === team) {
+      return idx;
+    }
+  }
+  return null;
+};
+
 const pickPictionaryDrawer = (memberIds: string[], drawCounts: Record<string, number>): string => {
   if (memberIds.length === 0) {
     throw new Error("No players on that team.");
@@ -1023,6 +1187,7 @@ export class SessionService {
   private onSessionUpdated?: (sessionId: string) => void;
   private readonly guessImageResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pictionaryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly catchPhraseResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -1339,6 +1504,9 @@ export class SessionService {
     }
     if (previousGame?.type === "pictionary") {
       this.clearPictionaryTimer(sessionId);
+    }
+    if (previousGame?.type === "catchPhrase") {
+      this.clearCatchPhraseTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -1689,6 +1857,31 @@ export class SessionService {
         words: Array.from({ length: blankCount }, () => null),
         readerParticipantId: null
       };
+    } else if (game === "catchPhrase") {
+      const actives = activeParticipants(session);
+      if (actives.length < CATCH_PHRASE_MIN_PLAYERS) {
+        throw new Error("Catch Phrase needs at least four active players.");
+      }
+      this.clearCatchPhraseTimer(sessionId);
+      next = {
+        id: nanoid(6),
+        type: "catchPhrase",
+        status: "teamSetup",
+        roundPhase: null,
+        teamAIds: [],
+        teamBIds: [],
+        teamScores: { A: 0, B: 0 },
+        passOrder: [],
+        holderIndex: null,
+        usedClueIds: [],
+        currentClueId: null,
+        currentPhrase: null,
+        roundStartedAt: null,
+        slowPhaseEndsAt: null,
+        mediumPhaseEndsAt: null,
+        roundEndsAt: null,
+        winnerTeam: null
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -1720,6 +1913,9 @@ export class SessionService {
     if (active?.type === "pictionary") {
       this.clearPictionaryTimer(sessionId);
     }
+    if (active?.type === "catchPhrase") {
+      this.clearCatchPhraseTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -1734,6 +1930,7 @@ export class SessionService {
     assertParticipantActiveForGameplay(session, participantId);
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
+    this.clearCatchPhraseTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -1748,6 +1945,7 @@ export class SessionService {
     }
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
+    this.clearCatchPhraseTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -1865,6 +2063,12 @@ export class SessionService {
     if (activeMadlibs?.type === "madlibs") {
       session.games = [];
     }
+
+    const activeCatchPhrase = session.games[0];
+    if (activeCatchPhrase?.type === "catchPhrase") {
+      this.clearCatchPhraseTimer(sessionId);
+      session.games = [];
+    }
   }
 
   public async removeParticipant(
@@ -1888,6 +2092,7 @@ export class SessionService {
     if (session.participants.length === 0) {
       this.clearGuessImageTimer(sessionId);
       this.clearPictionaryTimer(sessionId);
+      this.clearCatchPhraseTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -4468,6 +4673,233 @@ export class SessionService {
     await this.persist();
   }
 
+  private clearCatchPhraseTimer(sessionId: string): void {
+    const existing = this.catchPhraseResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.catchPhraseResolveTimers.delete(sessionId);
+    }
+  }
+
+  private catchPhraseCurrentHolderId(game: CatchPhraseGameInternal): string | null {
+    if (game.holderIndex === null || game.holderIndex < 0 || game.holderIndex >= game.passOrder.length) {
+      return null;
+    }
+    return game.passOrder[game.holderIndex] ?? null;
+  }
+
+  /** New phrase only; used when passing—timer continues until buzz. */
+  private catchPhraseAssignNewClue(game: CatchPhraseGameInternal): void {
+    const clue = pickCatchPhraseClue(game.usedClueIds);
+    if (!clue) {
+      throw new Error("No Catch Phrase clues available.");
+    }
+    if (game.usedClueIds.includes(clue.id)) {
+      game.usedClueIds = [];
+    }
+    game.usedClueIds.push(clue.id);
+    game.currentClueId = clue.id;
+    game.currentPhrase = clue.text;
+  }
+
+  private catchPhraseStartLiveRound(game: CatchPhraseGameInternal): void {
+    this.catchPhraseAssignNewClue(game);
+    const now = Date.now();
+    const phases = catchPhraseRandomPhaseBoundaries(now);
+    game.roundStartedAt = phases.roundStartedAt;
+    game.slowPhaseEndsAt = phases.slowPhaseEndsAt;
+    game.mediumPhaseEndsAt = phases.mediumPhaseEndsAt;
+    game.roundEndsAt = phases.roundEndsAt;
+    game.roundPhase = "live";
+  }
+
+  private scheduleCatchPhraseDeadline(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "playing" || game.roundPhase !== "live" || game.roundEndsAt === null) {
+      return;
+    }
+    this.clearCatchPhraseTimer(sessionId);
+    const delay = Math.max(0, game.roundEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.catchPhraseTimedOut(sessionId).catch(() => {});
+    }, delay);
+    this.catchPhraseResolveTimers.set(sessionId, timer);
+  }
+
+  private async catchPhraseTimedOut(sessionId: string): Promise<void> {
+    let session: SessionInternal;
+    try {
+      session = this.getSessionOrThrow(sessionId);
+    } catch {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "playing" || game.roundPhase !== "live") {
+      return;
+    }
+
+    const holderId = this.catchPhraseCurrentHolderId(game);
+    if (!holderId) {
+      this.clearCatchPhraseTimer(sessionId);
+      session.games = [];
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+      return;
+    }
+    const holderTeam = catchPhraseTeamForParticipant(game, holderId);
+    if (!holderTeam) {
+      this.clearCatchPhraseTimer(sessionId);
+      session.games = [];
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+      return;
+    }
+
+    // Buzzer: the team with the device was giving clues to their own side; the *other* team (not guessing this clue) scores.
+    const nonGuessingTeam: "A" | "B" = holderTeam === "A" ? "B" : "A";
+    const scoringIds = nonGuessingTeam === "A" ? game.teamAIds : game.teamBIds;
+    for (const pid of scoringIds) {
+      const participant = session.participants.find((p) => p.id === pid);
+      if (participant && participantIsActive(participant)) {
+        participant.score += 1;
+      }
+    }
+    game.teamScores[nonGuessingTeam] += 1;
+
+    this.clearCatchPhraseTimer(sessionId);
+    game.currentClueId = null;
+    game.currentPhrase = null;
+    game.roundStartedAt = null;
+    game.slowPhaseEndsAt = null;
+    game.mediumPhaseEndsAt = null;
+    game.roundEndsAt = null;
+
+    if (game.teamScores[nonGuessingTeam] >= CATCH_PHRASE_WIN_SCORE) {
+      game.status = "finished";
+      game.roundPhase = null;
+      game.winnerTeam = nonGuessingTeam;
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+      return;
+    }
+
+    const nextHolderTeam: "A" | "B" = nonGuessingTeam;
+    const currentIndex = game.holderIndex ?? -1;
+    const nextIndex = nextCatchPhraseHolderOnTeam(game, currentIndex, nextHolderTeam);
+    if (nextIndex === null) {
+      session.games = [];
+      session.updatedAt = Date.now();
+      await this.persist();
+      this.onSessionUpdated?.(sessionId);
+      return;
+    }
+    game.holderIndex = nextIndex;
+    game.roundPhase = "awaitingRoundStart";
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  public async catchPhraseSetTeams(
+    sessionId: string,
+    participantId: string,
+    teamAIds: string[],
+    teamBIds: string[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can set teams.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "teamSetup") {
+      throw new Error("Teams can only be edited during setup.");
+    }
+    validateCatchPhraseTeamRoster(session, teamAIds, teamBIds);
+    game.teamAIds = [...teamAIds];
+    game.teamBIds = [...teamBIds];
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async catchPhraseBeginPlay(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can start play.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "teamSetup") {
+      throw new Error("Catch Phrase is not waiting for team setup.");
+    }
+    validateCatchPhraseTeamRoster(session, game.teamAIds, game.teamBIds);
+    const passOrder = buildCatchPhrasePassOrder(session, game.teamAIds, game.teamBIds);
+    if (passOrder.length < CATCH_PHRASE_MIN_PLAYERS) {
+      throw new Error("Could not create a valid pass order.");
+    }
+
+    this.clearCatchPhraseTimer(sessionId);
+    game.status = "playing";
+    game.roundPhase = "awaitingRoundStart";
+    game.passOrder = passOrder;
+    game.holderIndex = 0;
+    game.currentClueId = null;
+    game.currentPhrase = null;
+    game.roundStartedAt = null;
+    game.slowPhaseEndsAt = null;
+    game.mediumPhaseEndsAt = null;
+    game.roundEndsAt = null;
+    game.teamScores = { A: 0, B: 0 };
+    game.winnerTeam = null;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async catchPhraseStartRound(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "playing" || game.roundPhase !== "awaitingRoundStart") {
+      throw new Error("Catch Phrase is not waiting to start a round.");
+    }
+    const holderId = this.catchPhraseCurrentHolderId(game);
+    if (!holderId || holderId !== participantId) {
+      throw new Error("Only the current holder can start this round.");
+    }
+
+    this.catchPhraseStartLiveRound(game);
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleCatchPhraseDeadline(sessionId);
+  }
+
+  public async catchPhraseGuessed(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "playing" || game.roundPhase !== "live") {
+      throw new Error("Catch Phrase is not in an active round.");
+    }
+    const holderId = this.catchPhraseCurrentHolderId(game);
+    if (!holderId || holderId !== participantId) {
+      throw new Error("Only the current holder can pass.");
+    }
+    if (game.passOrder.length === 0 || game.holderIndex === null) {
+      throw new Error("Pass order is not configured.");
+    }
+
+    this.clearCatchPhraseTimer(sessionId);
+    game.holderIndex = (game.holderIndex + 1) % game.passOrder.length;
+    this.catchPhraseAssignNewClue(game);
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleCatchPhraseDeadline(sessionId);
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -5477,6 +5909,96 @@ export class SessionService {
             lastResult,
             nextRoundStartsAt: game.roundBreakEndsAt ?? Date.now(),
             nextTeam: game.roundBreakNextTeam!
+          }
+        }
+      };
+    }
+
+    if (game.type === "catchPhrase") {
+      if (game.status === "teamSetup") {
+        return {
+          ...base,
+          activeGame: "catchPhrase",
+          gameState: {
+            type: "catchPhrase",
+            state: {
+              status: "teamSetup",
+              teamAIds: [...game.teamAIds],
+              teamBIds: [...game.teamBIds]
+            }
+          }
+        };
+      }
+
+      if (game.status === "playing") {
+        const holderId = this.catchPhraseCurrentHolderId(game) ?? "";
+        if (game.roundPhase === "awaitingRoundStart") {
+          return {
+            ...base,
+            activeGame: "catchPhrase",
+            gameState: {
+              type: "catchPhrase",
+              state: {
+                status: "playing",
+                roundPhase: "awaitingRoundStart",
+                teamAIds: [...game.teamAIds],
+                teamBIds: [...game.teamBIds],
+                teamScores: { ...game.teamScores },
+                holderId,
+                passOrder: [...game.passOrder]
+              }
+            }
+          };
+        }
+
+        const showPhrase = Boolean(viewerParticipantId && holderId && viewerParticipantId === holderId);
+        const roundStartedAt = game.roundStartedAt ?? Date.now();
+        const roundEndsAt = game.roundEndsAt ?? roundStartedAt;
+        let slowPhaseEndsAt = game.slowPhaseEndsAt;
+        let mediumPhaseEndsAt = game.mediumPhaseEndsAt;
+        if (
+          slowPhaseEndsAt === null
+          || mediumPhaseEndsAt === null
+          || !(roundStartedAt < roundEndsAt)
+        ) {
+          const span = Math.max(1, roundEndsAt - roundStartedAt);
+          slowPhaseEndsAt = roundStartedAt + Math.floor(span / 3);
+          mediumPhaseEndsAt = roundStartedAt + Math.floor((2 * span) / 3);
+        }
+        return {
+          ...base,
+          activeGame: "catchPhrase",
+          gameState: {
+            type: "catchPhrase",
+            state: {
+              status: "playing",
+              roundPhase: "live",
+              teamAIds: [...game.teamAIds],
+              teamBIds: [...game.teamBIds],
+              teamScores: { ...game.teamScores },
+              holderId,
+              passOrder: [...game.passOrder],
+              roundStartedAt,
+              slowPhaseEndsAt,
+              mediumPhaseEndsAt,
+              roundEndsAt,
+              myPhrase: showPhrase ? game.currentPhrase : null
+            }
+          }
+        };
+      }
+
+      return {
+        ...base,
+        activeGame: "catchPhrase",
+        gameState: {
+          type: "catchPhrase",
+          state: {
+            status: "finished",
+            teamAIds: [...game.teamAIds],
+            teamBIds: [...game.teamBIds],
+            teamScores: { ...game.teamScores },
+            winnerTeam: game.winnerTeam ?? (game.teamScores.A >= game.teamScores.B ? "A" : "B")
           }
         }
       };

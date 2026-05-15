@@ -1019,6 +1019,19 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.pictionaryTeamGuessed(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:hostSkipRound") {
           await sessionService.pictionaryHostSkipRound(context.sessionId, context.participantId);
+        } else if (event.type === "catchPhrase:setTeams") {
+          await sessionService.catchPhraseSetTeams(
+            context.sessionId,
+            context.participantId,
+            event.payload.teamAIds,
+            event.payload.teamBIds
+          );
+        } else if (event.type === "catchPhrase:beginPlay") {
+          await sessionService.catchPhraseBeginPlay(context.sessionId, context.participantId);
+        } else if (event.type === "catchPhrase:startRound") {
+          await sessionService.catchPhraseStartRound(context.sessionId, context.participantId);
+        } else if (event.type === "catchPhrase:guessed") {
+          await sessionService.catchPhraseGuessed(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);

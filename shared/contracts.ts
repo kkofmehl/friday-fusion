@@ -13,7 +13,8 @@ export const gameTypeSchema = z.enum([
   "applesToApples",
   "uno",
   "bs",
-  "madlibs"
+  "madlibs",
+  "catchPhrase"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -497,6 +498,74 @@ export type PictionarySavedStroke = z.infer<typeof pictionarySavedStrokeSchema>;
 export const pictionaryTeamIdSchema = z.enum(["A", "B"]);
 export type PictionaryTeamId = z.infer<typeof pictionaryTeamIdSchema>;
 
+export const catchPhraseTeamIdSchema = z.enum(["A", "B"]);
+export type CatchPhraseTeamId = z.infer<typeof catchPhraseTeamIdSchema>;
+/** Phase 1: slow beeps — random length (ms). */
+export const CATCH_PHRASE_PHASE1_MIN_MS = 25_000;
+export const CATCH_PHRASE_PHASE1_MAX_MS = 30_000;
+/** Phase 2: medium beeps — random length (ms). */
+export const CATCH_PHRASE_PHASE2_MIN_MS = 15_000;
+export const CATCH_PHRASE_PHASE2_MAX_MS = 25_000;
+/** Phase 3: fast beeps until buzz — random length (ms). */
+export const CATCH_PHRASE_PHASE3_MIN_MS = 8_000;
+export const CATCH_PHRASE_PHASE3_MAX_MS = 15_000;
+export const CATCH_PHRASE_WIN_SCORE = 5;
+export const CATCH_PHRASE_MIN_PLAYERS = 4;
+
+const catchPhraseTeamSetupSchema = z.object({
+  status: z.literal("teamSetup"),
+  teamAIds: z.array(z.string()),
+  teamBIds: z.array(z.string())
+});
+
+const catchPhraseTeamScoresSchema = z.object({
+  A: z.number().int().nonnegative(),
+  B: z.number().int().nonnegative()
+});
+
+const catchPhrasePlayingSchema = z.discriminatedUnion("roundPhase", [
+  z.object({
+    status: z.literal("playing"),
+    roundPhase: z.literal("awaitingRoundStart"),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    teamScores: catchPhraseTeamScoresSchema,
+    holderId: z.string(),
+    passOrder: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("playing"),
+    roundPhase: z.literal("live"),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    teamScores: catchPhraseTeamScoresSchema,
+    holderId: z.string(),
+    passOrder: z.array(z.string()),
+    roundStartedAt: z.number().int(),
+    /** End of phase 1 (slow beeps); exclusive upper bound for slow vs medium. */
+    slowPhaseEndsAt: z.number().int(),
+    /** End of phase 2 (medium beeps); exclusive upper bound for medium vs fast. */
+    mediumPhaseEndsAt: z.number().int(),
+    /** Buzz when this instant is reached (end of phase 3). */
+    roundEndsAt: z.number().int(),
+    /** Only visible to the current holder. */
+    myPhrase: z.string().nullable()
+  })
+]);
+
+export const catchPhraseStateSchema = z.discriminatedUnion("status", [
+  catchPhraseTeamSetupSchema,
+  catchPhrasePlayingSchema,
+  z.object({
+    status: z.literal("finished"),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    teamScores: catchPhraseTeamScoresSchema,
+    winnerTeam: catchPhraseTeamIdSchema
+  })
+]);
+export type CatchPhraseState = z.infer<typeof catchPhraseStateSchema>;
+
 export const pictionaryStateSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("teamSetup"),
@@ -806,6 +875,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("madlibs"),
     state: madlibsStateSchema
+  }),
+  z.object({
+    type: z.literal("catchPhrase"),
+    state: catchPhraseStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1079,7 +1152,17 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({ word: z.string().trim().min(1).max(60) })
   }),
   z.object({ type: z.literal("madlibs:passRead"), payload: z.object({}) }),
-  z.object({ type: z.literal("madlibs:nextRound"), payload: z.object({}) })
+  z.object({ type: z.literal("madlibs:nextRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("catchPhrase:setTeams"),
+    payload: z.object({
+      teamAIds: z.array(z.string()),
+      teamBIds: z.array(z.string())
+    })
+  }),
+  z.object({ type: z.literal("catchPhrase:beginPlay"), payload: z.object({}) }),
+  z.object({ type: z.literal("catchPhrase:startRound"), payload: z.object({}) }),
+  z.object({ type: z.literal("catchPhrase:guessed"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

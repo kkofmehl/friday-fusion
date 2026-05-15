@@ -14,6 +14,7 @@ import { ApplesToApplesGame } from "../games/ApplesToApplesGame";
 import { UnoGame } from "../games/UnoGame";
 import { BsGame } from "../games/BsGame";
 import { MadlibsGame } from "../games/MadlibsGame";
+import { CatchPhraseGame } from "../games/CatchPhraseGame";
 
 export function GameScreen({
   session,
@@ -216,6 +217,16 @@ export function GameScreen({
     if (session.gameState?.type === "madlibs") {
       return (
         <MadlibsGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "catchPhrase") {
+      return (
+        <CatchPhraseGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

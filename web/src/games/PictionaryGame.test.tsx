@@ -68,6 +68,25 @@ describe("PictionaryGame", () => {
     });
   });
 
+  it("hides team assignment controls from non-host during team setup", () => {
+    const session: SessionState = {
+      ...baseSession(),
+      gameState: {
+        type: "pictionary",
+        state: {
+          status: "teamSetup",
+          roundDurationMs: 60_000,
+          teamAIds: [],
+          teamBIds: []
+        }
+      }
+    };
+    render(<PictionaryGame session={session} currentParticipantId="p2" isHost={false} send={vi.fn()} />);
+    expect(screen.getByText(/Only the host can assign teams/i)).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: /^Team A$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Save team lineup/i })).toBeNull();
+  });
+
   it("drawer sees prompt; other player does not", () => {
     const send = vi.fn();
     const drawingState = {

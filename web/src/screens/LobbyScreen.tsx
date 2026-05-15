@@ -99,6 +99,12 @@ const GAMES: GameOption[] = [
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",
     emoji: "📝"
+  },
+  {
+    id: "catchPhrase",
+    title: "Catch Phrase",
+    description: "Two teams pass the device around with a hidden timer racing in the background.",
+    emoji: "🔔"
   }
 ];
 
