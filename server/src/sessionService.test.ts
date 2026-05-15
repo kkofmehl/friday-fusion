@@ -2341,4 +2341,127 @@ describe("SessionService", () => {
     );
   });
 
+  describe("yahtzee", () => {
+    it("starts with first roll and rejects non-current roller", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const g1 = await setup.service.joinSession(host.joinCode, "A");
+      await setup.service.joinSession(host.joinCode, "B");
+      await setup.service.startGame(host.sessionId, "yahtzee");
+      const s = setup.service.getState(host.sessionId, host.participantId);
+      expect(s.gameState?.type).toBe("yahtzee");
+      if (s.gameState?.type !== "yahtzee" || s.gameState.state.status !== "playing") {
+        throw new Error("expected yahtzee playing");
+      }
+      expect(s.gameState.state.rollsUsed).toBe(1);
+      expect(s.gameState.state.currentPlayerId).toBe(host.participantId);
+      await expect(setup.service.yahtzeeRoll(host.sessionId, g1.participantId)).rejects.toThrow("Not your turn.");
+    });
+
+    it("allows pending category swap then commits on passTurn", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.startGame(host.sessionId, "yahtzee");
+      await setup.service.yahtzeeSetPendingCategory(host.sessionId, host.participantId, "sixes");
+      await setup.service.yahtzeeSetPendingCategory(host.sessionId, host.participantId, "chance");
+      let s = setup.service.getState(host.sessionId, host.participantId);
+      if (s.gameState?.type !== "yahtzee" || s.gameState.state.status !== "playing") {
+        throw new Error("expected yahtzee");
+      }
+      expect(s.gameState.state.pendingCategory).toBe("chance");
+      await setup.service.yahtzeePassTurn(host.sessionId, host.participantId);
+      s = setup.service.getState(host.sessionId, host.participantId);
+      if (s.gameState?.type !== "yahtzee" || s.gameState.state.status !== "playing") {
+        throw new Error("expected yahtzee after pass");
+      }
+      expect(s.gameState.state.pendingCategory).toBeNull();
+      const sheet = s.gameState.state.sheetsByParticipant[host.participantId] ?? [];
+      expect(sheet.some((r) => r.category === "chance")).toBe(true);
+      expect(sheet.some((r) => r.category === "sixes")).toBe(false);
+    });
+
+    it("rejects passTurn without pending category", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.startGame(host.sessionId, "yahtzee");
+      await expect(setup.service.yahtzeePassTurn(host.sessionId, host.participantId)).rejects.toThrow(
+        "Choose a scoring row before passing."
+      );
+    });
+
+    it("caps at three rolls", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.startGame(host.sessionId, "yahtzee");
+      await setup.service.yahtzeeRoll(host.sessionId, host.participantId);
+      await setup.service.yahtzeeRoll(host.sessionId, host.participantId);
+      await expect(setup.service.yahtzeeRoll(host.sessionId, host.participantId)).rejects.toThrow(
+        "No rolls remaining."
+      );
+    });
+
+    it("finishes with reverse placement on participant scores", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const g1 = await setup.service.joinSession(host.joinCode, "B");
+      await setup.service.startGame(host.sessionId, "yahtzee");
+      const cats = [
+        "ones",
+        "twos",
+        "threes",
+        "fours",
+        "fives",
+        "sixes",
+        "threeOfAKind",
+        "fourOfAKind",
+        "fullHouse",
+        "smallStraight",
+        "largeStraight",
+        "yahtzee",
+        "chance"
+      ] as const;
+      for (let step = 0; step < 26; step += 1) {
+        const st = setup.service.getState(host.sessionId, host.participantId);
+        if (st.gameState?.type !== "yahtzee") {
+          throw new Error("expected yahtzee");
+        }
+        if (st.gameState.state.status === "finished") {
+          break;
+        }
+        const cur = st.gameState.state.currentPlayerId;
+        const n = st.gameState.state.sheetsByParticipant[cur]?.length ?? 0;
+        const cat = cats[n];
+        if (!cat) {
+          throw new Error("category index");
+        }
+        await setup.service.yahtzeeSetPendingCategory(host.sessionId, cur, cat);
+        await setup.service.yahtzeePassTurn(host.sessionId, cur);
+      }
+      const end = setup.service.getState(host.sessionId, host.participantId);
+      expect(end.gameState?.type).toBe("yahtzee");
+      if (end.gameState?.type !== "yahtzee" || end.gameState.state.status !== "finished") {
+        throw new Error("expected finished");
+      }
+      const hostP = end.participants.find((p) => p.id === host.participantId);
+      const g1P = end.participants.find((p) => p.id === g1.participantId);
+      const totals = end.gameState.state.yahtzeeGrandTotals;
+      const hostTotal = totals[host.participantId] ?? 0;
+      const gTotal = totals[g1.participantId] ?? 0;
+      if (hostTotal > gTotal) {
+        expect(hostP?.score).toBe(2);
+        expect(g1P?.score).toBe(1);
+      } else if (gTotal > hostTotal) {
+        expect(g1P?.score).toBe(2);
+        expect(hostP?.score).toBe(1);
+      } else {
+        expect(hostP?.score).toBe(2);
+        expect(g1P?.score).toBe(1);
+      }
+    });
+  });
 });

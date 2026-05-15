@@ -13,5 +13,5 @@
       "vitest/globals"
     ]
   },
-  "include": ["src/**/*.ts", "../shared/contracts.ts"]
+  "include": ["src/**/*.ts", "../shared/contracts.ts", "../shared/yahtzeeScoring.ts"]
 }

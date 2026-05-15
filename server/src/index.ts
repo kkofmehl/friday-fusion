@@ -1032,6 +1032,22 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.catchPhraseStartRound(context.sessionId, context.participantId);
         } else if (event.type === "catchPhrase:guessed") {
           await sessionService.catchPhraseGuessed(context.sessionId, context.participantId);
+        } else if (event.type === "yahtzee:toggleHold") {
+          await sessionService.yahtzeeToggleHold(
+            context.sessionId,
+            context.participantId,
+            event.payload.dieIndex
+          );
+        } else if (event.type === "yahtzee:roll") {
+          await sessionService.yahtzeeRoll(context.sessionId, context.participantId);
+        } else if (event.type === "yahtzee:setPendingCategory") {
+          await sessionService.yahtzeeSetPendingCategory(
+            context.sessionId,
+            context.participantId,
+            event.payload.category
+          );
+        } else if (event.type === "yahtzee:passTurn") {
+          await sessionService.yahtzeePassTurn(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);

@@ -54,3 +54,7 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-14:** Catch Phrase: refactor timer into three explicit random-length phases (phase 1 slow beeps 20–45s, phase 2 medium 20–45s, phase 3 fast 8–20s) instead of one total timer with percentage thresholds; make phase-1 pulse circle green for contrast.
 
 **2026-05-14:** Catch Phrase: double-check buzzer scoring — confirm non–clue-giving team gets points (code was already correct; clarify naming + test that holder team scores stay flat).
+
+**2026-05-14:** Yahtzee in Friday Fusion — implement plan: `yahtzee` game type, server-authoritative dice and scoring, hold + roll (max 3), `setPendingCategory` until `passTurn` commits, classic 13 rows + upper bonus, reverse-place points added to `participant.score` on finish, shared `yahtzeeScoring.ts` + tests, WebSocket handlers, `YahtzeeGame` UI (“This game” sheet totals vs FF score), procedural dice sound + mute toggle (`localStorage`), `GameScreen`/`LobbyScreen` wiring.
+
+**2026-05-14:** Yahtzee UI/sound tweaks: show only the viewer’s scorecard; open rows use “Score #” buttons with potential points; stronger green hold ring on dice; light blue panel + bold “Your turn” on the roller’s view; dice SFX reworked as many short band-limited taps plus a low settle thud.

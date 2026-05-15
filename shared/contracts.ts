@@ -14,7 +14,8 @@ export const gameTypeSchema = z.enum([
   "uno",
   "bs",
   "madlibs",
-  "catchPhrase"
+  "catchPhrase",
+  "yahtzee"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -823,6 +824,71 @@ export const unoStateSchema = z.discriminatedUnion("status", [
 ]);
 export type UnoState = z.infer<typeof unoStateSchema>;
 
+export const yahtzeeCategorySchema = z.enum([
+  "ones",
+  "twos",
+  "threes",
+  "fours",
+  "fives",
+  "sixes",
+  "threeOfAKind",
+  "fourOfAKind",
+  "fullHouse",
+  "smallStraight",
+  "largeStraight",
+  "yahtzee",
+  "chance"
+]);
+export type YahtzeeCategory = z.infer<typeof yahtzeeCategorySchema>;
+
+const yahtzeeDieSchema = z.number().int().min(1).max(6);
+export const yahtzeeDiceTupleSchema = z.tuple([
+  yahtzeeDieSchema,
+  yahtzeeDieSchema,
+  yahtzeeDieSchema,
+  yahtzeeDieSchema,
+  yahtzeeDieSchema
+]);
+export type YahtzeeDiceTuple = z.infer<typeof yahtzeeDiceTupleSchema>;
+
+export const yahtzeeHeldTupleSchema = z.tuple([
+  z.boolean(),
+  z.boolean(),
+  z.boolean(),
+  z.boolean(),
+  z.boolean()
+]);
+
+export const yahtzeeSheetRowSchema = z.object({
+  category: yahtzeeCategorySchema,
+  points: z.number().int()
+});
+export type YahtzeeSheetRow = z.infer<typeof yahtzeeSheetRowSchema>;
+
+export const yahtzeeSheetsByParticipantSchema = z.record(z.string(), z.array(yahtzeeSheetRowSchema));
+
+export const yahtzeeStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("playing"),
+    playerOrder: z.array(z.string()),
+    currentPlayerId: z.string(),
+    dice: yahtzeeDiceTupleSchema,
+    held: yahtzeeHeldTupleSchema,
+    rollsUsed: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    pendingCategory: yahtzeeCategorySchema.nullable(),
+    sheetsByParticipant: yahtzeeSheetsByParticipantSchema
+  }),
+  z.object({
+    status: z.literal("finished"),
+    playerOrder: z.array(z.string()),
+    sheetsByParticipant: yahtzeeSheetsByParticipantSchema,
+    yahtzeeGrandTotals: z.record(z.string(), z.number().int()),
+    placementAwards: z.record(z.string(), z.number().int()),
+    winnerParticipantId: z.string()
+  })
+]);
+export type YahtzeeState = z.infer<typeof yahtzeeStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -879,6 +945,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("catchPhrase"),
     state: catchPhraseStateSchema
+  }),
+  z.object({
+    type: z.literal("yahtzee"),
+    state: yahtzeeStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1162,7 +1232,17 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("catchPhrase:beginPlay"), payload: z.object({}) }),
   z.object({ type: z.literal("catchPhrase:startRound"), payload: z.object({}) }),
-  z.object({ type: z.literal("catchPhrase:guessed"), payload: z.object({}) })
+  z.object({ type: z.literal("catchPhrase:guessed"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("yahtzee:toggleHold"),
+    payload: z.object({ dieIndex: z.number().int().min(0).max(4) })
+  }),
+  z.object({ type: z.literal("yahtzee:roll"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("yahtzee:setPendingCategory"),
+    payload: z.object({ category: yahtzeeCategorySchema })
+  }),
+  z.object({ type: z.literal("yahtzee:passTurn"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

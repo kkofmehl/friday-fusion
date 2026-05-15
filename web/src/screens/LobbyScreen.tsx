@@ -105,6 +105,13 @@ const GAMES: GameOption[] = [
     title: "Catch Phrase",
     description: "Two teams pass the device around with a hidden timer racing in the background.",
     emoji: "🔔"
+  },
+  {
+    id: "yahtzee",
+    title: "Yahtzee",
+    description:
+      "Take turns rolling five dice, holding what you like, then score a row—Friday Fusion adds placement points when the game ends.",
+    emoji: "🎲"
   }
 ];
 

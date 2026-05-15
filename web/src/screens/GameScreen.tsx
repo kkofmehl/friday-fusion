@@ -15,6 +15,7 @@ import { UnoGame } from "../games/UnoGame";
 import { BsGame } from "../games/BsGame";
 import { MadlibsGame } from "../games/MadlibsGame";
 import { CatchPhraseGame } from "../games/CatchPhraseGame";
+import { YahtzeeGame } from "../games/YahtzeeGame";
 
 export function GameScreen({
   session,
@@ -97,6 +98,8 @@ export function GameScreen({
     ? { type: "game:start", payload: { game: "bs" } }
     : session.gameState?.type === "madlibs"
     ? { type: "game:start", payload: { game: "madlibs" } }
+    : session.gameState?.type === "yahtzee"
+    ? { type: "game:start", payload: { game: "yahtzee" } }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
 
   const renderGame = () => {
@@ -230,6 +233,17 @@ export function GameScreen({
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "yahtzee") {
+      return (
+        <YahtzeeGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
           send={send}
         />
       );

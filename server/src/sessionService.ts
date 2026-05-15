@@ -33,8 +33,15 @@ import {
   type MadlibsBlankPrompt,
   type BsRank,
   type UnoActiveColor,
-  type UnoCard
+  type UnoCard,
+  type YahtzeeCategory,
+  type YahtzeeSheetRow
 } from "../../shared/contracts";
+import {
+  computeYahtzeePlacement,
+  grandTotalFromSheetRows,
+  scoreCategory
+} from "../../shared/yahtzeeScoring";
 import { pickPictionaryClue } from "./pictionaryClues";
 import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
@@ -416,6 +423,23 @@ type CatchPhraseGameInternal = {
   winnerTeam: "A" | "B" | null;
 };
 
+type YahtzeeGameInternal = {
+  id: string;
+  type: "yahtzee";
+  status: "playing" | "finished";
+  playerOrder: string[];
+  currentPlayerIndex: number;
+  dice: [number, number, number, number, number];
+  held: [boolean, boolean, boolean, boolean, boolean];
+  rollsUsed: 1 | 2 | 3;
+  pendingCategory: YahtzeeCategory | null;
+  sheetsByParticipant: Record<string, YahtzeeSheetRow[]>;
+  scoresApplied: boolean;
+  yahtzeeGrandTotals?: Record<string, number>;
+  placementAwards?: Record<string, number>;
+  winnerParticipantId?: string | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -430,7 +454,8 @@ type GameInternal =
   | UnoGameInternal
   | BsGameInternal
   | MadlibsGameInternal
-  | CatchPhraseGameInternal;
+  | CatchPhraseGameInternal
+  | YahtzeeGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -888,7 +913,98 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       winnerTeam: g.winnerTeam === "A" || g.winnerTeam === "B" ? g.winnerTeam : null
     };
   }
+  if (game.type === "yahtzee") {
+    const g = game as YahtzeeGameInternal;
+    const playerOrder = Array.isArray(g.playerOrder) ? [...g.playerOrder] : [];
+    const sheets: Record<string, YahtzeeSheetRow[]> = {};
+    for (const pid of playerOrder) {
+      const rows = g.sheetsByParticipant?.[pid];
+      sheets[pid] = Array.isArray(rows)
+        ? rows.filter((r) => r && typeof r.category === "string" && typeof r.points === "number")
+        : [];
+    }
+    const clampDie = (n: number): number => Math.min(6, Math.max(1, Math.floor(Number(n)) || 1));
+    const rawDice = Array.isArray(g.dice) && g.dice.length === 5 ? g.dice : [1, 1, 1, 1, 1];
+    const dice: [number, number, number, number, number] = [
+      clampDie(rawDice[0]!),
+      clampDie(rawDice[1]!),
+      clampDie(rawDice[2]!),
+      clampDie(rawDice[3]!),
+      clampDie(rawDice[4]!)
+    ];
+    const h = Array.isArray(g.held) && g.held.length === 5 ? g.held : [false, false, false, false, false];
+    const held: [boolean, boolean, boolean, boolean, boolean] = [
+      Boolean(h[0]),
+      Boolean(h[1]),
+      Boolean(h[2]),
+      Boolean(h[3]),
+      Boolean(h[4])
+    ];
+    const ru: 1 | 2 | 3 = g.rollsUsed === 2 || g.rollsUsed === 3 ? g.rollsUsed : 1;
+    let currentPlayerIndex = Math.max(0, Math.floor(Number(g.currentPlayerIndex) || 0));
+    if (playerOrder.length > 0) {
+      currentPlayerIndex %= playerOrder.length;
+    } else {
+      currentPlayerIndex = 0;
+    }
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      status: g.status === "finished" || g.status === "playing" ? g.status : "playing",
+      playerOrder,
+      currentPlayerIndex,
+      dice,
+      held,
+      rollsUsed: ru,
+      pendingCategory: g.pendingCategory ?? null,
+      sheetsByParticipant: sheets,
+      scoresApplied: g.scoresApplied === true,
+      yahtzeeGrandTotals:
+        g.yahtzeeGrandTotals && typeof g.yahtzeeGrandTotals === "object" ? { ...g.yahtzeeGrandTotals } : undefined,
+      placementAwards:
+        g.placementAwards && typeof g.placementAwards === "object" ? { ...g.placementAwards } : undefined,
+      winnerParticipantId: typeof g.winnerParticipantId === "string" ? g.winnerParticipantId : null
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
+};
+
+const yahtzeeRollDie = (): number => Math.floor(Math.random() * 6) + 1;
+
+const yahtzeeRollFiveDice = (): [number, number, number, number, number] => [
+  yahtzeeRollDie(),
+  yahtzeeRollDie(),
+  yahtzeeRollDie(),
+  yahtzeeRollDie(),
+  yahtzeeRollDie()
+];
+
+const yahtzeeRerollKeepingHeld = (
+  dice: [number, number, number, number, number],
+  held: [boolean, boolean, boolean, boolean, boolean]
+): [number, number, number, number, number] => {
+  const next: number[] = [...dice];
+  for (let i = 0; i < 5; i += 1) {
+    if (!held[i]) {
+      next[i] = yahtzeeRollDie();
+    }
+  }
+  return next as [number, number, number, number, number];
+};
+
+const yahtzeeSheetHasCategory = (rows: YahtzeeSheetRow[], category: YahtzeeCategory): boolean =>
+  rows.some((row) => row.category === category);
+
+const yahtzeeEveryoneFinished = (game: YahtzeeGameInternal): boolean => {
+  if (game.playerOrder.length === 0) {
+    return false;
+  }
+  for (const pid of game.playerOrder) {
+    if ((game.sheetsByParticipant[pid] ?? []).length !== 13) {
+      return false;
+    }
+  }
+  return true;
 };
 
 /** Delay before others may call missed UNO after someone plays down to one card without declaring. */
@@ -1881,6 +1997,30 @@ export class SessionService {
         mediumPhaseEndsAt: null,
         roundEndsAt: null,
         winnerTeam: null
+      };
+    } else if (game === "yahtzee") {
+      const actives = activeParticipants(session);
+      if (actives.length < 1) {
+        throw new Error("Yahtzee needs at least one active player.");
+      }
+      const playerOrder = actives.map((p) => p.id);
+      const sheetsByParticipant: Record<string, YahtzeeSheetRow[]> = {};
+      for (const pid of playerOrder) {
+        sheetsByParticipant[pid] = [];
+      }
+      const dice = yahtzeeRollFiveDice();
+      next = {
+        id: nanoid(6),
+        type: "yahtzee",
+        status: "playing",
+        playerOrder,
+        currentPlayerIndex: 0,
+        dice,
+        held: [false, false, false, false, false],
+        rollsUsed: 1,
+        pendingCategory: null,
+        sheetsByParticipant,
+        scoresApplied: false
       };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
@@ -4900,6 +5040,137 @@ export class SessionService {
     this.scheduleCatchPhraseDeadline(sessionId);
   }
 
+  public async yahtzeeToggleHold(sessionId: string, participantId: string, dieIndex: number): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "yahtzee" || game.status !== "playing") {
+      throw new Error("Yahtzee is not in play.");
+    }
+    const currentId = game.playerOrder[game.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (dieIndex < 0 || dieIndex > 4 || !Number.isInteger(dieIndex)) {
+      throw new Error("Invalid die index.");
+    }
+    const held = [...game.held] as boolean[];
+    held[dieIndex] = !held[dieIndex];
+    game.held = held as [boolean, boolean, boolean, boolean, boolean];
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async yahtzeeRoll(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "yahtzee" || game.status !== "playing") {
+      throw new Error("Yahtzee is not in play.");
+    }
+    const currentId = game.playerOrder[game.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (game.rollsUsed >= 3) {
+      throw new Error("No rolls remaining.");
+    }
+    game.dice = yahtzeeRerollKeepingHeld(game.dice, game.held);
+    game.rollsUsed = game.rollsUsed === 1 ? 2 : 3;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async yahtzeeSetPendingCategory(
+    sessionId: string,
+    participantId: string,
+    category: YahtzeeCategory
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "yahtzee" || game.status !== "playing") {
+      throw new Error("Yahtzee is not in play.");
+    }
+    const currentId = game.playerOrder[game.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    const rows = game.sheetsByParticipant[participantId] ?? [];
+    if (yahtzeeSheetHasCategory(rows, category)) {
+      throw new Error("That category is already filled.");
+    }
+    game.pendingCategory = category;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  private yahtzeeFinalize(session: SessionInternal, game: YahtzeeGameInternal): void {
+    if (game.scoresApplied) {
+      return;
+    }
+    const totals: Record<string, number> = {};
+    for (const pid of game.playerOrder) {
+      totals[pid] = grandTotalFromSheetRows(game.sheetsByParticipant[pid] ?? []);
+    }
+    const standings = computeYahtzeePlacement(game.playerOrder, totals);
+    for (const row of standings) {
+      const p = session.participants.find((x) => x.id === row.participantId);
+      if (p) {
+        p.score += row.award;
+      }
+    }
+    game.scoresApplied = true;
+    game.status = "finished";
+    game.yahtzeeGrandTotals = totals;
+    game.placementAwards = Object.fromEntries(standings.map((s) => [s.participantId, s.award]));
+    game.winnerParticipantId = standings[0]?.participantId ?? game.playerOrder[0] ?? "";
+    game.pendingCategory = null;
+  }
+
+  private yahtzeeAdvanceToNextTurn(game: YahtzeeGameInternal): void {
+    const n = game.playerOrder.length;
+    if (n === 0) {
+      return;
+    }
+    game.currentPlayerIndex = (game.currentPlayerIndex + 1) % n;
+    game.dice = yahtzeeRollFiveDice();
+    game.held = [false, false, false, false, false];
+    game.rollsUsed = 1;
+    game.pendingCategory = null;
+  }
+
+  public async yahtzeePassTurn(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "yahtzee" || game.status !== "playing") {
+      throw new Error("Yahtzee is not in play.");
+    }
+    const currentId = game.playerOrder[game.currentPlayerIndex];
+    if (currentId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    if (game.pendingCategory === null) {
+      throw new Error("Choose a scoring row before passing.");
+    }
+    const rows = game.sheetsByParticipant[participantId] ?? [];
+    if (yahtzeeSheetHasCategory(rows, game.pendingCategory)) {
+      throw new Error("That category is already filled.");
+    }
+    const points = scoreCategory(game.dice, game.pendingCategory);
+    const nextRows = [...rows, { category: game.pendingCategory, points }];
+    game.sheetsByParticipant[participantId] = nextRows;
+
+    if (yahtzeeEveryoneFinished(game)) {
+      this.yahtzeeFinalize(session, game);
+    } else {
+      this.yahtzeeAdvanceToNextTurn(game);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -6232,6 +6503,52 @@ export class SessionService {
             believedParticipantIds: [...game.believedParticipantIds],
             calledBsParticipantId: game.calledBsParticipantId ?? "",
             revealedCards: [...game.pendingPlayedCards]
+          }
+        }
+      };
+    }
+
+    if (game.type === "yahtzee") {
+      if (game.status === "finished") {
+        const sheets: Record<string, YahtzeeSheetRow[]> = {};
+        for (const pid of game.playerOrder) {
+          sheets[pid] = [...(game.sheetsByParticipant[pid] ?? [])];
+        }
+        return {
+          ...base,
+          activeGame: "yahtzee",
+          gameState: {
+            type: "yahtzee",
+            state: {
+              status: "finished",
+              playerOrder: [...game.playerOrder],
+              sheetsByParticipant: sheets,
+              yahtzeeGrandTotals: { ...(game.yahtzeeGrandTotals ?? {}) },
+              placementAwards: { ...(game.placementAwards ?? {}) },
+              winnerParticipantId: game.winnerParticipantId ?? ""
+            }
+          }
+        };
+      }
+      const currentPlayerId = game.playerOrder[game.currentPlayerIndex] ?? "";
+      const sheetsClone: Record<string, YahtzeeSheetRow[]> = {};
+      for (const pid of game.playerOrder) {
+        sheetsClone[pid] = [...(game.sheetsByParticipant[pid] ?? [])];
+      }
+      return {
+        ...base,
+        activeGame: "yahtzee",
+        gameState: {
+          type: "yahtzee",
+          state: {
+            status: "playing",
+            playerOrder: [...game.playerOrder],
+            currentPlayerId,
+            dice: [...game.dice] as [number, number, number, number, number],
+            held: [...game.held] as [boolean, boolean, boolean, boolean, boolean],
+            rollsUsed: game.rollsUsed,
+            pendingCategory: game.pendingCategory,
+            sheetsByParticipant: sheetsClone
           }
         }
       };

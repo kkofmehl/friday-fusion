@@ -17,6 +17,8 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "../shared/contracts.ts",
+    "../shared/yahtzeeScoring.ts"
   ]
 }
