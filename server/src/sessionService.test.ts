@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionState } from "../../shared/contracts";
+import { SCATTERGORIES_COUNTDOWN_MS, type SessionState } from "../../shared/contracts";
 import { SessionService } from "./sessionService";
 import { FileStore } from "./storage/fileStore";
 
@@ -2462,6 +2462,116 @@ describe("SessionService", () => {
         expect(hostP?.score).toBe(2);
         expect(g1P?.score).toBe(1);
       }
+    });
+  });
+
+  describe("scattergories", () => {
+    it("transitions from countdown to answering after 3 seconds", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "scattergories");
+      await setup.service.scattergoriesDrawLetter(host.sessionId, host.participantId);
+      await setup.service.scattergoriesStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(SCATTERGORIES_COUNTDOWN_MS + 100);
+      const state = setup.service.getState(host.sessionId);
+      expect(state.gameState?.type).toBe("scattergories");
+      if (state.gameState?.type !== "scattergories") {
+        throw new Error("expected scattergories");
+      }
+      expect(state.gameState.state.status).toBe("answering");
+      vi.useRealTimers();
+    });
+
+    it("masks other players answers during answering", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "scattergories");
+      await setup.service.scattergoriesDrawLetter(host.sessionId, host.participantId);
+      await setup.service.scattergoriesStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(SCATTERGORIES_COUNTDOWN_MS + 100);
+      const game = setup.service.getState(host.sessionId).gameState;
+      if (game?.type !== "scattergories" || game.state.status !== "answering") {
+        throw new Error("expected answering");
+      }
+      const blank = game.state.prompts.map(() => "");
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, host.participantId, [
+        "Alpha",
+        ...blank.slice(1)
+      ]);
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, guest.participantId, [
+        "Beta",
+        ...blank.slice(1)
+      ]);
+      const hostView = setup.service.getState(host.sessionId, host.participantId);
+      const guestView = setup.service.getState(host.sessionId, guest.participantId);
+      if (hostView.gameState?.type !== "scattergories" || hostView.gameState.state.status !== "answering") {
+        throw new Error("host view");
+      }
+      expect(hostView.gameState.state.answers[host.participantId]?.[0]).toBe("Alpha");
+      expect(hostView.gameState.state.answers[guest.participantId]).toBeUndefined();
+      expect(guestView.gameState?.type).toBe("scattergories");
+      if (guestView.gameState?.type !== "scattergories" || guestView.gameState.state.status !== "answering") {
+        throw new Error("guest view");
+      }
+      expect(guestView.gameState.state.answers[guest.participantId]?.[0]).toBe("Beta");
+      vi.useRealTimers();
+    });
+
+    it("awards multi-word points and reverts on toggle", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "scattergories");
+      await setup.service.scattergoriesSetDuration(host.sessionId, host.participantId, 60_000);
+      await setup.service.scattergoriesDrawLetter(host.sessionId, host.participantId);
+      const drawn = setup.service.getState(host.sessionId).gameState;
+      if (drawn?.type !== "scattergories" || !drawn.state.letter) {
+        throw new Error("letter expected");
+      }
+      const letter = drawn.state.letter;
+      await setup.service.scattergoriesStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(SCATTERGORIES_COUNTDOWN_MS + 100);
+      const idleGame = setup.service.getState(host.sessionId).gameState;
+      if (idleGame?.type !== "scattergories" || idleGame.state.status !== "answering") {
+        throw new Error("answering expected");
+      }
+      const blanks = idleGame.state.prompts.map(() => "");
+      const first = `${letter}illy ${letter}ilo`;
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, guest.participantId, [first, ...blanks.slice(1)]);
+      await vi.advanceTimersByTimeAsync(60_100);
+      const reviewing = setup.service.getState(host.sessionId).gameState;
+      expect(reviewing?.type).toBe("scattergories");
+      if (reviewing?.type !== "scattergories" || reviewing.state.status !== "reviewing") {
+        throw new Error("reviewing expected");
+      }
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        true
+      );
+      let guestScore = setup.service.getState(host.sessionId).participants.find((p) => p.id === guest.participantId)
+        ?.score;
+      expect(guestScore).toBe(2);
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        false
+      );
+      guestScore = setup.service.getState(host.sessionId).participants.find((p) => p.id === guest.participantId)?.score;
+      expect(guestScore).toBe(0);
+      vi.useRealTimers();
     });
   });
 });

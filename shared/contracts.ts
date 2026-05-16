@@ -15,7 +15,8 @@ export const gameTypeSchema = z.enum([
   "bs",
   "madlibs",
   "catchPhrase",
-  "yahtzee"
+  "yahtzee",
+  "scattergories"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -889,6 +890,69 @@ export const yahtzeeStateSchema = z.discriminatedUnion("status", [
 ]);
 export type YahtzeeState = z.infer<typeof yahtzeeStateSchema>;
 
+export const SCATTERGORIES_COUNTDOWN_MS = 3_000;
+export const SCATTERGORIES_ANSWER_DURATIONS_MS = [60_000, 90_000, 120_000, 180_000] as const;
+export const SCATTERGORIES_ANSWER_MAX_CHARS = 80;
+
+export const scattergoriesListSummarySchema = z.object({
+  id: z.string(),
+  title: z.string()
+});
+export type ScattergoriesListSummary = z.infer<typeof scattergoriesListSummarySchema>;
+
+export const scattergoriesVerdictSchema = z.enum(["valid", "invalid"]);
+export type ScattergoriesVerdict = z.infer<typeof scattergoriesVerdictSchema>;
+
+const scattergoriesSetupFieldsSchema = z.object({
+  listId: z.string(),
+  listTitle: z.string(),
+  prompts: z.array(z.string()),
+  letter: z.string().length(1).nullable(),
+  answerDurationMs: z.number().int(),
+  usedListIds: z.array(z.string()),
+  usedLetters: z.array(z.string())
+});
+
+export const scattergoriesStateSchema = z.discriminatedUnion("status", [
+  scattergoriesSetupFieldsSchema.extend({
+    status: z.literal("idle")
+  }),
+  scattergoriesSetupFieldsSchema.extend({
+    status: z.literal("countdown"),
+    letter: z.string().length(1),
+    countdownEndsAt: z.number().int()
+  }),
+  scattergoriesSetupFieldsSchema.extend({
+    status: z.literal("answering"),
+    letter: z.string().length(1),
+    roundEndsAt: z.number().int(),
+    answers: z.record(z.string(), z.array(z.string()))
+  }),
+  scattergoriesSetupFieldsSchema.extend({
+    status: z.literal("reviewing"),
+    letter: z.string().length(1),
+    currentPromptIndex: z.number().int().nonnegative(),
+    revealedAnswers: z.array(
+      z.object({
+        participantId: z.string(),
+        text: z.string()
+      })
+    ),
+    verdicts: z.record(z.string(), scattergoriesVerdictSchema.nullable())
+  }),
+  scattergoriesSetupFieldsSchema.extend({
+    status: z.literal("roundComplete"),
+    letter: z.string().length(1),
+    roundScores: z.array(
+      z.object({
+        participantId: z.string(),
+        pointsThisRound: z.number().int().nonnegative()
+      })
+    )
+  })
+]);
+export type ScattergoriesState = z.infer<typeof scattergoriesStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -949,6 +1013,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("yahtzee"),
     state: yahtzeeStateSchema
+  }),
+  z.object({
+    type: z.literal("scattergories"),
+    state: scattergoriesStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1242,7 +1310,39 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("yahtzee:setPendingCategory"),
     payload: z.object({ category: yahtzeeCategorySchema })
   }),
-  z.object({ type: z.literal("yahtzee:passTurn"), payload: z.object({}) })
+  z.object({ type: z.literal("yahtzee:passTurn"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("scattergories:selectList"),
+    payload: z.object({ listId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("scattergories:randomList"), payload: z.object({}) }),
+  z.object({ type: z.literal("scattergories:drawLetter"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("scattergories:setDuration"),
+    payload: z.object({
+      answerDurationMs: z.union([
+        z.literal(60_000),
+        z.literal(90_000),
+        z.literal(120_000),
+        z.literal(180_000)
+      ])
+    })
+  }),
+  z.object({ type: z.literal("scattergories:startRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("scattergories:updateAnswers"),
+    payload: z.object({ answers: z.array(z.string().max(SCATTERGORIES_ANSWER_MAX_CHARS)) })
+  }),
+  z.object({
+    type: z.literal("scattergories:markAnswer"),
+    payload: z.object({
+      promptIndex: z.number().int().nonnegative(),
+      participantId: z.string().min(1),
+      valid: z.boolean()
+    })
+  }),
+  z.object({ type: z.literal("scattergories:nextPrompt"), payload: z.object({}) }),
+  z.object({ type: z.literal("scattergories:newRound"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

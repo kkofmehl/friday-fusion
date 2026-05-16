@@ -1,0 +1,146 @@
+[
+  {
+    "id": "scat-001",
+    "title": "Around the house",
+    "prompts": [
+      "Something in the kitchen",
+      "A tool",
+      "Something you store in a closet",
+      "A cleaning supply",
+      "Something with buttons",
+      "A piece of furniture",
+      "Something you plug in",
+      "A room in a home",
+      "Something made of wood",
+      "Something you hang on a wall",
+      "A holiday decoration",
+      "Something in the garage"
+    ]
+  },
+  {
+    "id": "scat-002",
+    "title": "Out and about",
+    "prompts": [
+      "A city",
+      "Something at a park",
+      "A type of vehicle",
+      "A street sign",
+      "Something tourists buy",
+      "A job you see downtown",
+      "A restaurant food",
+      "Something at the beach",
+      "A sport you play outside",
+      "A type of tree",
+      "Something at a fair",
+      "A reason to take a trip"
+    ]
+  },
+  {
+    "id": "scat-003",
+    "title": "Food and drink",
+    "prompts": [
+      "A fruit",
+      "A vegetable",
+      "A dessert",
+      "A drink",
+      "Something spicy",
+      "A breakfast food",
+      "A sandwich ingredient",
+      "A candy",
+      "Something you grill",
+      "A soup ingredient",
+      "A cheese",
+      "Something you dip"
+    ]
+  },
+  {
+    "id": "scat-004",
+    "title": "School days",
+    "prompts": [
+      "A school subject",
+      "Something in a backpack",
+      "A reason to stay home sick",
+      "A school supply",
+      "Something on a report card",
+      "A club or team",
+      "Something in the cafeteria",
+      "A book genre",
+      "Something a teacher says",
+      "A field trip destination",
+      "Something in the library",
+      "A holiday during the school year"
+    ]
+  },
+  {
+    "id": "scat-005",
+    "title": "Pop culture",
+    "prompts": [
+      "A movie title",
+      "A song title",
+      "A TV show",
+      "A famous person",
+      "A board game",
+      "A video game",
+      "A cartoon character",
+      "A superhero",
+      "A band name",
+      "A meme topic",
+      "A streaming service",
+      "A costume idea"
+    ]
+  },
+  {
+    "id": "scat-006",
+    "title": "Wild kingdom",
+    "prompts": [
+      "An animal",
+      "A bird",
+      "A sea creature",
+      "An insect",
+      "A pet name",
+      "Something at a zoo",
+      "A farm animal",
+      "A scary animal",
+      "An animal sound",
+      "Something animals eat",
+      "A place animals live",
+      "A mythical creature"
+    ]
+  },
+  {
+    "id": "scat-007",
+    "title": "Word play",
+    "prompts": [
+      "An adjective",
+      "A verb",
+      "Something loud",
+      "Something soft",
+      "A color",
+      "A shape",
+      "Something round",
+      "Something sticky",
+      "A feeling",
+      "Something old",
+      "Something tiny",
+      "Something shiny"
+    ]
+  },
+  {
+    "id": "scat-008",
+    "title": "Party time",
+    "prompts": [
+      "A party game",
+      "A gift idea",
+      "Something at a birthday",
+      "A dance move",
+      "A snack for guests",
+      "A reason to celebrate",
+      "Something you wear to a party",
+      "A party decoration",
+      "A toast topic",
+      "A group activity",
+      "A playlist theme",
+      "Something in a goodie bag"
+    ]
+  }
+]

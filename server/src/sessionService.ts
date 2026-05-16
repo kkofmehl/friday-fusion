@@ -35,7 +35,9 @@ import {
   type UnoActiveColor,
   type UnoCard,
   type YahtzeeCategory,
-  type YahtzeeSheetRow
+  type YahtzeeSheetRow,
+  SCATTERGORIES_ANSWER_MAX_CHARS,
+  SCATTERGORIES_COUNTDOWN_MS
 } from "../../shared/contracts";
 import {
   computeYahtzeePlacement,
@@ -72,6 +74,13 @@ import {
   type MadlibTemplate
 } from "./madlibsTemplates";
 import { shuffledUnoDeck } from "./unoDeck";
+import {
+  getScattergoriesListById,
+  pickScattergoriesLetter,
+  pickScattergoriesList,
+  type ScattergoriesList
+} from "./scattergoriesCardLoader";
+import { countLetterWords } from "../../shared/scattergoriesScoring";
 import {
   advanceTurnAfterPlay,
   isColoredNumberCard,
@@ -440,6 +449,25 @@ type YahtzeeGameInternal = {
   winnerParticipantId?: string | null;
 };
 
+type ScattergoriesGameInternal = {
+  id: string;
+  type: "scattergories";
+  status: "idle" | "countdown" | "answering" | "reviewing" | "roundComplete";
+  listId: string;
+  listTitle: string;
+  prompts: string[];
+  letter: string | null;
+  answerDurationMs: number;
+  usedListIds: string[];
+  usedLetters: string[];
+  countdownEndsAt: number | null;
+  roundEndsAt: number | null;
+  answers: Record<string, string[]>;
+  currentPromptIndex: number;
+  verdictsByPrompt: Record<number, Record<string, "valid" | "invalid">>;
+  roundScoreDelta: Record<string, number>;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -455,7 +483,8 @@ type GameInternal =
   | BsGameInternal
   | MadlibsGameInternal
   | CatchPhraseGameInternal
-  | YahtzeeGameInternal;
+  | YahtzeeGameInternal
+  | ScattergoriesGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1304,6 +1333,7 @@ export class SessionService {
   private readonly guessImageResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pictionaryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly catchPhraseResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly scattergoriesResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -1623,6 +1653,9 @@ export class SessionService {
     }
     if (previousGame?.type === "catchPhrase") {
       this.clearCatchPhraseTimer(sessionId);
+    }
+    if (previousGame?.type === "scattergories") {
+      this.clearScattergoriesTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -2022,6 +2055,30 @@ export class SessionService {
         sheetsByParticipant,
         scoresApplied: false
       };
+    } else if (game === "scattergories") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Scattergories needs at least two active players.");
+      }
+      const firstList = pickScattergoriesList(new Set());
+      next = {
+        id: nanoid(6),
+        type: "scattergories",
+        status: "idle",
+        listId: firstList.id,
+        listTitle: firstList.title,
+        prompts: [...firstList.prompts],
+        letter: null,
+        answerDurationMs: 90_000,
+        usedListIds: [firstList.id],
+        usedLetters: [],
+        countdownEndsAt: null,
+        roundEndsAt: null,
+        answers: {},
+        currentPromptIndex: 0,
+        verdictsByPrompt: {},
+        roundScoreDelta: {}
+      };
     } else {
       throw new Error(`Unknown game type: ${String(game)}`);
     }
@@ -2056,6 +2113,9 @@ export class SessionService {
     if (active?.type === "catchPhrase") {
       this.clearCatchPhraseTimer(sessionId);
     }
+    if (active?.type === "scattergories") {
+      this.clearScattergoriesTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -2071,6 +2131,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
     this.clearCatchPhraseTimer(sessionId);
+    this.clearScattergoriesTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2086,6 +2147,7 @@ export class SessionService {
     this.clearGuessImageTimer(sessionId);
     this.clearPictionaryTimer(sessionId);
     this.clearCatchPhraseTimer(sessionId);
+    this.clearScattergoriesTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2233,6 +2295,7 @@ export class SessionService {
       this.clearGuessImageTimer(sessionId);
       this.clearPictionaryTimer(sessionId);
       this.clearCatchPhraseTimer(sessionId);
+      this.clearScattergoriesTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -5171,6 +5234,334 @@ export class SessionService {
     await this.persist();
   }
 
+  private scattergoriesAssertHost(session: SessionInternal, participantId: string): void {
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can do that.");
+    }
+    assertParticipantActiveForGameplay(session, participantId);
+  }
+
+  private scattergoriesGameOrThrow(session: SessionInternal): ScattergoriesGameInternal {
+    const game = session.games[0];
+    if (game?.type !== "scattergories") {
+      throw new Error("Scattergories is not active.");
+    }
+    return game;
+  }
+
+  private applyScattergoriesList(game: ScattergoriesGameInternal, list: ScattergoriesList): void {
+    game.listId = list.id;
+    game.listTitle = list.title;
+    game.prompts = [...list.prompts];
+    if (!game.usedListIds.includes(list.id)) {
+      game.usedListIds.push(list.id);
+    }
+  }
+
+  private scattergoriesEmptyAnswers(promptCount: number): string[] {
+    return Array.from({ length: promptCount }, () => "");
+  }
+
+  private scattergoriesInitAnswersForRoster(
+    session: SessionInternal,
+    game: ScattergoriesGameInternal
+  ): void {
+    const empty = this.scattergoriesEmptyAnswers(game.prompts.length);
+    game.answers = {};
+    for (const participant of activeParticipants(session)) {
+      game.answers[participant.id] = [...empty];
+    }
+  }
+
+  private clearScattergoriesTimer(sessionId: string): void {
+    const existing = this.scattergoriesResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.scattergoriesResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleScattergoriesTimer(sessionId: string, deadlineMs: number, onFire: () => Promise<void>): void {
+    this.clearScattergoriesTimer(sessionId);
+    const delay = Math.max(0, deadlineMs - Date.now());
+    const timer = setTimeout(() => {
+      void onFire().catch(() => {});
+    }, delay);
+    this.scattergoriesResolveTimers.set(sessionId, timer);
+  }
+
+  private async scattergoriesTransitionToAnswering(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "scattergories" || game.status !== "countdown" || !game.letter) {
+      return;
+    }
+    this.clearScattergoriesTimer(sessionId);
+    const now = Date.now();
+    game.status = "answering";
+    game.countdownEndsAt = null;
+    game.roundEndsAt = now + game.answerDurationMs;
+    this.scattergoriesInitAnswersForRoster(session, game);
+    session.updatedAt = now;
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+    this.scheduleScattergoriesTimer(sessionId, game.roundEndsAt, () =>
+      this.scattergoriesTransitionToReviewing(sessionId)
+    );
+  }
+
+  private async scattergoriesTransitionToReviewing(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "scattergories" || game.status !== "answering" || !game.letter) {
+      return;
+    }
+    this.clearScattergoriesTimer(sessionId);
+    game.status = "reviewing";
+    game.roundEndsAt = null;
+    game.currentPromptIndex = 0;
+    game.verdictsByPrompt = {};
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  private scattergoriesAdjustScore(
+    session: SessionInternal,
+    participantId: string,
+    delta: number,
+    game: ScattergoriesGameInternal
+  ): void {
+    if (delta === 0) {
+      return;
+    }
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant) {
+      return;
+    }
+    participant.score += delta;
+    game.roundScoreDelta[participantId] = (game.roundScoreDelta[participantId] ?? 0) + delta;
+  }
+
+  private scattergoriesRevokeVerdictPoints(
+    session: SessionInternal,
+    game: ScattergoriesGameInternal,
+    promptIndex: number,
+    participantId: string
+  ): void {
+    const prior = game.verdictsByPrompt[promptIndex]?.[participantId];
+    if (prior !== "valid" || !game.letter) {
+      return;
+    }
+    const text = game.answers[participantId]?.[promptIndex] ?? "";
+    const points = countLetterWords(text, game.letter);
+    this.scattergoriesAdjustScore(session, participantId, -points, game);
+  }
+
+  public async scattergoriesSelectList(
+    sessionId: string,
+    hostParticipantId: string,
+    listId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("Lists can only be changed before a round starts.");
+    }
+    const list = getScattergoriesListById(listId);
+    if (!list) {
+      throw new Error("Unknown Scattergories list.");
+    }
+    this.applyScattergoriesList(game, list);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesRandomList(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("Lists can only be changed before a round starts.");
+    }
+    const list = pickScattergoriesList(new Set(game.usedListIds));
+    this.applyScattergoriesList(game, list);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesDrawLetter(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("Letters can only be drawn before a round starts.");
+    }
+    const letter = pickScattergoriesLetter(new Set(game.usedLetters));
+    game.letter = letter;
+    if (!game.usedLetters.includes(letter)) {
+      game.usedLetters.push(letter);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesSetDuration(
+    sessionId: string,
+    hostParticipantId: string,
+    answerDurationMs: number
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("Duration can only be changed before a round starts.");
+    }
+    if (![60_000, 90_000, 120_000, 180_000].includes(answerDurationMs)) {
+      throw new Error("Invalid answer duration.");
+    }
+    game.answerDurationMs = answerDurationMs;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesStartRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("A round is already in progress.");
+    }
+    if (!game.letter) {
+      throw new Error("Draw a letter before starting the round.");
+    }
+    if (game.prompts.length === 0) {
+      throw new Error("Select a list before starting the round.");
+    }
+    this.clearScattergoriesTimer(sessionId);
+    game.status = "countdown";
+    game.answers = {};
+    game.currentPromptIndex = 0;
+    game.verdictsByPrompt = {};
+    game.roundScoreDelta = {};
+    game.roundEndsAt = null;
+    const countdownEndsAt = Date.now() + SCATTERGORIES_COUNTDOWN_MS;
+    game.countdownEndsAt = countdownEndsAt;
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleScattergoriesTimer(sessionId, countdownEndsAt, () =>
+      this.scattergoriesTransitionToAnswering(sessionId)
+    );
+  }
+
+  public async scattergoriesUpdateAnswers(
+    sessionId: string,
+    participantId: string,
+    answers: string[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "answering") {
+      throw new Error("Scattergories is not accepting answers.");
+    }
+    if (answers.length !== game.prompts.length) {
+      throw new Error("Answer count does not match prompts.");
+    }
+    const sanitized = answers.map((a) => a.slice(0, SCATTERGORIES_ANSWER_MAX_CHARS));
+    game.answers[participantId] = sanitized;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesMarkAnswer(
+    sessionId: string,
+    hostParticipantId: string,
+    promptIndex: number,
+    targetParticipantId: string,
+    valid: boolean
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "reviewing" || !game.letter) {
+      throw new Error("Scattergories is not in the review phase.");
+    }
+    if (promptIndex !== game.currentPromptIndex) {
+      throw new Error("That prompt is not being reviewed.");
+    }
+    if (promptIndex < 0 || promptIndex >= game.prompts.length) {
+      throw new Error("Invalid prompt index.");
+    }
+    if (!activeParticipants(session).some((p) => p.id === targetParticipantId)) {
+      throw new Error("Participant is not active in this session.");
+    }
+    this.scattergoriesRevokeVerdictPoints(session, game, promptIndex, targetParticipantId);
+    if (!game.verdictsByPrompt[promptIndex]) {
+      game.verdictsByPrompt[promptIndex] = {};
+    }
+    game.verdictsByPrompt[promptIndex]![targetParticipantId] = valid ? "valid" : "invalid";
+    if (valid) {
+      const text = game.answers[targetParticipantId]?.[promptIndex] ?? "";
+      const points = countLetterWords(text, game.letter);
+      this.scattergoriesAdjustScore(session, targetParticipantId, points, game);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesNextPrompt(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "reviewing" || !game.letter) {
+      throw new Error("Scattergories is not in the review phase.");
+    }
+    const roster = activeParticipants(session);
+    const verdicts = game.verdictsByPrompt[game.currentPromptIndex] ?? {};
+    const allMarked = roster.every((p) => verdicts[p.id] === "valid" || verdicts[p.id] === "invalid");
+    if (!allMarked) {
+      throw new Error("Mark every answer before moving on.");
+    }
+    const lastIndex = game.prompts.length - 1;
+    if (game.currentPromptIndex >= lastIndex) {
+      game.status = "roundComplete";
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    game.currentPromptIndex += 1;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async scattergoriesNewRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    this.scattergoriesAssertHost(session, hostParticipantId);
+    const game = this.scattergoriesGameOrThrow(session);
+    if (game.status !== "roundComplete") {
+      throw new Error("Finish reviewing the current round first.");
+    }
+    this.clearScattergoriesTimer(sessionId);
+    game.status = "idle";
+    game.letter = null;
+    game.countdownEndsAt = null;
+    game.roundEndsAt = null;
+    game.answers = {};
+    game.currentPromptIndex = 0;
+    game.verdictsByPrompt = {};
+    game.roundScoreDelta = {};
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearPictionaryTimer(sessionId: string): void {
     const existing = this.pictionaryResolveTimers.get(sessionId);
     if (existing) {
@@ -6552,6 +6943,116 @@ export class SessionService {
           }
         }
       };
+    }
+
+    if (game.type === "scattergories") {
+      const setupFields = {
+        listId: game.listId,
+        listTitle: game.listTitle,
+        prompts: [...game.prompts],
+        letter: game.letter,
+        answerDurationMs: game.answerDurationMs,
+        usedListIds: [...game.usedListIds],
+        usedLetters: [...game.usedLetters]
+      };
+      if (game.status === "idle") {
+        return {
+          ...base,
+          activeGame: "scattergories",
+          gameState: {
+            type: "scattergories",
+            state: {
+              ...setupFields,
+              status: "idle" as const
+            }
+          }
+        };
+      }
+      if (game.status === "countdown" && game.letter && game.countdownEndsAt !== null) {
+        return {
+          ...base,
+          activeGame: "scattergories",
+          gameState: {
+            type: "scattergories",
+            state: {
+              ...setupFields,
+              letter: game.letter,
+              status: "countdown" as const,
+              countdownEndsAt: game.countdownEndsAt
+            }
+          }
+        };
+      }
+      if (game.status === "answering" && game.letter && game.roundEndsAt !== null) {
+        const maskedAnswers: Record<string, string[]> = {};
+        if (viewerParticipantId) {
+          maskedAnswers[viewerParticipantId] =
+            game.answers[viewerParticipantId] ?? this.scattergoriesEmptyAnswers(game.prompts.length);
+        }
+        return {
+          ...base,
+          activeGame: "scattergories",
+          gameState: {
+            type: "scattergories",
+            state: {
+              ...setupFields,
+              letter: game.letter,
+              status: "answering" as const,
+              roundEndsAt: game.roundEndsAt,
+              answers: maskedAnswers
+            }
+          }
+        };
+      }
+      if (game.status === "reviewing" && game.letter) {
+        const roster = activeParticipants(session);
+        const revealedAnswers = roster.map((p) => ({
+          participantId: p.id,
+          text: (game.answers[p.id]?.[game.currentPromptIndex] ?? "").trim()
+        }));
+        const promptVerdicts = game.verdictsByPrompt[game.currentPromptIndex] ?? {};
+        const verdicts: Record<string, "valid" | "invalid" | null> = {};
+        for (const p of roster) {
+          const v = promptVerdicts[p.id];
+          verdicts[p.id] = v === "valid" || v === "invalid" ? v : null;
+        }
+        return {
+          ...base,
+          activeGame: "scattergories",
+          gameState: {
+            type: "scattergories",
+            state: {
+              ...setupFields,
+              letter: game.letter,
+              status: "reviewing" as const,
+              currentPromptIndex: game.currentPromptIndex,
+              revealedAnswers,
+              verdicts
+            }
+          }
+        };
+      }
+      if (game.status === "roundComplete" && game.letter) {
+        const roundScores = activeParticipants(session).map((p) => ({
+          participantId: p.id,
+          pointsThisRound: game.roundScoreDelta[p.id] ?? 0
+        }));
+        roundScores.sort((a, b) => b.pointsThisRound - a.pointsThisRound);
+        return {
+          ...base,
+          activeGame: "scattergories",
+          gameState: {
+            type: "scattergories",
+            state: {
+              ...setupFields,
+              letter: game.letter,
+              status: "roundComplete" as const,
+              roundScores
+            }
+          }
+        };
+      }
+      throw new Error(`Invalid scattergories phase: ${game.status}`);
     }
 
     if (game.type === "uno") {

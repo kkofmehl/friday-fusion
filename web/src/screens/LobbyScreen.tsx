@@ -112,6 +112,13 @@ const GAMES: GameOption[] = [
     description:
       "Take turns rolling five dice, holding what you like, then score a row—Friday Fusion adds placement points when the game ends.",
     emoji: "🎲"
+  },
+  {
+    id: "scattergories",
+    title: "Scattergories",
+    description:
+      "Race the clock to fill categories for a random letter—then the host scores each answer together.",
+    emoji: "📋"
   }
 ];
 

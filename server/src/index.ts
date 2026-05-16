@@ -202,6 +202,10 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
 
   app.get("/api/active-sessions", async () => sessionService.listActiveSessions());
   app.get("/api/trivia/categories", async () => loadTriviaCategories());
+  app.get("/api/scattergories/lists", async () => {
+    const { getScattergoriesListSummaries } = await import("./scattergoriesCardLoader");
+    return getScattergoriesListSummaries();
+  });
 
   app.post("/api/sessions/join", async (request, reply) => {
     const body = joinSessionRequestSchema.parse(request.body);
@@ -1048,6 +1052,42 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "yahtzee:passTurn") {
           await sessionService.yahtzeePassTurn(context.sessionId, context.participantId);
+        } else if (event.type === "scattergories:selectList") {
+          await sessionService.scattergoriesSelectList(
+            context.sessionId,
+            context.participantId,
+            event.payload.listId
+          );
+        } else if (event.type === "scattergories:randomList") {
+          await sessionService.scattergoriesRandomList(context.sessionId, context.participantId);
+        } else if (event.type === "scattergories:drawLetter") {
+          await sessionService.scattergoriesDrawLetter(context.sessionId, context.participantId);
+        } else if (event.type === "scattergories:setDuration") {
+          await sessionService.scattergoriesSetDuration(
+            context.sessionId,
+            context.participantId,
+            event.payload.answerDurationMs
+          );
+        } else if (event.type === "scattergories:startRound") {
+          await sessionService.scattergoriesStartRound(context.sessionId, context.participantId);
+        } else if (event.type === "scattergories:updateAnswers") {
+          await sessionService.scattergoriesUpdateAnswers(
+            context.sessionId,
+            context.participantId,
+            event.payload.answers
+          );
+        } else if (event.type === "scattergories:markAnswer") {
+          await sessionService.scattergoriesMarkAnswer(
+            context.sessionId,
+            context.participantId,
+            event.payload.promptIndex,
+            event.payload.participantId,
+            event.payload.valid
+          );
+        } else if (event.type === "scattergories:nextPrompt") {
+          await sessionService.scattergoriesNextPrompt(context.sessionId, context.participantId);
+        } else if (event.type === "scattergories:newRound") {
+          await sessionService.scattergoriesNewRound(context.sessionId, context.participantId);
         }
 
         broadcastState(context.sessionId);
