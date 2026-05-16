@@ -3685,6 +3685,33 @@ label {
   color: var(--slate-600);
 }
 
+.yahtzee-announce {
+  margin: 0.5rem 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(90deg, #f97316, #f59e0b);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  animation: yahtzeeAnnounceFade 3s ease forwards;
+}
+
+@keyframes yahtzeeAnnounceFade {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 .yahtzee-muted {
   color: var(--slate-500);
   font-size: 0.9rem;
@@ -3721,6 +3748,26 @@ label {
 .yahtzee-sheet-wrap {
   overflow-x: auto;
   max-width: 28rem;
+}
+
+.yahtzee-upper-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  margin: 0 0 0.45rem;
+  color: var(--slate-700);
+  font-size: 0.92rem;
+}
+
+.yahtzee-upper-bonus-indicator {
+  color: var(--slate-500);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.yahtzee-upper-bonus-indicator--met {
+  color: #15803d;
 }
 
 .yahtzee-sheet-title {

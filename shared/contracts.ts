@@ -868,19 +868,37 @@ export type YahtzeeSheetRow = z.infer<typeof yahtzeeSheetRowSchema>;
 
 export const yahtzeeSheetsByParticipantSchema = z.record(z.string(), z.array(yahtzeeSheetRowSchema));
 
-export const yahtzeeStateSchema = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("playing"),
-    playerOrder: z.array(z.string()),
-    currentPlayerId: z.string(),
-    dice: yahtzeeDiceTupleSchema,
-    held: yahtzeeHeldTupleSchema,
-    rollsUsed: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-    pendingCategory: yahtzeeCategorySchema.nullable(),
-    sheetsByParticipant: yahtzeeSheetsByParticipantSchema
+export const yahtzeeModeSchema = z.enum(["turns", "simultaneous"]);
+export type YahtzeeMode = z.infer<typeof yahtzeeModeSchema>;
+
+export const yahtzeeAnnouncementSchema = z.object({
+  participantId: z.string(),
+  createdAtMs: z.number().int()
+});
+export type YahtzeeAnnouncement = z.infer<typeof yahtzeeAnnouncementSchema>;
+
+const yahtzeePlayingSharedSchema = z.object({
+  status: z.literal("playing"),
+  playerOrder: z.array(z.string()),
+  dice: yahtzeeDiceTupleSchema,
+  held: yahtzeeHeldTupleSchema,
+  rollsUsed: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  pendingCategory: yahtzeeCategorySchema.nullable(),
+  sheetsByParticipant: yahtzeeSheetsByParticipantSchema,
+  latestYahtzee: yahtzeeAnnouncementSchema.nullable()
+});
+
+export const yahtzeeStateSchema = z.union([
+  yahtzeePlayingSharedSchema.extend({
+    mode: z.literal("turns"),
+    currentPlayerId: z.string()
+  }),
+  yahtzeePlayingSharedSchema.extend({
+    mode: z.literal("simultaneous")
   }),
   z.object({
     status: z.literal("finished"),
+    mode: yahtzeeModeSchema,
     playerOrder: z.array(z.string()),
     sheetsByParticipant: yahtzeeSheetsByParticipantSchema,
     yahtzeeGrandTotals: z.record(z.string(), z.number().int()),
@@ -1064,6 +1082,7 @@ export type ServerEvent = z.infer<typeof serverEventSchema>;
 export const gameStartOptionsSchema = z.object({
   hangmanMode: hangmanModeSchema.optional(),
   hangmanCreatorId: z.string().optional(),
+  yahtzeeMode: yahtzeeModeSchema.optional(),
   /** Guess the image: who uploads the image and enters descriptions for the first round (defaults to host). */
   guessImageSetupParticipantId: z.string().optional(),
   /** Guess the image: when `everyone`, each player prepares their own image; host then picks which one to play. */

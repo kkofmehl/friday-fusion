@@ -3,7 +3,8 @@ import type { ClientEvent, SessionState, YahtzeeCategory } from "../../../shared
 import {
   grandTotalFromSheetRows,
   scoreCategory,
-  YAHTZEE_CATEGORY_ORDER
+  YAHTZEE_CATEGORY_ORDER,
+  YAHTZEE_UPPER_CATEGORIES
 } from "../../../shared/yahtzeeScoring";
 import { activeParticipants } from "../utils/participants";
 import {
@@ -175,7 +176,7 @@ export function YahtzeeGame({
 
   const playingDiceKey =
     state.status === "playing"
-      ? diceFingerprint(state.dice, state.rollsUsed, state.currentPlayerId)
+      ? diceFingerprint(state.dice, state.rollsUsed, state.mode === "turns" ? state.currentPlayerId : currentParticipantId)
       : null;
 
   useEffect(() => {
@@ -202,18 +203,44 @@ export function YahtzeeGame({
   }, [playingDiceKey, state.status]);
 
   const isPlaying = state.status === "playing";
-  const currentPlayerId = isPlaying ? state.currentPlayerId : "";
-  const isCurrentRoller = isPlaying && currentPlayerId === currentParticipantId;
-  const canAct = canPlay && isCurrentRoller;
+  const isSimultaneousMode = isPlaying && state.mode === "simultaneous";
+  const currentPlayerId = isPlaying && state.mode === "turns" ? state.currentPlayerId : currentParticipantId;
+  const myRows = state.sheetsByParticipant[currentParticipantId] ?? [];
+  const myRoundsLeft = Math.max(0, 13 - myRows.length);
+  const isCurrentRoller = isPlaying && (isSimultaneousMode || currentPlayerId === currentParticipantId);
+  const canAct = canPlay && isCurrentRoller && (isSimultaneousMode ? myRoundsLeft > 0 : true);
+  const [activeYahtzeeAnnouncement, setActiveYahtzeeAnnouncement] = useState<{
+    participantId: string;
+    createdAtMs: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isPlaying || !state.latestYahtzee) {
+      setActiveYahtzeeAnnouncement(null);
+      return;
+    }
+    const latest = state.latestYahtzee;
+    const elapsedMs = Date.now() - latest.createdAtMs;
+    if (elapsedMs >= 3000) {
+      setActiveYahtzeeAnnouncement(null);
+      return;
+    }
+    setActiveYahtzeeAnnouncement(latest);
+    const timeout = window.setTimeout(() => {
+      setActiveYahtzeeAnnouncement((current) =>
+        current && current.createdAtMs === latest.createdAtMs ? null : current
+      );
+    }, 3000 - elapsedMs);
+    return () => window.clearTimeout(timeout);
+  }, [isPlaying, isPlaying ? state.latestYahtzee?.participantId : null, isPlaying ? state.latestYahtzee?.createdAtMs : null]);
 
   const myCommitted = useMemo(() => {
-    const rows = state.sheetsByParticipant[currentParticipantId] ?? [];
     const sub: Partial<Record<YahtzeeCategory, number>> = {};
-    for (const r of rows) {
+    for (const r of myRows) {
       sub[r.category] = r.points;
     }
     return sub;
-  }, [state, currentParticipantId]);
+  }, [myRows]);
 
   const yahtzeeTotals = useMemo(() => {
     const out: Record<string, number> = {};
@@ -222,6 +249,16 @@ export function YahtzeeGame({
     }
     return out;
   }, [roster, state]);
+
+  const upperSectionTotal = useMemo(
+    () =>
+      YAHTZEE_UPPER_CATEGORIES.reduce((sum, category) => {
+        const points = myCommitted[category];
+        return sum + (typeof points === "number" ? points : 0);
+      }, 0),
+    [myCommitted]
+  );
+  const hasReachedUpperBonusTarget = upperSectionTotal >= 63;
 
   const pickCategory = (category: YahtzeeCategory): void => {
     if (!canAct) {
@@ -286,13 +323,23 @@ export function YahtzeeGame({
   const rollsLeft = 3 - state.rollsUsed;
   const pending = state.pendingCategory;
   const pendingPreview = pending ? scoreCategory(dice, pending) : null;
+  const yahtzeeAnnouncementText = activeYahtzeeAnnouncement
+    ? `${nameFor(activeYahtzeeAnnouncement.participantId)} got a YAHTZEE!`
+    : null;
 
   return (
     <div className={`yahtzee${isCurrentRoller ? " yahtzee--your-turn" : ""}`}>
       <header className="yahtzee-head">
         <h2>Yahtzee</h2>
+        {yahtzeeAnnouncementText && <p className="yahtzee-announce">{yahtzeeAnnouncementText}</p>}
         <p className="yahtzee-turn-line">
-          {isCurrentRoller ? (
+          {isSimultaneousMode ? (
+            <>
+              <strong className="yahtzee-your-turn-callout">Simultaneous mode</strong>
+              {" — "}
+              {myRoundsLeft} round{myRoundsLeft === 1 ? "" : "s"} left on your card
+            </>
+          ) : isCurrentRoller ? (
             <>
               <strong className="yahtzee-your-turn-callout">Your turn</strong>
               {" — "}
@@ -305,12 +352,17 @@ export function YahtzeeGame({
           )}
         </p>
         <div className="yahtzee-summary">
-          <h3 className="yahtzee-summary-title">This game (sheet total)</h3>
+          <h3 className="yahtzee-summary-title">
+            {isSimultaneousMode ? "Live progress" : "This game (sheet total)"}
+          </h3>
           <ul className="yahtzee-summary-list">
             {roster.map((p) => (
               <li key={p.id}>
                 <span>{p.displayName}</span>
                 <span className="yahtzee-summary-total">{yahtzeeTotals[p.id] ?? 0}</span>
+                <span className="yahtzee-muted">
+                  {Math.max(0, 13 - (state.sheetsByParticipant[p.id]?.length ?? 0))} rounds left
+                </span>
                 <span className="yahtzee-muted" title="Lobby score from all games">
                   FF: {p.score}
                 </span>
@@ -348,7 +400,7 @@ export function YahtzeeGame({
           Roll dice
         </button>
         <button type="button" className="btn btn-primary" disabled={!canAct || pending === null} onClick={passTurn}>
-          Pass turn
+          {isSimultaneousMode ? "Score row" : "Pass turn"}
         </button>
         {pending !== null && (
           <span className="yahtzee-pending-preview">
@@ -358,6 +410,19 @@ export function YahtzeeGame({
       </div>
 
       <div className="yahtzee-sheet-wrap">
+        <p className="yahtzee-upper-total" aria-live="polite">
+          Upper section:{" "}
+          <strong>
+            {upperSectionTotal} / 63
+          </strong>
+          <span
+            className={`yahtzee-upper-bonus-indicator${
+              hasReachedUpperBonusTarget ? " yahtzee-upper-bonus-indicator--met" : ""
+            }`}
+          >
+            {hasReachedUpperBonusTarget ? " Bonus target met \u2713" : " Bonus target pending"}
+          </span>
+        </p>
         <h3 className="yahtzee-sheet-title">Your scorecard</h3>
         <table className="yahtzee-sheet">
           <thead>

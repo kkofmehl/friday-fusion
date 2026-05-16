@@ -7,6 +7,7 @@ import {
   type ClientEvent,
   type GameType,
   type HangmanMode,
+  type YahtzeeMode,
   type SessionState
 } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
@@ -154,6 +155,7 @@ export function LobbyScreen({
   const [twentyQMaxQuestions, setTwentyQMaxQuestions] = useState(20);
   const [pictionaryDrawSecs, setPictionaryDrawSecs] = useState(PICTORY_ROUND_DURATION_DEFAULT_MS / 1000);
   const [applesMode, setApplesMode] = useState<ApplesToApplesMode>("standard");
+  const [yahtzeeMode, setYahtzeeMode] = useState<YahtzeeMode>("turns");
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -249,6 +251,13 @@ export function LobbyScreen({
       send({
         type: "game:start",
         payload: { game, options: { applesToApplesMode: applesMode } }
+      });
+      return;
+    }
+    if (game === "yahtzee") {
+      send({
+        type: "game:start",
+        payload: { game, options: { yahtzeeMode } }
       });
       return;
     }
@@ -479,6 +488,35 @@ export function LobbyScreen({
                     </span>
                   </label>
                   <p className="mode-option-hint">Needs at least three active players.</p>
+                </fieldset>
+              )}
+              {game.id === "yahtzee" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Mode</legend>
+                  <label className={`mode-option${yahtzeeMode === "turns" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="yahtzee-mode"
+                      value="turns"
+                      checked={yahtzeeMode === "turns"}
+                      onChange={() => setYahtzeeMode("turns")}
+                    />
+                    <span className="mode-option-title">Classic turns</span>
+                    <span className="mode-option-hint">One active roller at a time, passing after selecting a row.</span>
+                  </label>
+                  <label className={`mode-option${yahtzeeMode === "simultaneous" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="yahtzee-mode"
+                      value="simultaneous"
+                      checked={yahtzeeMode === "simultaneous"}
+                      onChange={() => setYahtzeeMode("simultaneous")}
+                    />
+                    <span className="mode-option-title">Simultaneous</span>
+                    <span className="mode-option-hint">
+                      Everyone plays their own board at once; live progress tracks totals and rounds left.
+                    </span>
+                  </label>
                 </fieldset>
               )}
               {isHost ? (

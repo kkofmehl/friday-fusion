@@ -35,6 +35,7 @@ import {
   type UnoActiveColor,
   type UnoCard,
   type YahtzeeCategory,
+  type YahtzeeMode,
   type YahtzeeSheetRow,
   SCATTERGORIES_ANSWER_MAX_CHARS,
   SCATTERGORIES_COUNTDOWN_MS
@@ -436,12 +437,18 @@ type YahtzeeGameInternal = {
   id: string;
   type: "yahtzee";
   status: "playing" | "finished";
+  mode: YahtzeeMode;
   playerOrder: string[];
   currentPlayerIndex: number;
   dice: [number, number, number, number, number];
   held: [boolean, boolean, boolean, boolean, boolean];
   rollsUsed: 1 | 2 | 3;
   pendingCategory: YahtzeeCategory | null;
+  diceByParticipant?: Record<string, [number, number, number, number, number]>;
+  heldByParticipant?: Record<string, [boolean, boolean, boolean, boolean, boolean]>;
+  rollsUsedByParticipant?: Record<string, 1 | 2 | 3>;
+  pendingCategoryByParticipant?: Record<string, YahtzeeCategory | null>;
+  latestYahtzee?: { participantId: string; createdAtMs: number } | null;
   sheetsByParticipant: Record<string, YahtzeeSheetRow[]>;
   scoresApplied: boolean;
   yahtzeeGrandTotals?: Record<string, number>;
@@ -944,6 +951,7 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
   }
   if (game.type === "yahtzee") {
     const g = game as YahtzeeGameInternal;
+    const mode: YahtzeeMode = g.mode === "simultaneous" ? "simultaneous" : "turns";
     const playerOrder = Array.isArray(g.playerOrder) ? [...g.playerOrder] : [];
     const sheets: Record<string, YahtzeeSheetRow[]> = {};
     for (const pid of playerOrder) {
@@ -976,16 +984,61 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
     } else {
       currentPlayerIndex = 0;
     }
+    const normalizeDiceTuple = (
+      raw: unknown
+    ): [number, number, number, number, number] => {
+      const values = Array.isArray(raw) && raw.length === 5 ? raw : [1, 1, 1, 1, 1];
+      return [
+        clampDie(values[0] as number),
+        clampDie(values[1] as number),
+        clampDie(values[2] as number),
+        clampDie(values[3] as number),
+        clampDie(values[4] as number)
+      ];
+    };
+    const normalizeHeldTuple = (raw: unknown): [boolean, boolean, boolean, boolean, boolean] => {
+      const values = Array.isArray(raw) && raw.length === 5 ? raw : [false, false, false, false, false];
+      return [Boolean(values[0]), Boolean(values[1]), Boolean(values[2]), Boolean(values[3]), Boolean(values[4])];
+    };
+    const diceByParticipant: Record<string, [number, number, number, number, number]> = {};
+    const heldByParticipant: Record<string, [boolean, boolean, boolean, boolean, boolean]> = {};
+    const rollsUsedByParticipant: Record<string, 1 | 2 | 3> = {};
+    const pendingCategoryByParticipant: Record<string, YahtzeeCategory | null> = {};
+    for (const pid of playerOrder) {
+      const sourceDice = g.diceByParticipant?.[pid];
+      const sourceHeld = g.heldByParticipant?.[pid];
+      const sourceRolls = g.rollsUsedByParticipant?.[pid];
+      diceByParticipant[pid] = normalizeDiceTuple(sourceDice ?? g.dice);
+      heldByParticipant[pid] = normalizeHeldTuple(sourceHeld ?? g.held);
+      rollsUsedByParticipant[pid] = sourceRolls === 2 || sourceRolls === 3 ? sourceRolls : 1;
+      pendingCategoryByParticipant[pid] = g.pendingCategoryByParticipant?.[pid] ?? null;
+    }
+    const latestYahtzee =
+      g.latestYahtzee
+      && typeof g.latestYahtzee === "object"
+      && typeof g.latestYahtzee.participantId === "string"
+      && typeof g.latestYahtzee.createdAtMs === "number"
+        ? {
+            participantId: g.latestYahtzee.participantId,
+            createdAtMs: Math.floor(g.latestYahtzee.createdAtMs)
+          }
+        : null;
     return {
       ...g,
       id: g.id ?? nanoid(6),
       status: g.status === "finished" || g.status === "playing" ? g.status : "playing",
+      mode,
       playerOrder,
       currentPlayerIndex,
       dice,
       held,
       rollsUsed: ru,
       pendingCategory: g.pendingCategory ?? null,
+      diceByParticipant,
+      heldByParticipant,
+      rollsUsedByParticipant,
+      pendingCategoryByParticipant,
+      latestYahtzee,
       sheetsByParticipant: sheets,
       scoresApplied: g.scoresApplied === true,
       yahtzeeGrandTotals:
@@ -999,6 +1052,7 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
 };
 
 const yahtzeeRollDie = (): number => Math.floor(Math.random() * 6) + 1;
+const YAHTZEE_TOTAL_ROUNDS_PER_PLAYER = 13;
 
 const yahtzeeRollFiveDice = (): [number, number, number, number, number] => [
   yahtzeeRollDie(),
@@ -1024,12 +1078,14 @@ const yahtzeeRerollKeepingHeld = (
 const yahtzeeSheetHasCategory = (rows: YahtzeeSheetRow[], category: YahtzeeCategory): boolean =>
   rows.some((row) => row.category === category);
 
+const yahtzeePlayerFinished = (rows: YahtzeeSheetRow[]): boolean => rows.length >= YAHTZEE_TOTAL_ROUNDS_PER_PLAYER;
+
 const yahtzeeEveryoneFinished = (game: YahtzeeGameInternal): boolean => {
   if (game.playerOrder.length === 0) {
     return false;
   }
   for (const pid of game.playerOrder) {
-    if ((game.sheetsByParticipant[pid] ?? []).length !== 13) {
+    if (!yahtzeePlayerFinished(game.sheetsByParticipant[pid] ?? [])) {
       return false;
     }
   }
@@ -2036,22 +2092,37 @@ export class SessionService {
       if (actives.length < 1) {
         throw new Error("Yahtzee needs at least one active player.");
       }
+      const yahtzeeMode: YahtzeeMode = options?.yahtzeeMode === "simultaneous" ? "simultaneous" : "turns";
       const playerOrder = actives.map((p) => p.id);
       const sheetsByParticipant: Record<string, YahtzeeSheetRow[]> = {};
+      const diceByParticipant: Record<string, [number, number, number, number, number]> = {};
+      const heldByParticipant: Record<string, [boolean, boolean, boolean, boolean, boolean]> = {};
+      const rollsUsedByParticipant: Record<string, 1 | 2 | 3> = {};
+      const pendingCategoryByParticipant: Record<string, YahtzeeCategory | null> = {};
       for (const pid of playerOrder) {
         sheetsByParticipant[pid] = [];
+        diceByParticipant[pid] = yahtzeeRollFiveDice();
+        heldByParticipant[pid] = [false, false, false, false, false];
+        rollsUsedByParticipant[pid] = 1;
+        pendingCategoryByParticipant[pid] = null;
       }
       const dice = yahtzeeRollFiveDice();
       next = {
         id: nanoid(6),
         type: "yahtzee",
         status: "playing",
+        mode: yahtzeeMode,
         playerOrder,
         currentPlayerIndex: 0,
         dice,
         held: [false, false, false, false, false],
         rollsUsed: 1,
         pendingCategory: null,
+        diceByParticipant,
+        heldByParticipant,
+        rollsUsedByParticipant,
+        pendingCategoryByParticipant,
+        latestYahtzee: null,
         sheetsByParticipant,
         scoresApplied: false
       };
@@ -5110,12 +5181,27 @@ export class SessionService {
     if (game?.type !== "yahtzee" || game.status !== "playing") {
       throw new Error("Yahtzee is not in play.");
     }
+    if (dieIndex < 0 || dieIndex > 4 || !Number.isInteger(dieIndex)) {
+      throw new Error("Invalid die index.");
+    }
+    if (game.mode === "simultaneous") {
+      const rows = game.sheetsByParticipant[participantId] ?? [];
+      if (yahtzeePlayerFinished(rows)) {
+        throw new Error("You have already finished your scorecard.");
+      }
+      const heldByParticipant = game.heldByParticipant ?? {};
+      const heldCurrent = heldByParticipant[participantId] ?? [false, false, false, false, false];
+      const held = [...heldCurrent] as boolean[];
+      held[dieIndex] = !held[dieIndex];
+      heldByParticipant[participantId] = held as [boolean, boolean, boolean, boolean, boolean];
+      game.heldByParticipant = heldByParticipant;
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
     const currentId = game.playerOrder[game.currentPlayerIndex];
     if (currentId !== participantId) {
       throw new Error("Not your turn.");
-    }
-    if (dieIndex < 0 || dieIndex > 4 || !Number.isInteger(dieIndex)) {
-      throw new Error("Invalid die index.");
     }
     const held = [...game.held] as boolean[];
     held[dieIndex] = !held[dieIndex];
@@ -5130,6 +5216,31 @@ export class SessionService {
     const game = session.games[0];
     if (game?.type !== "yahtzee" || game.status !== "playing") {
       throw new Error("Yahtzee is not in play.");
+    }
+    if (game.mode === "simultaneous") {
+      const rows = game.sheetsByParticipant[participantId] ?? [];
+      if (yahtzeePlayerFinished(rows)) {
+        throw new Error("You have already finished your scorecard.");
+      }
+      const diceByParticipant = game.diceByParticipant ?? {};
+      const heldByParticipant = game.heldByParticipant ?? {};
+      const rollsUsedByParticipant = game.rollsUsedByParticipant ?? {};
+      const dice = diceByParticipant[participantId];
+      const held = heldByParticipant[participantId];
+      const rollsUsed = rollsUsedByParticipant[participantId] ?? 1;
+      if (!dice || !held) {
+        throw new Error("Your Yahtzee turn state is missing.");
+      }
+      if (rollsUsed >= 3) {
+        throw new Error("No rolls remaining.");
+      }
+      diceByParticipant[participantId] = yahtzeeRerollKeepingHeld(dice, held);
+      rollsUsedByParticipant[participantId] = rollsUsed === 1 ? 2 : 3;
+      game.diceByParticipant = diceByParticipant;
+      game.rollsUsedByParticipant = rollsUsedByParticipant;
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
     }
     const currentId = game.playerOrder[game.currentPlayerIndex];
     if (currentId !== participantId) {
@@ -5155,15 +5266,25 @@ export class SessionService {
     if (game?.type !== "yahtzee" || game.status !== "playing") {
       throw new Error("Yahtzee is not in play.");
     }
-    const currentId = game.playerOrder[game.currentPlayerIndex];
-    if (currentId !== participantId) {
-      throw new Error("Not your turn.");
-    }
     const rows = game.sheetsByParticipant[participantId] ?? [];
+    if (game.mode === "turns") {
+      const currentId = game.playerOrder[game.currentPlayerIndex];
+      if (currentId !== participantId) {
+        throw new Error("Not your turn.");
+      }
+    } else if (yahtzeePlayerFinished(rows)) {
+      throw new Error("You have already finished your scorecard.");
+    }
     if (yahtzeeSheetHasCategory(rows, category)) {
       throw new Error("That category is already filled.");
     }
-    game.pendingCategory = category;
+    if (game.mode === "simultaneous") {
+      const pendingCategoryByParticipant = game.pendingCategoryByParticipant ?? {};
+      pendingCategoryByParticipant[participantId] = category;
+      game.pendingCategoryByParticipant = pendingCategoryByParticipant;
+    } else {
+      game.pendingCategory = category;
+    }
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -5210,6 +5331,49 @@ export class SessionService {
     if (game?.type !== "yahtzee" || game.status !== "playing") {
       throw new Error("Yahtzee is not in play.");
     }
+    const rows = game.sheetsByParticipant[participantId] ?? [];
+    if (game.mode === "simultaneous") {
+      if (yahtzeePlayerFinished(rows)) {
+        throw new Error("You have already finished your scorecard.");
+      }
+      const pendingCategoryByParticipant = game.pendingCategoryByParticipant ?? {};
+      const pendingCategory = pendingCategoryByParticipant[participantId] ?? null;
+      if (pendingCategory === null) {
+        throw new Error("Choose a scoring row before passing.");
+      }
+      if (yahtzeeSheetHasCategory(rows, pendingCategory)) {
+        throw new Error("That category is already filled.");
+      }
+      const dice = game.diceByParticipant?.[participantId];
+      if (!dice) {
+        throw new Error("Your Yahtzee turn state is missing.");
+      }
+      const points = scoreCategory(dice, pendingCategory);
+      const nextRows = [...rows, { category: pendingCategory, points }];
+      game.sheetsByParticipant[participantId] = nextRows;
+      if (pendingCategory === "yahtzee" && points === 50) {
+        game.latestYahtzee = { participantId, createdAtMs: Date.now() };
+      }
+      if (yahtzeeEveryoneFinished(game)) {
+        this.yahtzeeFinalize(session, game);
+      } else {
+        const diceByParticipant = game.diceByParticipant ?? {};
+        const heldByParticipant = game.heldByParticipant ?? {};
+        const rollsUsedByParticipant = game.rollsUsedByParticipant ?? {};
+        diceByParticipant[participantId] = yahtzeeRollFiveDice();
+        heldByParticipant[participantId] = [false, false, false, false, false];
+        rollsUsedByParticipant[participantId] = 1;
+        pendingCategoryByParticipant[participantId] = null;
+        game.diceByParticipant = diceByParticipant;
+        game.heldByParticipant = heldByParticipant;
+        game.rollsUsedByParticipant = rollsUsedByParticipant;
+        game.pendingCategoryByParticipant = pendingCategoryByParticipant;
+      }
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+
     const currentId = game.playerOrder[game.currentPlayerIndex];
     if (currentId !== participantId) {
       throw new Error("Not your turn.");
@@ -5217,13 +5381,15 @@ export class SessionService {
     if (game.pendingCategory === null) {
       throw new Error("Choose a scoring row before passing.");
     }
-    const rows = game.sheetsByParticipant[participantId] ?? [];
     if (yahtzeeSheetHasCategory(rows, game.pendingCategory)) {
       throw new Error("That category is already filled.");
     }
     const points = scoreCategory(game.dice, game.pendingCategory);
     const nextRows = [...rows, { category: game.pendingCategory, points }];
     game.sheetsByParticipant[participantId] = nextRows;
+    if (game.pendingCategory === "yahtzee" && points === 50) {
+      game.latestYahtzee = { participantId, createdAtMs: Date.now() };
+    }
 
     if (yahtzeeEveryoneFinished(game)) {
       this.yahtzeeFinalize(session, game);
@@ -6912,6 +7078,7 @@ export class SessionService {
             type: "yahtzee",
             state: {
               status: "finished",
+              mode: game.mode,
               playerOrder: [...game.playerOrder],
               sheetsByParticipant: sheets,
               yahtzeeGrandTotals: { ...(game.yahtzeeGrandTotals ?? {}) },
@@ -6926,6 +7093,37 @@ export class SessionService {
       for (const pid of game.playerOrder) {
         sheetsClone[pid] = [...(game.sheetsByParticipant[pid] ?? [])];
       }
+      const latestYahtzee =
+        game.latestYahtzee
+        && Date.now() - game.latestYahtzee.createdAtMs <= 3_000
+        && game.playerOrder.includes(game.latestYahtzee.participantId)
+          ? { ...game.latestYahtzee }
+          : null;
+      if (game.mode === "simultaneous") {
+        const viewerId = viewerParticipantId ?? game.playerOrder[0] ?? "";
+        const dice = game.diceByParticipant?.[viewerId] ?? game.dice;
+        const held = game.heldByParticipant?.[viewerId] ?? [false, false, false, false, false];
+        const rollsUsed = game.rollsUsedByParticipant?.[viewerId] ?? 1;
+        const pendingCategory = game.pendingCategoryByParticipant?.[viewerId] ?? null;
+        return {
+          ...base,
+          activeGame: "yahtzee",
+          gameState: {
+            type: "yahtzee",
+            state: {
+              status: "playing",
+              mode: "simultaneous",
+              playerOrder: [...game.playerOrder],
+              dice: [...dice] as [number, number, number, number, number],
+              held: [...held] as [boolean, boolean, boolean, boolean, boolean],
+              rollsUsed,
+              pendingCategory,
+              sheetsByParticipant: sheetsClone,
+              latestYahtzee
+            }
+          }
+        };
+      }
       return {
         ...base,
         activeGame: "yahtzee",
@@ -6933,13 +7131,15 @@ export class SessionService {
           type: "yahtzee",
           state: {
             status: "playing",
+            mode: "turns",
             playerOrder: [...game.playerOrder],
             currentPlayerId,
             dice: [...game.dice] as [number, number, number, number, number],
             held: [...game.held] as [boolean, boolean, boolean, boolean, boolean],
             rollsUsed: game.rollsUsed,
             pendingCategory: game.pendingCategory,
-            sheetsByParticipant: sheetsClone
+            sheetsByParticipant: sheetsClone,
+            latestYahtzee
           }
         }
       };

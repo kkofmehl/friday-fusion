@@ -24,9 +24,11 @@ describe("LobbyScreen", () => {
       <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />
     );
 
-    fireEvent.click(screen.getByDisplayValue("turns"));
-    fireEvent.change(screen.getByLabelText("Puzzle creator"), { target: { value: "p3" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Start" })[0]!);
+    const hangmanCard = screen.getByRole("heading", { name: "Hangman" }).closest("article");
+    if (!hangmanCard) throw new Error("expected Hangman card");
+    fireEvent.click(hangmanCard.querySelector('input[name="hangman-mode"][value="turns"]')!);
+    fireEvent.change(hangmanCard.querySelector("#hangman-creator-select")!, { target: { value: "p3" } });
+    fireEvent.click(hangmanCard.querySelector(".btn-primary")!);
 
     expect(send).toHaveBeenCalledWith({
       type: "game:start",
@@ -86,6 +88,21 @@ describe("LobbyScreen", () => {
 
     const list = screen.getByRole("list", { name: /what guests want to play next/i });
     expect(list.textContent).toContain("Bob wants to play Trivia");
+  });
+
+  it("sends selected mode when starting Yahtzee", () => {
+    const send = vi.fn();
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />);
+
+    const yahtzeeCard = screen.getByRole("heading", { name: "Yahtzee" }).closest("article");
+    if (!yahtzeeCard) throw new Error("expected Yahtzee card");
+    fireEvent.click(yahtzeeCard.querySelector('input[name="yahtzee-mode"][value="simultaneous"]')!);
+    fireEvent.click(yahtzeeCard.querySelector(".btn-primary")!);
+
+    expect(send).toHaveBeenCalledWith({
+      type: "game:start",
+      payload: { game: "yahtzee", options: { yahtzeeMode: "simultaneous" } }
+    });
   });
 
   it("sends lobby:setGamePreference when a guest clicks I want to play this", () => {

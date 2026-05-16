@@ -100,7 +100,10 @@ export function GameScreen({
     : session.gameState?.type === "madlibs"
     ? { type: "game:start", payload: { game: "madlibs" } }
     : session.gameState?.type === "yahtzee"
-    ? { type: "game:start", payload: { game: "yahtzee" } }
+    ? {
+        type: "game:start",
+        payload: { game: "yahtzee", options: { yahtzeeMode: session.gameState.state.mode } }
+      }
     : session.gameState?.type === "scattergories"
     ? { type: "game:start", payload: { game: "scattergories" } }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };

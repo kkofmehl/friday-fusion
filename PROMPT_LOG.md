@@ -158,3 +158,14 @@
 74. User requested a running discard-pile total in BS to increase pressure; assistant added a live discard counter to the BS game header and verified BS web tests/lints.
 
 75. User reported `npm run build` failure; assistant reproduced the TypeScript nullability error in `web/src/games/UnoGame.tsx` (`playing` possibly null), added a narrow guard before `playing` usage, and verified full root build succeeds.
+76. User requested a full UI facelift to look more professional and slightly darker (not full dark mode), strictly look-and-feel only and without impacting functionality.
+77. User requested a follow-up brand-polish pass plus a lobby game list layout preview with one full-width column and larger per-game icons.
+78. User requested a much more aggressive full visual makeover: polished, slick, colorful, and fun with a stronger wow-factor.
+79. User requested a structurally different UI (not just colors), aiming for a blocky Discord-like feel that is surprising on load.
+
+## 2026-05-16
+
+80. User reported Yahtzee reroll randomness felt unreliable and requested verification/fix so non-held dice always get a fresh reroll, plus a running upper-section total above the scorecard with a green check when the 63-point bonus threshold is reached.
+81. User clarified they do not want forced fresh reroll values; they only wanted a bug check on randomization. Assistant reverted the forced-different-face reroll behavior and kept standard random rerolls where repeats are allowed.
+82. User requested an additional Yahtzee mode for concurrent play (each player progresses independently with private dice/scorecard state), live top-bar progress showing each player's total and rounds left, and a bold 3-second "X got a YAHTZEE!" announcement in both modes, with final tally only after all players finish.
+83. User reported a bug where turn-based "Not your turn." validation still triggered in simultaneous Yahtzee mode; assistant moved that guard to turns-only in `yahtzeeToggleHold` and added regression coverage.
