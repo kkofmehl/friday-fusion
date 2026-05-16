@@ -110,26 +110,28 @@ export function App(): JSX.Element {
         onLeave={leaveSession}
         onCloseSession={isHost ? closeSession : undefined}
       />
-      <main className="app-main">
-        {inGame ? (
-          <GameScreen
-            session={session}
-            currentParticipantId={auth.participantId}
-            isHost={isHost}
-            canPlay={canPlay}
-            send={sendEvent}
-            apiBase={apiBase}
-          />
-        ) : (
-          <LobbyScreen
-            session={session}
-            currentParticipantId={auth.participantId}
-            isHost={isHost}
-            send={sendEvent}
-          />
-        )}
-      </main>
-      <AppFooter />
+      <div className="app-workspace">
+        <main className="app-main">
+          {inGame ? (
+            <GameScreen
+              session={session}
+              currentParticipantId={auth.participantId}
+              isHost={isHost}
+              canPlay={canPlay}
+              send={sendEvent}
+              apiBase={apiBase}
+            />
+          ) : (
+            <LobbyScreen
+              session={session}
+              currentParticipantId={auth.participantId}
+              isHost={isHost}
+              send={sendEvent}
+            />
+          )}
+        </main>
+        <AppFooter />
+      </div>
       <Toast message={error} onDismiss={() => setError("")} />
     </div>
   );

@@ -106,81 +106,102 @@ export function LandingScreen({
 
   return (
     <main className="landing-shell">
-      <section className="landing-card">
-        <div className="landing-brand">
-          <span className="landing-logo">FF</span>
-          <h1>Friday Fusion</h1>
-          <p className="landing-tagline">Realtime team games for your crew.</p>
-        </div>
+      <div className="landing-grid">
+        <section className="landing-hero-card">
+          <div className="landing-brand">
+            <span className="landing-logo">FF</span>
+            <h1>Friday Fusion</h1>
+            <p className="landing-tagline">Realtime party games for your crew.</p>
+          </div>
+          <ul className="landing-feature-list" aria-label="Platform highlights">
+            <li className="landing-feature-item">
+              <span aria-hidden="true">🎮</span>
+              <span>Jump between lots of mini-games in one room.</span>
+            </li>
+            <li className="landing-feature-item">
+              <span aria-hidden="true">⚡</span>
+              <span>Live updates keep everyone in sync.</span>
+            </li>
+            <li className="landing-feature-item">
+              <span aria-hidden="true">🧠</span>
+              <span>Play quick rounds or all-night sessions.</span>
+            </li>
+          </ul>
+        </section>
 
-        <div className="segmented" role="tablist" aria-label="Create or join">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "create"}
-            className={`segmented-option${mode === "create" ? " is-active" : ""}`}
-            onClick={() => setMode("create")}
-          >
-            Create session
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "join"}
-            className={`segmented-option${mode === "join" ? " is-active" : ""}`}
-            onClick={() => setMode("join")}
-          >
-            Join session
-          </button>
-        </div>
+        <section className="landing-card">
+          <div className="segmented" role="tablist" aria-label="Create or join">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "create"}
+              className={`segmented-option${mode === "create" ? " is-active" : ""}`}
+              onClick={() => setMode("create")}
+            >
+              Create session
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "join"}
+              className={`segmented-option${mode === "join" ? " is-active" : ""}`}
+              onClick={() => setMode("join")}
+            >
+              Join session
+            </button>
+          </div>
 
-        {error && <p className="inline-error">{error}</p>}
+          {error && <p className="inline-error">{error}</p>}
 
-        <form onSubmit={handleSubmit} className="landing-form">
-          <label htmlFor="display-name">Your display name</label>
-          <input
-            id="display-name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="e.g. Alex"
-            maxLength={32}
-            required
-          />
+          <form onSubmit={handleSubmit} className="landing-form">
+            <label htmlFor="display-name">Your display name</label>
+            <input
+              id="display-name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="e.g. Alex"
+              maxLength={32}
+              required
+            />
 
-          {mode === "create" ? (
-            <>
-              <label htmlFor="session-name">Session name (optional)</label>
-              <input
-                id="session-name"
-                value={sessionName}
-                onChange={(event) => setSessionName(event.target.value)}
-                placeholder="Friday Crew"
-                maxLength={40}
-              />
-              <p className="landing-hint">We'll use a word-code based on the name, or make one up for you.</p>
-            </>
-          ) : (
-            <>
-              <label htmlFor="join-code">Session code</label>
-              <input
-                id="join-code"
-                value={joinCode}
-                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="BRIGHT-OTTER"
-                required
-                autoCapitalize="characters"
-              />
-            </>
-          )}
+            {mode === "create" ? (
+              <>
+                <label htmlFor="session-name">Session name (optional)</label>
+                <input
+                  id="session-name"
+                  value={sessionName}
+                  onChange={(event) => setSessionName(event.target.value)}
+                  placeholder="Friday Crew"
+                  maxLength={40}
+                />
+                <p className="landing-hint">We'll use a word-code based on the name, or make one up for you.</p>
+              </>
+            ) : (
+              <>
+                <label htmlFor="join-code">Session code</label>
+                <input
+                  id="join-code"
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                  placeholder="BRIGHT-OTTER"
+                  required
+                  autoCapitalize="characters"
+                />
+              </>
+            )}
 
-          <button type="submit" className="btn btn-primary btn-lg" disabled={submitting}>
-            {submitting ? "Working..." : mode === "create" ? "Create session" : "Join session"}
-          </button>
-        </form>
+            <button type="submit" className="btn btn-primary btn-lg" disabled={submitting}>
+              {submitting ? "Working..." : mode === "create" ? "Create session" : "Join session"}
+            </button>
+          </form>
+        </section>
 
-        {activeSessions.length > 0 && (
-          <div className="landing-active">
+        <section className="landing-active-card">
+          <header className="landing-active-head">
             <h2>Active sessions</h2>
+            <span className="pill pill-muted">{activeSessions.length}</span>
+          </header>
+          {activeSessions.length > 0 ? (
             <ul className="landing-active-list">
               {activeSessions.map((session) => (
                 <li key={session.sessionId}>
@@ -197,9 +218,11 @@ export function LandingScreen({
                 </li>
               ))}
             </ul>
-          </div>
-        )}
-      </section>
+          ) : (
+            <p className="landing-active-empty">No live sessions yet. Create one to get things started.</p>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
