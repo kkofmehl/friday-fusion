@@ -174,3 +174,4 @@
 86. User requested larger game icons positioned in the right-side empty area of each lobby game card (as marked in screenshot), and assistant updated card layout/styles accordingly.
 87. User requested showing the active game's icon below the players scoreboard while in-game; assistant added a left-rail game icon panel in `GameScreen` with responsive styling and test coverage.
 88. User reported the in-game icon panel overlapped scoreboard footer buttons; assistant adjusted sticky behavior so the full left rail (scoreboard + icon) sticks together and the icon remains below the scoreboard.
+89. User requested adding a sidebar session chat/smack-talk feature available in both lobby and game screens, storing chat to a session file purged at session end, a basic emoji pack, and floating/fading emoji reactions visible to all participants.

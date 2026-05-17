@@ -1060,6 +1060,29 @@ export const activeSessionSummarySchema = z.object({
 });
 export type ActiveSessionSummary = z.infer<typeof activeSessionSummarySchema>;
 
+export const SESSION_CHAT_MESSAGE_MAX_CHARS = 400;
+export const SESSION_CHAT_EMOJI_MAX_CHARS = 16;
+
+export const sessionChatMessageSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  participantId: z.string(),
+  displayName: z.string().min(1),
+  text: z.string().min(1).max(SESSION_CHAT_MESSAGE_MAX_CHARS),
+  createdAt: z.number().int()
+});
+export type SessionChatMessage = z.infer<typeof sessionChatMessageSchema>;
+
+export const sessionEmojiReactionSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  participantId: z.string(),
+  displayName: z.string().min(1),
+  emoji: z.string().min(1).max(SESSION_CHAT_EMOJI_MAX_CHARS),
+  createdAt: z.number().int()
+});
+export type SessionEmojiReaction = z.infer<typeof sessionEmojiReactionSchema>;
+
 export const serverEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:state"), payload: sessionStateSchema }),
   z.object({
@@ -1072,6 +1095,27 @@ export const serverEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("activeSessions:updated"),
     payload: z.object({ sessions: z.array(activeSessionSummarySchema) })
+  }),
+  z.object({
+    type: z.literal("chat:history"),
+    payload: z.object({
+      sessionId: z.string(),
+      messages: z.array(sessionChatMessageSchema)
+    })
+  }),
+  z.object({
+    type: z.literal("chat:message"),
+    payload: z.object({
+      sessionId: z.string(),
+      message: sessionChatMessageSchema
+    })
+  }),
+  z.object({
+    type: z.literal("chat:emojiReaction"),
+    payload: z.object({
+      sessionId: z.string(),
+      reaction: sessionEmojiReactionSchema
+    })
   }),
   z.object({ type: z.literal("error"), payload: z.object({ message: z.string() }) }),
   z.object({ type: z.literal("game:message"), payload: z.object({ message: z.string() }) }),
@@ -1103,6 +1147,18 @@ export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:hello"), payload: z.object({ sessionId: z.string(), participantId: z.string() }) }),
   z.object({ type: z.literal("lobby:subscribe"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("chat:sendMessage"),
+    payload: z.object({
+      text: z.string().trim().min(1).max(SESSION_CHAT_MESSAGE_MAX_CHARS)
+    })
+  }),
+  z.object({
+    type: z.literal("chat:sendReaction"),
+    payload: z.object({
+      emoji: z.string().min(1).max(SESSION_CHAT_EMOJI_MAX_CHARS)
+    })
+  }),
   z.object({
     type: z.literal("lobby:setGamePreference"),
     payload: z.object({ game: gameTypeSchema })

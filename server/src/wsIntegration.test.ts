@@ -147,6 +147,56 @@ describe("WebSocket integration", () => {
     second.close();
   });
 
+  it("broadcasts chat messages and emoji reactions to session participants", async () => {
+    if (!context) throw new Error("no context");
+    const guestJoined = await context.service.joinSession(context.joinCode, "Guest");
+    const hostSocket = new WebSocket(`ws://127.0.0.1:${context.port}/ws`);
+    const guestSocket = new WebSocket(`ws://127.0.0.1:${context.port}/ws`);
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        hostSocket.once("open", () => resolve());
+        hostSocket.once("error", reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        guestSocket.once("open", () => resolve());
+        guestSocket.once("error", reject);
+      })
+    ]);
+    hostSocket.send(
+      JSON.stringify({
+        type: "session:hello",
+        payload: { sessionId: context.sessionId, participantId: context.hostParticipantId }
+      })
+    );
+    guestSocket.send(
+      JSON.stringify({
+        type: "session:hello",
+        payload: { sessionId: context.sessionId, participantId: guestJoined.participantId }
+      })
+    );
+    await nextServerEvent(hostSocket, (event) => event.type === "session:state");
+    await nextServerEvent(hostSocket, (event) => event.type === "chat:history");
+    await nextServerEvent(guestSocket, (event) => event.type === "session:state");
+    await nextServerEvent(guestSocket, (event) => event.type === "chat:history");
+
+    hostSocket.send(JSON.stringify({ type: "chat:sendMessage", payload: { text: "bring it on" } }));
+    const messageEvent = await nextServerEvent(
+      guestSocket,
+      (event) => event.type === "chat:message" && event.payload.message.text === "bring it on"
+    );
+    expect(messageEvent.payload.message.displayName).toBe("Host");
+
+    guestSocket.send(JSON.stringify({ type: "chat:sendReaction", payload: { emoji: "🔥" } }));
+    const reactionEvent = await nextServerEvent(
+      hostSocket,
+      (event) => event.type === "chat:emojiReaction" && event.payload.reaction.emoji === "🔥"
+    );
+    expect(reactionEvent.payload.reaction.displayName).toBe("Guest");
+
+    hostSocket.close();
+    guestSocket.close();
+  });
+
   it("returns trivia categories from REST endpoint", async () => {
     if (!context) throw new Error("no context");
     const response = await context.app.inject({

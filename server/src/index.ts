@@ -12,7 +12,11 @@ import {
   clientEventSchema,
   createSessionRequestSchema,
   joinSessionRequestSchema,
+  SESSION_CHAT_EMOJI_MAX_CHARS,
+  SESSION_CHAT_MESSAGE_MAX_CHARS,
   serverEventSchema,
+  type SessionChatMessage,
+  type SessionEmojiReaction,
   type ServerEvent
 } from "../../shared/contracts";
 import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
@@ -24,6 +28,10 @@ import { captionThisSessionUploadDir, resolveCaptionThisStoredFile } from "./cap
 import { guessTheImageSessionUploadDir, resolveGuessTheImageStoredFile } from "./guessTheImageUploads";
 import { SessionService, createSessionService } from "./sessionService";
 import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
+import {
+  appendSessionChatMessage,
+  readSessionChatMessages
+} from "./chatMessagesStore";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const DEAD_CONNECTION_MS = 45_000;
@@ -147,6 +155,46 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
 
   const sendError = (socket: WebSocket, message: string): void => {
     sendEvent(socket, { type: "error", payload: { message } });
+  };
+
+  const getParticipantDisplayName = (sessionId: string, participantId: string): string => {
+    const participant = sessionService
+      .getState(sessionId)
+      .participants.find((entry) => entry.id === participantId);
+    if (!participant) {
+      throw new Error("Participant is not in this session.");
+    }
+    return participant.displayName;
+  };
+
+  const sendChatHistory = async (socket: WebSocket, sessionId: string): Promise<void> => {
+    const messages = await readSessionChatMessages(sessionService.getDataDirectory(), sessionId);
+    sendEvent(socket, {
+      type: "chat:history",
+      payload: { sessionId, messages }
+    });
+  };
+
+  const broadcastChatMessage = (sessionId: string, message: SessionChatMessage): void => {
+    const targets = connections.get(sessionId) ?? [];
+    const payload: ServerEvent = {
+      type: "chat:message",
+      payload: { sessionId, message }
+    };
+    for (const target of targets) {
+      sendEvent(target.socket, payload);
+    }
+  };
+
+  const broadcastEmojiReaction = (sessionId: string, reaction: SessionEmojiReaction): void => {
+    const targets = connections.get(sessionId) ?? [];
+    const payload: ServerEvent = {
+      type: "chat:emojiReaction",
+      payload: { sessionId, reaction }
+    };
+    for (const target of targets) {
+      sendEvent(target.socket, payload);
+    }
   };
 
   const removeConnection = (sessionId: string, predicate: (ctx: ConnectionContext) => boolean): void => {
@@ -591,6 +639,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           connections.set(sessionId, sessionConnections);
           lastConnectedAt.set(sessionId, Date.now());
           broadcastState(sessionId);
+          await sendChatHistory(socket, sessionId);
           return;
         }
 
@@ -612,6 +661,47 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
         }
 
         context.lastSeenAt = Date.now();
+
+        if (event.type === "chat:sendMessage") {
+          const text = event.payload.text.trim();
+          if (!text) {
+            throw new Error("Message cannot be empty.");
+          }
+          if (text.length > SESSION_CHAT_MESSAGE_MAX_CHARS) {
+            throw new Error(`Message must be ${SESSION_CHAT_MESSAGE_MAX_CHARS} characters or less.`);
+          }
+          const message: SessionChatMessage = {
+            id: nanoid(12),
+            sessionId: context.sessionId,
+            participantId: context.participantId,
+            displayName: getParticipantDisplayName(context.sessionId, context.participantId),
+            text,
+            createdAt: Date.now()
+          };
+          await appendSessionChatMessage(sessionService.getDataDirectory(), context.sessionId, message);
+          broadcastChatMessage(context.sessionId, message);
+          return;
+        }
+
+        if (event.type === "chat:sendReaction") {
+          const emoji = event.payload.emoji.trim();
+          if (!emoji) {
+            throw new Error("Emoji is required.");
+          }
+          if (emoji.length > SESSION_CHAT_EMOJI_MAX_CHARS) {
+            throw new Error(`Emoji must be ${SESSION_CHAT_EMOJI_MAX_CHARS} characters or less.`);
+          }
+          const reaction: SessionEmojiReaction = {
+            id: nanoid(12),
+            sessionId: context.sessionId,
+            participantId: context.participantId,
+            displayName: getParticipantDisplayName(context.sessionId, context.participantId),
+            emoji,
+            createdAt: Date.now()
+          };
+          broadcastEmojiReaction(context.sessionId, reaction);
+          return;
+        }
 
         if (event.type === "session:leave") {
           const { sessionId, participantId, socket: leavingSocket } = context;

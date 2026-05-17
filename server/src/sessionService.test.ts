@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -333,6 +333,33 @@ describe("SessionService", () => {
     );
     await setup.service.closeSession(host.sessionId, host.participantId);
     expect(() => setup.service.getState(host.sessionId)).toThrow("Session not found.");
+  });
+
+  it("purges chat files when a host closes a session", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    const chatDir = path.join(tempDir, "uploads", "chat", host.sessionId);
+    const chatFile = path.join(chatDir, "messages.json");
+    await mkdir(chatDir, { recursive: true });
+    await writeFile(chatFile, "[]", "utf8");
+
+    await setup.service.closeSession(host.sessionId, host.participantId);
+    await expect(access(chatFile)).rejects.toBeDefined();
+  });
+
+  it("purges chat files during stale-session cleanup", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const chatDir = path.join(tempDir, "uploads", "chat", host.sessionId);
+    const chatFile = path.join(chatDir, "messages.json");
+    await mkdir(chatDir, { recursive: true });
+    await writeFile(chatFile, "[]", "utf8");
+
+    await setup.service.cleanupStaleSessions(-1);
+    await expect(access(chatFile)).rejects.toBeDefined();
   });
 
   it("ends the active game and returns the session to the lobby", async () => {

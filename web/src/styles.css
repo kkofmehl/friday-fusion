@@ -530,6 +530,13 @@ label {
   box-shadow: 16px 0 24px -20px rgba(15, 23, 42, 0.85);
 }
 
+.topbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-height: 0;
+}
+
 .topbar-brand {
   display: flex;
   flex-direction: column;
@@ -592,6 +599,27 @@ label {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(203, 213, 225, 0.7);
+}
+
+.topbar-chat {
+  min-height: 0;
+}
+
+.topbar-chat .session-chat-card {
+  padding: 0.75rem;
+  background: rgba(248, 250, 252, 0.94);
+}
+
+.topbar-chat .card-head {
+  margin-bottom: 0.6rem;
+}
+
+.topbar-chat .card-head h2 {
+  font-size: 1rem;
+}
+
+.topbar-chat .session-chat-messages {
+  max-height: 12rem;
 }
 
 .topbar-actions {
@@ -1249,6 +1277,89 @@ label {
   pointer-events: none;
   opacity: 0.88;
   user-select: none;
+}
+
+.session-chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session-chat-messages {
+  max-height: 16rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-right: 0.2rem;
+}
+
+.session-chat-empty {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 0.88rem;
+}
+
+.session-chat-message {
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--slate-200);
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.session-chat-message-mine {
+  border-color: var(--indigo-200);
+  background: rgba(224, 231, 255, 0.72);
+}
+
+.session-chat-meta {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  color: var(--slate-600);
+}
+
+.session-chat-text {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--slate-800);
+  font-size: 0.9rem;
+}
+
+.session-chat-emoji-pack {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.session-chat-emoji-btn {
+  min-width: 0;
+}
+
+.session-chat-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+}
+
+.emoji-reactions-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 35;
+  overflow: hidden;
+}
+
+.emoji-reaction-float {
+  position: absolute;
+  bottom: 1rem;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  filter: drop-shadow(0 10px 10px rgba(15, 23, 42, 0.25));
+  animation: emojiFloatUp 2.1s ease-out forwards;
 }
 
 @media (max-width: 860px) {
@@ -4190,6 +4301,21 @@ label {
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes emojiFloatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.9);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -8px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -48vh) scale(1.14);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn,
   .player-row,
@@ -4198,7 +4324,8 @@ label {
   .trivia-option,
   .gallows-part,
   .toast,
-  .connection-pill-pending .connection-dot {
+  .connection-pill-pending .connection-dot,
+  .emoji-reaction-float {
     animation: none !important;
     transition: none !important;
   }
