@@ -121,6 +121,37 @@ describe("LobbyScreen", () => {
     });
   });
 
+  it("renders game icons from the game_icons directory", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+
+    const expectedIcons: Array<[name: string, iconPath: string]> = [
+      ["Hangman", "/game_icons/hangman.png"],
+      ["Two Truths and a Lie", "/game_icons/two_truths_and_one_lie.png"],
+      ["Trivia", "/game_icons/trivia.png"],
+      ["Icebreaker Questions", "/game_icons/ice_breaker_questions.png"],
+      ["Guess Who Said It?", "/game_icons/guess_who_said_it.png"],
+      ["Guess the image", "/game_icons/guess_the_image.png"],
+      ["20 Questions", "/game_icons/20_questions.png"],
+      ["Caption This", "/game_icons/caption_this.png"],
+      ["Pictionary", "/game_icons/pictionary.png"],
+      ["Apples to Apples", "/game_icons/apples_to_apples.png"],
+      ["UNO", "/game_icons/uno.png"],
+      ["BS", "/game_icons/bs.png"],
+      ["Madlibs", "/game_icons/madlibs.png"],
+      ["Catch Phrase", "/game_icons/catchphrase.png"],
+      ["Yahtzee", "/game_icons/yahtzee.png"],
+      ["Scattergories", "/game_icons/scattegories.png"]
+    ];
+
+    for (const [gameName, iconPath] of expectedIcons) {
+      const card = screen.getByRole("heading", { name: gameName }).closest("article");
+      if (!card) throw new Error(`expected ${gameName} card`);
+      const icon = card.querySelector("img.game-card-icon");
+      expect(icon).not.toBeNull();
+      expect(icon?.getAttribute("src")).toBe(iconPath);
+    }
+  });
+
   it("shows bench notice instead of game picker when a game runs and the guest is benched", () => {
     render(
       <LobbyScreen

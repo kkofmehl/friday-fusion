@@ -169,3 +169,8 @@
 81. User clarified they do not want forced fresh reroll values; they only wanted a bug check on randomization. Assistant reverted the forced-different-face reroll behavior and kept standard random rerolls where repeats are allowed.
 82. User requested an additional Yahtzee mode for concurrent play (each player progresses independently with private dice/scorecard state), live top-bar progress showing each player's total and rounds left, and a bold 3-second "X got a YAHTZEE!" announcement in both modes, with final tally only after all players finish.
 83. User reported a bug where turn-based "Not your turn." validation still triggered in simultaneous Yahtzee mode; assistant moved that guard to turns-only in `yahtzeeToggleHold` and added regression coverage.
+84. User added new game icons in `public/game_icons` and requested wiring them into the UI so each game card uses the intuitive matching icon filename.
+85. User reported 404 errors for the new game icons; assistant fixed static asset pathing so repo-root `public/game_icons` is served by Vite and included in web builds.
+86. User requested larger game icons positioned in the right-side empty area of each lobby game card (as marked in screenshot), and assistant updated card layout/styles accordingly.
+87. User requested showing the active game's icon below the players scoreboard while in-game; assistant added a left-rail game icon panel in `GameScreen` with responsive styling and test coverage.
+88. User reported the in-game icon panel overlapped scoreboard footer buttons; assistant adjusted sticky behavior so the full left rail (scoreboard + icon) sticks together and the icon remains below the scoreboard.

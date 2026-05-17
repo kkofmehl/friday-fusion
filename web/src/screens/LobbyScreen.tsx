@@ -18,7 +18,7 @@ type GameOption = {
   id: GameType;
   title: string;
   description: string;
-  emoji: string;
+  iconSrc: string;
 };
 
 const GAMES: GameOption[] = [
@@ -26,100 +26,100 @@ const GAMES: GameOption[] = [
     id: "hangman",
     title: "Hangman",
     description: "Host picks a word, everyone else guesses letter by letter.",
-    emoji: "A"
+    iconSrc: "/game_icons/hangman.png"
   },
   {
     id: "twoTruthsLie",
     title: "Two Truths and a Lie",
     description: "Share three statements. Others vote on which is the lie.",
-    emoji: "T"
+    iconSrc: "/game_icons/two_truths_and_one_lie.png"
   },
   {
     id: "trivia",
     title: "Trivia",
     description: "Answer a series of questions across mixed categories.",
-    emoji: "Q"
+    iconSrc: "/game_icons/trivia.png"
   },
   {
     id: "icebreaker",
     title: "Icebreaker Questions",
     description: "Fun prompts—share answers (and optional photos), then reveal together.",
-    emoji: "I"
+    iconSrc: "/game_icons/ice_breaker_questions.png"
   },
   {
     id: "guessWhoSaidIt",
     title: "Guess Who Said It?",
     description: "Stock prompts, anonymous answers, then guess who said what—earn points for correct matches.",
-    emoji: "?"
+    iconSrc: "/game_icons/guess_who_said_it.png"
   },
   {
     id: "guessTheImage",
     title: "Guess the image",
     description: "Image fades in; pick the right caption as fast as you can.",
-    emoji: "G"
+    iconSrc: "/game_icons/guess_the_image.png"
   },
   {
     id: "twentyQuestions",
     title: "20 Questions",
     description: "One person picks something; others ask yes/no questions until they guess or run out.",
-    emoji: "20"
+    iconSrc: "/game_icons/20_questions.png"
   },
   {
     id: "captionThis",
     title: "Caption This",
     description: "One player supplies an image; everyone captions it, then votes for their favorite.",
-    emoji: "C"
+    iconSrc: "/game_icons/caption_this.png"
   },
   {
     id: "pictionary",
     title: "Pictionary",
     description: "Two teams take turns drawing clues on a shared canvas—guess aloud with your team.",
-    emoji: "P"
+    iconSrc: "/game_icons/pictionary.png"
   },
   {
     id: "applesToApples",
     title: "Apples to Apples",
     description:
       "Rotating judge, topic card, and hidden responses—stock phrases in JSON (original content, easy to expand).",
-    emoji: "🍎"
+    iconSrc: "/game_icons/apples_to_apples.png"
   },
   {
     id: "uno",
     title: "UNO",
     description: "Classic color and number matching—skip, reverse, wilds, declare UNO, and catch missed calls.",
-    emoji: "🃏"
+    iconSrc: "/game_icons/uno.png"
   },
   {
     id: "bs",
     title: "BS",
     description: "Bluff your way through A-to-K declarations—others can believe you or call BS.",
-    emoji: "🂠"
+    iconSrc: "/game_icons/bs.png"
   },
   {
     id: "madlibs",
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",
-    emoji: "📝"
+    iconSrc: "/game_icons/madlibs.png"
   },
   {
     id: "catchPhrase",
     title: "Catch Phrase",
     description: "Two teams pass the device around with a hidden timer racing in the background.",
-    emoji: "🔔"
+    iconSrc: "/game_icons/catchphrase.png"
   },
   {
     id: "yahtzee",
     title: "Yahtzee",
     description:
       "Take turns rolling five dice, holding what you like, then score a row—Friday Fusion adds placement points when the game ends.",
-    emoji: "🎲"
+    iconSrc: "/game_icons/yahtzee.png"
   },
   {
     id: "scattergories",
     title: "Scattergories",
     description:
       "Race the clock to fill categories for a random letter—then the host scores each answer together.",
-    emoji: "📋"
+    iconSrc: "/game_icons/scattegories.png"
   }
 ];
 
@@ -316,7 +316,7 @@ export function LobbyScreen({
             {GAMES.map((game) => (
             <article key={game.id} className="game-card">
               <div className="game-card-emoji" aria-hidden="true">
-                {game.emoji}
+                <img className="game-card-icon" src={game.iconSrc} alt="" loading="lazy" />
               </div>
               <h3>{game.title}</h3>
               <p>{game.description}</p>
