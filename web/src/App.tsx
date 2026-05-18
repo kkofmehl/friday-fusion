@@ -1,10 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ClientEvent, SessionState } from "../../shared/contracts";
+import type {
+  ClientEvent,
+  SessionChatMessage,
+  SessionEmojiReaction,
+  SessionState
+} from "../../shared/contracts";
 import { resolveApiBase } from "./config";
 import { useRealtime, type SessionClosedReason } from "./hooks/useRealtime";
 import { AppFooter } from "./components/AppFooter";
 import { Toast } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
+import { EmojiReactionsOverlay, type EmojiReactionBurst } from "./components/EmojiReactionsOverlay";
 import { LandingScreen, type LandingSuccess } from "./screens/LandingScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { GameScreen } from "./screens/GameScreen";
@@ -22,6 +28,8 @@ export function App(): JSX.Element {
   const [session, setSession] = useState<SessionState | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [chatMessages, setChatMessages] = useState<SessionChatMessage[]>([]);
+  const [emojiBursts, setEmojiBursts] = useState<EmojiReactionBurst[]>([]);
 
   const handleSession = useCallback((state: SessionState) => {
     setSession(state);
@@ -32,6 +40,8 @@ export function App(): JSX.Element {
   const handleSessionClosed = useCallback((reason: SessionClosedReason) => {
     setAuth(null);
     setSession(null);
+    setChatMessages([]);
+    setEmojiBursts([]);
     setNotice(
       reason === "host_closed"
         ? "The host closed this session."
@@ -39,6 +49,29 @@ export function App(): JSX.Element {
           ? "You were removed from the session by the host."
           : "Session closed after everyone left."
     );
+  }, []);
+  const handleChatHistory = useCallback((messages: SessionChatMessage[]) => {
+    setChatMessages(messages);
+  }, []);
+  const handleChatMessage = useCallback((message: SessionChatMessage) => {
+    setChatMessages((prev) => {
+      if (prev.some((entry) => entry.id === message.id)) {
+        return prev;
+      }
+      return [...prev, message];
+    });
+  }, []);
+  const handleEmojiReaction = useCallback((reaction: SessionEmojiReaction) => {
+    const burst: EmojiReactionBurst = {
+      id: reaction.id,
+      emoji: reaction.emoji,
+      displayName: reaction.displayName,
+      lanePercent: Math.floor(10 + Math.random() * 80)
+    };
+    setEmojiBursts((prev) => [...prev, burst]);
+    setTimeout(() => {
+      setEmojiBursts((prev) => prev.filter((entry) => entry.id !== burst.id));
+    }, 2200);
   }, []);
 
   const realtimeAuth = useMemo(
@@ -51,12 +84,17 @@ export function App(): JSX.Element {
     auth: realtimeAuth,
     onSession: handleSession,
     onError: handleError,
-    onSessionClosed: handleSessionClosed
+    onSessionClosed: handleSessionClosed,
+    onChatHistory: handleChatHistory,
+    onChatMessage: handleChatMessage,
+    onEmojiReaction: handleEmojiReaction
   });
 
   const handleLandingSuccess = (result: LandingSuccess) => {
     setAuth({ sessionId: result.sessionId, participantId: result.participantId, displayName: result.displayName });
     setSession(result.state);
+    setChatMessages([]);
+    setEmojiBursts([]);
     setError("");
     setNotice("");
   };
@@ -67,6 +105,8 @@ export function App(): JSX.Element {
     }
     setAuth(null);
     setSession(null);
+    setChatMessages([]);
+    setEmojiBursts([]);
     setError("");
   };
 
@@ -107,6 +147,10 @@ export function App(): JSX.Element {
         sessionName={session.sessionName}
         joinCode={session.joinCode}
         status={status}
+        chatMessages={chatMessages}
+        currentParticipantId={auth.participantId}
+        onSendChatMessage={(text) => send({ type: "chat:sendMessage", payload: { text } })}
+        onSendEmojiReaction={(emoji) => send({ type: "chat:sendReaction", payload: { emoji } })}
         onLeave={leaveSession}
         onCloseSession={isHost ? closeSession : undefined}
       />
@@ -132,6 +176,7 @@ export function App(): JSX.Element {
         </main>
         <AppFooter />
       </div>
+      <EmojiReactionsOverlay reactions={emojiBursts} />
       <Toast message={error} onDismiss={() => setError("")} />
     </div>
   );

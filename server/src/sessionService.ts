@@ -62,6 +62,7 @@ import {
   deleteGuessTheImageStoredFile,
   purgeAllGuessTheImageSessionUploads
 } from "./guessTheImageUploads";
+import { purgeSessionChatMessages } from "./chatMessagesStore";
 import {
   getApplesResponseText,
   pickApplesTopic,
@@ -2207,6 +2208,7 @@ export class SessionService {
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+    await purgeSessionChatMessages(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
   }
@@ -2223,6 +2225,7 @@ export class SessionService {
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
     await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+    await purgeSessionChatMessages(this.dataDirectory, sessionId);
     this.sessions.delete(sessionId);
     await this.persist();
     return true;
@@ -2371,6 +2374,7 @@ export class SessionService {
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
       await purgeAllCaptionThisSessionUploads(this.dataDirectory, sessionId);
+      await purgeSessionChatMessages(this.dataDirectory, sessionId);
       this.sessions.delete(sessionId);
       await this.persist();
       return { sessionDeleted: true };
@@ -2940,6 +2944,7 @@ export class SessionService {
     for (const [sessionId, session] of this.sessions.entries()) {
       if (now - session.updatedAt > maxAgeMs) {
         await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
+        await purgeSessionChatMessages(this.dataDirectory, sessionId);
         this.sessions.delete(sessionId);
         changed = true;
       }

@@ -530,6 +530,13 @@ label {
   box-shadow: 16px 0 24px -20px rgba(15, 23, 42, 0.85);
 }
 
+.topbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-height: 0;
+}
+
 .topbar-brand {
   display: flex;
   flex-direction: column;
@@ -592,6 +599,77 @@ label {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(203, 213, 225, 0.7);
+}
+
+.topbar-chat {
+  min-height: 0;
+}
+
+.topbar-chat .session-chat-card {
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: none;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: none;
+  backdrop-filter: blur(4px);
+}
+
+.topbar-chat .card-head {
+  margin-bottom: 0.6rem;
+}
+
+.topbar-chat .card-head h2 {
+  font-size: 1rem;
+  color: rgba(241, 245, 249, 0.95);
+}
+
+.topbar-chat .session-chat-messages {
+  max-height: 12rem;
+}
+
+.topbar-chat .session-chat-empty {
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.topbar-chat .session-chat-message {
+  border: none;
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.topbar-chat .session-chat-message-mine {
+  border: none;
+  background: rgba(79, 70, 229, 0.65);
+}
+
+.topbar-chat .session-chat-meta {
+  color: rgba(203, 213, 225, 0.88);
+}
+
+.topbar-chat .session-chat-text {
+  color: rgba(248, 250, 252, 0.96);
+}
+
+.topbar-chat .session-chat-emoji-btn {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(15, 23, 42, 0.62);
+  color: rgba(248, 250, 252, 0.95);
+  font-size: 1.05rem;
+  min-height: 2.15rem;
+}
+
+.topbar-chat .session-chat-emoji-btn:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(129, 140, 248, 0.46);
+}
+
+.topbar-chat .session-chat-compose input {
+  background: rgba(15, 23, 42, 0.74);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: rgba(248, 250, 252, 0.95);
+}
+
+.topbar-chat .session-chat-compose input::placeholder {
+  color: rgba(148, 163, 184, 0.9);
 }
 
 .topbar-actions {
@@ -1249,6 +1327,92 @@ label {
   pointer-events: none;
   opacity: 0.88;
   user-select: none;
+}
+
+.session-chat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session-chat-messages {
+  max-height: 16rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.1rem;
+}
+
+.session-chat-empty {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 0.88rem;
+}
+
+.session-chat-message {
+  align-self: flex-start;
+  max-width: 88%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 14px;
+  border: none;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.session-chat-message-mine {
+  align-self: flex-end;
+  background: rgba(224, 231, 255, 0.72);
+}
+
+.session-chat-meta {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--slate-600);
+}
+
+.session-chat-text {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--slate-800);
+  font-size: 0.9rem;
+}
+
+.session-chat-emoji-pack {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.session-chat-emoji-btn {
+  min-width: 0;
+  font-size: 1.05rem;
+  min-height: 2.1rem;
+}
+
+.session-chat-compose {
+  display: block;
+}
+
+.emoji-reactions-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 35;
+  overflow: hidden;
+}
+
+.emoji-reaction-float {
+  position: absolute;
+  bottom: 1rem;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  filter: drop-shadow(0 10px 10px rgba(15, 23, 42, 0.25));
+  animation: emojiFloatUp 2.1s ease-out forwards;
 }
 
 @media (max-width: 860px) {
@@ -4190,6 +4354,21 @@ label {
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes emojiFloatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.9);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -8px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -48vh) scale(1.14);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn,
   .player-row,
@@ -4198,7 +4377,8 @@ label {
   .trivia-option,
   .gallows-part,
   .toast,
-  .connection-pill-pending .connection-dot {
+  .connection-pill-pending .connection-dot,
+  .emoji-reaction-float {
     animation: none !important;
     transition: none !important;
   }

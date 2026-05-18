@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type ClientEvent,
+  type SessionChatMessage,
+  type SessionEmojiReaction,
   type ServerEvent,
   type SessionState,
   serverEventSchema
@@ -22,6 +24,9 @@ export type UseRealtimeOptions = {
   onSession: (state: SessionState) => void;
   onError: (message: string) => void;
   onSessionClosed?: (reason: SessionClosedReason) => void;
+  onChatHistory?: (messages: SessionChatMessage[]) => void;
+  onChatMessage?: (message: SessionChatMessage) => void;
+  onEmojiReaction?: (reaction: SessionEmojiReaction) => void;
 };
 
 export type UseRealtimeResult = {
@@ -41,7 +46,10 @@ export const useRealtime = ({
   auth,
   onSession,
   onError,
-  onSessionClosed
+  onSessionClosed,
+  onChatHistory,
+  onChatMessage,
+  onEmojiReaction
 }: UseRealtimeOptions): UseRealtimeResult => {
   const [status, setStatus] = useState<RealtimeStatus>("idle");
   const socketRef = useRef<WebSocket | null>(null);
@@ -54,12 +62,18 @@ export const useRealtime = ({
   const onSessionRef = useRef(onSession);
   const onErrorRef = useRef(onError);
   const onSessionClosedRef = useRef(onSessionClosed);
+  const onChatHistoryRef = useRef(onChatHistory);
+  const onChatMessageRef = useRef(onChatMessage);
+  const onEmojiReactionRef = useRef(onEmojiReaction);
 
   useEffect(() => {
     onSessionRef.current = onSession;
     onErrorRef.current = onError;
     onSessionClosedRef.current = onSessionClosed;
-  }, [onSession, onError, onSessionClosed]);
+    onChatHistoryRef.current = onChatHistory;
+    onChatMessageRef.current = onChatMessage;
+    onEmojiReactionRef.current = onEmojiReaction;
+  }, [onSession, onError, onSessionClosed, onChatHistory, onChatMessage, onEmojiReaction]);
 
   const wsUrl = useMemo(() => resolveWsUrl(apiBase), [apiBase]);
 
@@ -192,6 +206,12 @@ export const useRealtime = ({
         const event: ServerEvent = parsed.data;
         if (event.type === "session:state") {
           onSessionRef.current(event.payload);
+        } else if (event.type === "chat:history") {
+          onChatHistoryRef.current?.(event.payload.messages);
+        } else if (event.type === "chat:message") {
+          onChatMessageRef.current?.(event.payload.message);
+        } else if (event.type === "chat:emojiReaction") {
+          onEmojiReactionRef.current?.(event.payload.reaction);
         } else if (event.type === "session:closed") {
           cancelledRef.current = true;
           onSessionClosedRef.current?.(event.payload.reason);
