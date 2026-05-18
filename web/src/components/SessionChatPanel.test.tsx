@@ -27,7 +27,7 @@ describe("SessionChatPanel", () => {
 
     const input = screen.getByLabelText("Chat message") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "  hello there  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.keyDown(input, { key: "Enter" });
 
     expect(onSendMessage).toHaveBeenCalledWith("hello there");
     expect(input.value).toBe("");

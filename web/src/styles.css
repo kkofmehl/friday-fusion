@@ -607,7 +607,11 @@ label {
 
 .topbar-chat .session-chat-card {
   padding: 0.75rem;
-  background: rgba(248, 250, 252, 0.94);
+  border-radius: 14px;
+  border: none;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: none;
+  backdrop-filter: blur(4px);
 }
 
 .topbar-chat .card-head {
@@ -616,10 +620,56 @@ label {
 
 .topbar-chat .card-head h2 {
   font-size: 1rem;
+  color: rgba(241, 245, 249, 0.95);
 }
 
 .topbar-chat .session-chat-messages {
   max-height: 12rem;
+}
+
+.topbar-chat .session-chat-empty {
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.topbar-chat .session-chat-message {
+  border: none;
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.topbar-chat .session-chat-message-mine {
+  border: none;
+  background: rgba(79, 70, 229, 0.65);
+}
+
+.topbar-chat .session-chat-meta {
+  color: rgba(203, 213, 225, 0.88);
+}
+
+.topbar-chat .session-chat-text {
+  color: rgba(248, 250, 252, 0.96);
+}
+
+.topbar-chat .session-chat-emoji-btn {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(15, 23, 42, 0.62);
+  color: rgba(248, 250, 252, 0.95);
+  font-size: 1.05rem;
+  min-height: 2.15rem;
+}
+
+.topbar-chat .session-chat-emoji-btn:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(129, 140, 248, 0.46);
+}
+
+.topbar-chat .session-chat-compose input {
+  background: rgba(15, 23, 42, 0.74);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: rgba(248, 250, 252, 0.95);
+}
+
+.topbar-chat .session-chat-compose input::placeholder {
+  color: rgba(148, 163, 184, 0.9);
 }
 
 .topbar-actions {
@@ -1290,8 +1340,8 @@ label {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding-right: 0.2rem;
+  gap: 0.5rem;
+  padding-right: 0.1rem;
 }
 
 .session-chat-empty {
@@ -1301,14 +1351,16 @@ label {
 }
 
 .session-chat-message {
+  align-self: flex-start;
+  max-width: 88%;
   padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--slate-200);
+  border-radius: 14px;
+  border: none;
   background: rgba(248, 250, 252, 0.86);
 }
 
 .session-chat-message-mine {
-  border-color: var(--indigo-200);
+  align-self: flex-end;
   background: rgba(224, 231, 255, 0.72);
 }
 
@@ -1318,7 +1370,7 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   color: var(--slate-600);
 }
 
@@ -1333,17 +1385,18 @@ label {
 .session-chat-emoji-pack {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.35rem;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
 }
 
 .session-chat-emoji-btn {
   min-width: 0;
+  font-size: 1.05rem;
+  min-height: 2.1rem;
 }
 
 .session-chat-compose {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.45rem;
+  display: block;
 }
 
 .emoji-reactions-overlay {

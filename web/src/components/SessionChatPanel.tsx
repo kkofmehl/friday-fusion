@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionChatMessage } from "../../../shared/contracts";
 
 const EMOJI_PACK = ["😀", "😂", "😎", "🔥", "👏", "💀", "🎉", "😈"] as const;
@@ -23,10 +23,19 @@ export function SessionChatPanel({
   onSendReaction
 }: SessionChatPanelProps): JSX.Element {
   const [draft, setDraft] = useState("");
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   const orderedMessages = useMemo(
     () => [...messages].sort((a, b) => a.createdAt - b.createdAt),
     [messages]
   );
+
+  useEffect(() => {
+    const node = messagesRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+  }, [orderedMessages.length]);
 
   const submit = (): void => {
     const next = draft.trim();
@@ -42,7 +51,7 @@ export function SessionChatPanel({
       <header className="card-head">
         <h2>Smack Talk</h2>
       </header>
-      <div className="session-chat-messages" aria-live="polite">
+      <div ref={messagesRef} className="session-chat-messages" aria-live="polite">
         {orderedMessages.length === 0 ? (
           <p className="session-chat-empty">No messages yet.</p>
         ) : (
@@ -63,20 +72,6 @@ export function SessionChatPanel({
           })
         )}
       </div>
-      <div className="session-chat-emoji-pack" aria-label="Emoji reactions">
-        {EMOJI_PACK.map((emoji) => (
-          <button
-            key={emoji}
-            type="button"
-            className="btn btn-ghost btn-sm session-chat-emoji-btn"
-            onClick={() => onSendReaction(emoji)}
-            aria-label={`Send ${emoji} reaction`}
-            title={`Send ${emoji}`}
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
       <div className="session-chat-compose">
         <input
           value={draft}
@@ -91,9 +86,20 @@ export function SessionChatPanel({
           placeholder="Type your smack talk..."
           aria-label="Chat message"
         />
-        <button type="button" className="btn btn-primary btn-sm" onClick={submit}>
-          Send
-        </button>
+      </div>
+      <div className="session-chat-emoji-pack" aria-label="Emoji reactions">
+        {EMOJI_PACK.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            className="btn btn-ghost btn-sm session-chat-emoji-btn"
+            onClick={() => onSendReaction(emoji)}
+            aria-label={`Send ${emoji} reaction`}
+            title={`Send ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
       </div>
     </section>
   );
