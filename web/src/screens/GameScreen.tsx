@@ -6,6 +6,7 @@ import { IcebreakerGame } from "../games/IcebreakerGame";
 import { GuessWhoSaidItGame } from "../games/GuessWhoSaidItGame";
 import { TwoTruthsGame } from "../games/TwoTruthsGame";
 import { TriviaGame } from "../games/TriviaGame";
+import { WouldYouRatherGame } from "../games/WouldYouRatherGame";
 import { GuessTheImageGame } from "../games/GuessTheImageGame";
 import { TwentyQuestionsGame } from "../games/TwentyQuestionsGame";
 import { CaptionThisGame } from "../games/CaptionThisGame";
@@ -22,6 +23,7 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
   twoTruthsLie: "/game_icons/two_truths_and_one_lie.png",
   trivia: "/game_icons/trivia.png",
+  wouldYouRather: "/game_icons/would_you_rather.png",
   icebreaker: "/game_icons/ice_breaker_questions.png",
   guessWhoSaidIt: "/game_icons/guess_who_said_it.png",
   guessTheImage: "/game_icons/guess_the_image.png",
@@ -88,6 +90,17 @@ export function GameScreen({
           }
         }
       }
+    : session.gameState?.type === "wouldYouRather"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "wouldYouRather",
+          options: {
+            wouldYouRatherTotalQuestions: session.gameState.state.totalQuestions,
+            wouldYouRatherAllowParticipantSubmissions: session.gameState.state.allowParticipantSubmissions
+          }
+        }
+      }
     : session.gameState?.type === "captionThis"
     ? {
         type: "game:start",
@@ -144,6 +157,16 @@ export function GameScreen({
           isHost={isHost}
           send={send}
           apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "wouldYouRather") {
+      return (
+        <WouldYouRatherGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
         />
       );
     }

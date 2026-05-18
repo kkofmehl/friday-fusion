@@ -173,6 +173,91 @@ describe("SessionService", () => {
     );
   });
 
+  it("starts would-you-rather with configured options", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Player");
+    await setup.service.startGame(host.sessionId, "wouldYouRather", {
+      wouldYouRatherTotalQuestions: 4,
+      wouldYouRatherAllowParticipantSubmissions: true
+    });
+    const state = setup.service.getState(host.sessionId);
+    if (state.gameState?.type !== "wouldYouRather") {
+      throw new Error("Expected wouldYouRather state");
+    }
+    expect(state.gameState.state.totalQuestions).toBe(4);
+    expect(state.gameState.state.allowParticipantSubmissions).toBe(true);
+    expect(state.gameState.state.status).toBe("questionOpen");
+    expect(state.gameState.state.activePrompt).not.toBeNull();
+  });
+
+  it("reveals would-you-rather results when all active players answer or pass", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const player = await setup.service.joinSession(host.joinCode, "Player");
+    await setup.service.startGame(host.sessionId, "wouldYouRather", {
+      wouldYouRatherTotalQuestions: 1
+    });
+    await setup.service.submitWouldYouRatherAnswer(host.sessionId, player.participantId, "optionA");
+    let interim = setup.service.getState(host.sessionId);
+    if (interim.gameState?.type !== "wouldYouRather") {
+      throw new Error("Expected wouldYouRather state");
+    }
+    expect(interim.gameState.state.status).toBe("questionOpen");
+    await setup.service.submitWouldYouRatherAnswer(host.sessionId, host.participantId, "pass");
+    interim = setup.service.getState(host.sessionId);
+    if (interim.gameState?.type !== "wouldYouRather" || !interim.gameState.state.results) {
+      throw new Error("Expected wouldYouRather results");
+    }
+    expect(interim.gameState.state.status).toBe("results");
+    expect(interim.gameState.state.results.optionACount).toBe(1);
+    expect(interim.gameState.state.results.passCount).toBe(1);
+    const hostRow = interim.participants.find((participant) => participant.id === host.participantId);
+    const playerRow = interim.participants.find((participant) => participant.id === player.participantId);
+    expect(hostRow?.score).toBe(0);
+    expect(playerRow?.score).toBe(0);
+  });
+
+  it("runs approved submitted would-you-rather prompts after base prompts", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const player = await setup.service.joinSession(host.joinCode, "Player");
+    await setup.service.startGame(host.sessionId, "wouldYouRather", {
+      wouldYouRatherTotalQuestions: 1,
+      wouldYouRatherAllowParticipantSubmissions: true
+    });
+    await setup.service.submitWouldYouRatherPrompt(host.sessionId, player.participantId, "camp in the woods", "stay in a city hotel");
+    let hostView = setup.service.getState(host.sessionId, host.participantId);
+    if (hostView.gameState?.type !== "wouldYouRather") {
+      throw new Error("Expected wouldYouRather state");
+    }
+    const pending = hostView.gameState.state.hostPendingSubmissions[0];
+    if (!pending) {
+      throw new Error("Expected pending submission");
+    }
+    await setup.service.reviewWouldYouRatherSubmission(host.sessionId, host.participantId, pending.id, "approve");
+    await setup.service.submitWouldYouRatherAnswer(host.sessionId, host.participantId, "optionA");
+    await setup.service.submitWouldYouRatherAnswer(host.sessionId, player.participantId, "optionB");
+    await setup.service.nextWouldYouRatherPrompt(host.sessionId, host.participantId);
+    hostView = setup.service.getState(host.sessionId, host.participantId);
+    if (hostView.gameState?.type !== "wouldYouRather") {
+      throw new Error("Expected wouldYouRather state");
+    }
+    expect(hostView.gameState.state.status).toBe("finished");
+    await setup.service.startWouldYouRatherSubmittedRound(host.sessionId, host.participantId);
+    hostView = setup.service.getState(host.sessionId, host.participantId);
+    if (hostView.gameState?.type !== "wouldYouRather") {
+      throw new Error("Expected wouldYouRather state");
+    }
+    expect(hostView.gameState.state.inSubmittedRound).toBe(true);
+    expect(hostView.gameState.state.status).toBe("questionOpen");
+    expect(hostView.gameState.state.totalQuestions).toBe(1);
+    expect(hostView.gameState.state.activePrompt?.source).toBe("submitted");
+  });
+
   it("loads trivia with filter options and exposes loading progress updates", async () => {
     const localTempDir = await mkdtemp(path.join(os.tmpdir(), "fusion-test-"));
     tempDir = localTempDir;

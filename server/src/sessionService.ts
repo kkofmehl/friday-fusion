@@ -13,6 +13,7 @@ import {
   UNO_HAND_SIZE,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
+  WOULD_YOU_RATHER_OPTION_MAX_CHARS,
   PICTORY_MAX_STROKES_PER_ROUND,
   PICTORY_ROUND_DURATION_DEFAULT_MS,
   PICTORY_ROUND_DURATION_MAX_MS,
@@ -49,6 +50,7 @@ import { pickPictionaryClue } from "./pictionaryClues";
 import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { pickGuessWhoSaidItQuestions } from "./guessWhoSaidItQuestionLoader";
+import { pickWouldYouRatherPrompts } from "./wouldYouRatherPromptLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
 import {
   purgeAllGuessWhoSaidItSessionUploads,
@@ -144,6 +146,40 @@ type TriviaGameInternal = {
   usedQuestionIds: string[];
   loading: TriviaLoadingState | null;
   status: "idle" | "loading" | "questionOpen" | "questionClosed" | "finished";
+};
+
+type WouldYouRatherChoiceInternal = "optionA" | "optionB" | "pass";
+
+type WouldYouRatherPromptInternal = {
+  id: string;
+  optionA: string;
+  optionB: string;
+  source: "library" | "submitted";
+  submittedByParticipantId: string | null;
+};
+
+type WouldYouRatherSubmissionInternal = {
+  id: string;
+  optionA: string;
+  optionB: string;
+  submittedByParticipantId: string;
+  status: "pending" | "approved" | "rejected";
+};
+
+type WouldYouRatherGameInternal = {
+  id: string;
+  type: "wouldYouRather";
+  status: "questionOpen" | "results" | "finished";
+  roundPrompts: WouldYouRatherPromptInternal[];
+  totalQuestions: number;
+  questionIndex: number;
+  activePrompt: WouldYouRatherPromptInternal | null;
+  responses: Record<string, WouldYouRatherChoiceInternal>;
+  results: { optionACount: number; optionBCount: number; passCount: number; totalResponses: number } | null;
+  usedPromptIds: string[];
+  allowParticipantSubmissions: boolean;
+  inSubmittedRound: boolean;
+  submissions: WouldYouRatherSubmissionInternal[];
 };
 
 type IcebreakerRevealedInternal = {
@@ -480,6 +516,7 @@ type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
   | TriviaGameInternal
+  | WouldYouRatherGameInternal
   | IcebreakerGameInternal
   | GuessWhoSaidItGameInternal
   | GuessTheImageGameInternal
@@ -645,6 +682,23 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       usedQuestionIds: game.usedQuestionIds ?? [],
       loading: game.loading ?? null,
       totalQuestions: game.totalQuestions ?? (game.questions.length || 1)
+    };
+  }
+  if (game.type === "wouldYouRather") {
+    return {
+      ...game,
+      id: game.id ?? nanoid(6),
+      roundPrompts: game.roundPrompts ?? [],
+      totalQuestions: Math.max(1, Number(game.totalQuestions) || 1),
+      questionIndex: Math.max(0, Number(game.questionIndex) || 0),
+      activePrompt: game.activePrompt ?? null,
+      responses: game.responses ?? {},
+      results: game.results ?? null,
+      usedPromptIds: Array.isArray(game.usedPromptIds) ? game.usedPromptIds : [],
+      allowParticipantSubmissions: game.allowParticipantSubmissions === true,
+      inSubmittedRound: game.inSubmittedRound === true,
+      submissions: Array.isArray(game.submissions) ? game.submissions : [],
+      status: game.status === "results" || game.status === "finished" ? game.status : "questionOpen"
     };
   }
   if (game.type === "icebreaker") {
@@ -1771,6 +1825,35 @@ export class SessionService {
         loading: null,
         status: "idle"
       };
+    } else if (game === "wouldYouRather") {
+      const previousWouldYouRather = session.games.find(
+        (entry): entry is WouldYouRatherGameInternal => entry.type === "wouldYouRather"
+      );
+      const count = Math.max(1, Math.min(200, Math.floor(options.wouldYouRatherTotalQuestions ?? 12)));
+      const usedPromptIds = new Set(previousWouldYouRather?.usedPromptIds ?? []);
+      const picked = pickWouldYouRatherPrompts(usedPromptIds, count).map((prompt) => ({
+        id: prompt.id,
+        optionA: prompt.optionA,
+        optionB: prompt.optionB,
+        source: prompt.source,
+        submittedByParticipantId: prompt.submittedByParticipantId
+      }));
+      picked.forEach((prompt) => usedPromptIds.add(prompt.id));
+      next = {
+        id: nanoid(6),
+        type: "wouldYouRather",
+        status: picked.length > 0 ? "questionOpen" : "finished",
+        roundPrompts: picked,
+        totalQuestions: picked.length || 1,
+        questionIndex: 0,
+        activePrompt: picked[0] ?? null,
+        responses: {},
+        results: null,
+        usedPromptIds: [...usedPromptIds],
+        allowParticipantSubmissions: options.wouldYouRatherAllowParticipantSubmissions === true,
+        inSubmittedRound: false,
+        submissions: []
+      };
     } else if (game === "icebreaker") {
       const previousIcebreaker = session.games.find((entry): entry is IcebreakerGameInternal => entry.type === "icebreaker");
       next = {
@@ -2250,6 +2333,11 @@ export class SessionService {
       delete activeIcebreaker.privateSubmissions[participantId];
       activeIcebreaker.revealed = activeIcebreaker.revealed.filter((r) => r.participantId !== participantId);
       delete activeIcebreaker.promptDraftsByParticipant[participantId];
+    }
+
+    const activeWouldYouRather = session.games[0];
+    if (activeWouldYouRather?.type === "wouldYouRather") {
+      delete activeWouldYouRather.responses[participantId];
     }
 
     const activeGuessWho = session.games[0];
@@ -2934,6 +3022,175 @@ export class SessionService {
     game.activeQuestion = nextQuestion ?? null;
     game.answers = {};
     game.status = nextQuestion ? "questionOpen" : "finished";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  private wouldYouRatherResultsFor(
+    session: SessionInternal,
+    game: WouldYouRatherGameInternal
+  ): { optionACount: number; optionBCount: number; passCount: number; totalResponses: number } {
+    const tallies = { optionACount: 0, optionBCount: 0, passCount: 0, totalResponses: 0 };
+    for (const participant of activeParticipants(session)) {
+      const choice = game.responses[participant.id];
+      if (choice === "optionA") {
+        tallies.optionACount += 1;
+      } else if (choice === "optionB") {
+        tallies.optionBCount += 1;
+      } else if (choice === "pass") {
+        tallies.passCount += 1;
+      }
+    }
+    tallies.totalResponses = tallies.optionACount + tallies.optionBCount + tallies.passCount;
+    return tallies;
+  }
+
+  public async submitWouldYouRatherAnswer(
+    sessionId: string,
+    participantId: string,
+    choice: WouldYouRatherChoiceInternal
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wouldYouRather" || game.status !== "questionOpen" || !game.activePrompt) {
+      throw new Error("Would You Rather is not accepting answers right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    game.responses[participantId] = choice;
+    const everyoneAnswered = activeParticipants(session).every(
+      (participant) => typeof game.responses[participant.id] === "string"
+    );
+    if (everyoneAnswered) {
+      game.results = this.wouldYouRatherResultsFor(session, game);
+      game.status = "results";
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async nextWouldYouRatherPrompt(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can move to the next prompt.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "wouldYouRather") {
+      throw new Error("Would You Rather game is not active.");
+    }
+    if (game.status !== "results") {
+      throw new Error("Move to the next prompt after results are shown.");
+    }
+    const nextIndex = game.questionIndex + 1;
+    const nextPrompt = game.roundPrompts[nextIndex] ?? null;
+    game.questionIndex = nextIndex;
+    game.activePrompt = nextPrompt;
+    game.responses = {};
+    game.results = null;
+    game.status = nextPrompt ? "questionOpen" : "finished";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async submitWouldYouRatherPrompt(
+    sessionId: string,
+    participantId: string,
+    optionAInput: string,
+    optionBInput: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wouldYouRather") {
+      throw new Error("Would You Rather game is not active.");
+    }
+    if (!game.allowParticipantSubmissions) {
+      throw new Error("Custom prompt submissions are disabled for this round.");
+    }
+    const optionA = optionAInput.trim();
+    const optionB = optionBInput.trim();
+    if (!optionA || !optionB) {
+      throw new Error("Both options are required.");
+    }
+    if (optionA.length > WOULD_YOU_RATHER_OPTION_MAX_CHARS || optionB.length > WOULD_YOU_RATHER_OPTION_MAX_CHARS) {
+      throw new Error(`Each option must be ${WOULD_YOU_RATHER_OPTION_MAX_CHARS} characters or less.`);
+    }
+    if (optionA.toLowerCase() === optionB.toLowerCase()) {
+      throw new Error("The two options must be different.");
+    }
+    game.submissions.push({
+      id: `wyr-sub-${nanoid(10)}`,
+      optionA,
+      optionB,
+      submittedByParticipantId: participantId,
+      status: "pending"
+    });
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async reviewWouldYouRatherSubmission(
+    sessionId: string,
+    hostParticipantId: string,
+    submissionId: string,
+    decision: "approve" | "reject"
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can review submissions.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "wouldYouRather") {
+      throw new Error("Would You Rather game is not active.");
+    }
+    const submission = game.submissions.find((item) => item.id === submissionId);
+    if (!submission || submission.status !== "pending") {
+      throw new Error("Submission is no longer pending.");
+    }
+    submission.status = decision === "approve" ? "approved" : "rejected";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async startWouldYouRatherSubmittedRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only host can start submitted prompts.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "wouldYouRather") {
+      throw new Error("Would You Rather game is not active.");
+    }
+    if (game.inSubmittedRound) {
+      throw new Error("Submitted prompt round already started.");
+    }
+    if (game.status !== "finished") {
+      throw new Error("Finish the configured prompts before starting submitted prompts.");
+    }
+    const approved = game.submissions.filter((submission) => submission.status === "approved");
+    if (approved.length === 0) {
+      throw new Error("No approved submitted prompts available.");
+    }
+    const roundPrompts: WouldYouRatherPromptInternal[] = approved.map((submission) => ({
+      id: submission.id,
+      optionA: submission.optionA,
+      optionB: submission.optionB,
+      source: "submitted",
+      submittedByParticipantId: submission.submittedByParticipantId
+    }));
+    game.inSubmittedRound = true;
+    game.roundPrompts = roundPrompts;
+    game.totalQuestions = roundPrompts.length;
+    game.questionIndex = 0;
+    game.activePrompt = roundPrompts[0] ?? null;
+    game.responses = {};
+    game.results = null;
+    game.status = game.activePrompt ? "questionOpen" : "finished";
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -6079,6 +6336,66 @@ export class SessionService {
             answers: game.answers,
             loading: game.loading,
             status: game.status
+          }
+        }
+      };
+    }
+
+    if (game.type === "wouldYouRather") {
+      const hostView = Boolean(
+        viewerParticipantId && session.participants.some((participant) => participant.id === viewerParticipantId && participant.isHost)
+      );
+      const answeredParticipantIds = activeParticipants(session)
+        .filter((participant) => typeof game.responses[participant.id] === "string")
+        .map((participant) => participant.id);
+      const optionASelectedParticipantIds = activeParticipants(session)
+        .filter((participant) => game.responses[participant.id] === "optionA")
+        .map((participant) => participant.id);
+      const optionBSelectedParticipantIds = activeParticipants(session)
+        .filter((participant) => game.responses[participant.id] === "optionB")
+        .map((participant) => participant.id);
+      const selectedChoice = viewerParticipantId ? game.responses[viewerParticipantId] ?? null : null;
+      const approvedSubmissions = game.submissions.filter((submission) => submission.status === "approved");
+      const pendingSubmissions = game.submissions.filter((submission) => submission.status === "pending");
+      const approvedSubmissionsRemaining = game.inSubmittedRound
+        ? Math.max(0, game.totalQuestions - game.questionIndex)
+        : approvedSubmissions.length;
+      return {
+        ...base,
+        activeGame: "wouldYouRather",
+        gameState: {
+          type: "wouldYouRather",
+          state: {
+            status: game.status,
+            totalQuestions: game.totalQuestions,
+            questionIndex: game.questionIndex,
+            inSubmittedRound: game.inSubmittedRound,
+            allowParticipantSubmissions: game.allowParticipantSubmissions,
+            activePrompt: game.activePrompt,
+            answeredParticipantIds,
+            hasAnswered: Boolean(selectedChoice),
+            selectedChoice,
+            optionASelectedParticipantIds,
+            optionBSelectedParticipantIds,
+            results: game.results,
+            pendingSubmissionsCount: pendingSubmissions.length,
+            approvedSubmissionsRemaining,
+            hostPendingSubmissions: hostView
+              ? pendingSubmissions.map((submission) => ({
+                id: submission.id,
+                optionA: submission.optionA,
+                optionB: submission.optionB,
+                submittedByParticipantId: submission.submittedByParticipantId
+              }))
+              : [],
+            hostApprovedSubmissions: hostView
+              ? approvedSubmissions.map((submission) => ({
+                id: submission.id,
+                optionA: submission.optionA,
+                optionB: submission.optionB,
+                submittedByParticipantId: submission.submittedByParticipantId
+              }))
+              : []
           }
         }
       };

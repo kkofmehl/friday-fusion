@@ -4,6 +4,7 @@ export const gameTypeSchema = z.enum([
   "hangman",
   "twoTruthsLie",
   "trivia",
+  "wouldYouRather",
   "icebreaker",
   "guessWhoSaidIt",
   "guessTheImage",
@@ -132,6 +133,62 @@ export const triviaStateSchema = z.object({
   status: z.enum(["idle", "loading", "questionOpen", "questionClosed", "finished"])
 });
 export type TriviaState = z.infer<typeof triviaStateSchema>;
+
+export const WOULD_YOU_RATHER_OPTION_MAX_CHARS = 180;
+
+export const wouldYouRatherRoundConfigSchema = z.object({
+  totalQuestions: z.number().int().positive(),
+  allowParticipantSubmissions: z.boolean().default(false)
+});
+export type WouldYouRatherRoundConfig = z.infer<typeof wouldYouRatherRoundConfigSchema>;
+
+export const wouldYouRatherChoiceSchema = z.enum(["optionA", "optionB", "pass"]);
+export type WouldYouRatherChoice = z.infer<typeof wouldYouRatherChoiceSchema>;
+
+export const wouldYouRatherPromptSchema = z.object({
+  id: z.string(),
+  optionA: z.string(),
+  optionB: z.string(),
+  source: z.enum(["library", "submitted"]).default("library"),
+  submittedByParticipantId: z.string().nullable().default(null)
+});
+export type WouldYouRatherPrompt = z.infer<typeof wouldYouRatherPromptSchema>;
+
+export const wouldYouRatherSubmissionSchema = z.object({
+  id: z.string(),
+  optionA: z.string(),
+  optionB: z.string(),
+  submittedByParticipantId: z.string()
+});
+export type WouldYouRatherSubmission = z.infer<typeof wouldYouRatherSubmissionSchema>;
+
+export const wouldYouRatherResultsSchema = z.object({
+  optionACount: z.number().int().nonnegative(),
+  optionBCount: z.number().int().nonnegative(),
+  passCount: z.number().int().nonnegative(),
+  totalResponses: z.number().int().nonnegative()
+});
+export type WouldYouRatherResults = z.infer<typeof wouldYouRatherResultsSchema>;
+
+export const wouldYouRatherStateSchema = z.object({
+  status: z.enum(["questionOpen", "results", "finished"]),
+  totalQuestions: z.number().int().positive(),
+  questionIndex: z.number().int().nonnegative(),
+  inSubmittedRound: z.boolean(),
+  allowParticipantSubmissions: z.boolean(),
+  activePrompt: wouldYouRatherPromptSchema.nullable(),
+  answeredParticipantIds: z.array(z.string()),
+  hasAnswered: z.boolean(),
+  selectedChoice: wouldYouRatherChoiceSchema.nullable(),
+  optionASelectedParticipantIds: z.array(z.string()),
+  optionBSelectedParticipantIds: z.array(z.string()),
+  results: wouldYouRatherResultsSchema.nullable(),
+  pendingSubmissionsCount: z.number().int().nonnegative(),
+  approvedSubmissionsRemaining: z.number().int().nonnegative(),
+  hostPendingSubmissions: z.array(wouldYouRatherSubmissionSchema),
+  hostApprovedSubmissions: z.array(wouldYouRatherSubmissionSchema)
+});
+export type WouldYouRatherState = z.infer<typeof wouldYouRatherStateSchema>;
 
 export const icebreakerQuestionSchema = z.object({
   id: z.string(),
@@ -985,6 +1042,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
     state: triviaStateSchema
   }),
   z.object({
+    type: z.literal("wouldYouRather"),
+    state: wouldYouRatherStateSchema
+  }),
+  z.object({
     type: z.literal("icebreaker"),
     state: icebreakerStateSchema
   }),
@@ -1140,7 +1201,11 @@ export const gameStartOptionsSchema = z.object({
   /** Pictionary: ms per drawing turn (server clamps to PICTORY_ROUND_DURATION_*). */
   pictionaryRoundDurationMs: z.number().int().positive().optional(),
   /** Apples to Apples: standard (redraw to hand size) or finite (6 rounds, no redraw). */
-  applesToApplesMode: applesToApplesModeSchema.optional()
+  applesToApplesMode: applesToApplesModeSchema.optional(),
+  /** Would You Rather: number of stock prompts to run before submitted prompts. */
+  wouldYouRatherTotalQuestions: z.number().int().positive().optional(),
+  /** Would You Rather: players can submit prompts during round if enabled. */
+  wouldYouRatherAllowParticipantSubmissions: z.boolean().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -1203,6 +1268,26 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("trivia:answer"), payload: z.object({ answer: z.string() }) }),
   z.object({ type: z.literal("trivia:closeQuestion"), payload: z.object({}) }),
   z.object({ type: z.literal("trivia:nextQuestion"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("wouldYouRather:answer"),
+    payload: z.object({ choice: wouldYouRatherChoiceSchema })
+  }),
+  z.object({
+    type: z.literal("wouldYouRather:submitPrompt"),
+    payload: z.object({
+      optionA: z.string().trim().min(1).max(WOULD_YOU_RATHER_OPTION_MAX_CHARS),
+      optionB: z.string().trim().min(1).max(WOULD_YOU_RATHER_OPTION_MAX_CHARS)
+    })
+  }),
+  z.object({
+    type: z.literal("wouldYouRather:reviewSubmission"),
+    payload: z.object({
+      submissionId: z.string().min(1),
+      decision: z.enum(["approve", "reject"])
+    })
+  }),
+  z.object({ type: z.literal("wouldYouRather:nextPrompt"), payload: z.object({}) }),
+  z.object({ type: z.literal("wouldYouRather:startSubmittedRound"), payload: z.object({}) }),
   z.object({ type: z.literal("icebreaker:startRound"), payload: icebreakerRoundConfigSchema }),
   z.object({
     type: z.literal("icebreaker:beginPromptGathering"),

@@ -872,6 +872,39 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             throw new Error("Only host can move to the next question.");
           }
           await sessionService.nextTriviaQuestion(context.sessionId, context.participantId);
+        } else if (event.type === "wouldYouRather:answer") {
+          await sessionService.submitWouldYouRatherAnswer(
+            context.sessionId,
+            context.participantId,
+            event.payload.choice
+          );
+        } else if (event.type === "wouldYouRather:submitPrompt") {
+          await sessionService.submitWouldYouRatherPrompt(
+            context.sessionId,
+            context.participantId,
+            event.payload.optionA,
+            event.payload.optionB
+          );
+        } else if (event.type === "wouldYouRather:reviewSubmission") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can review submissions.");
+          }
+          await sessionService.reviewWouldYouRatherSubmission(
+            context.sessionId,
+            context.participantId,
+            event.payload.submissionId,
+            event.payload.decision
+          );
+        } else if (event.type === "wouldYouRather:nextPrompt") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can move to the next prompt.");
+          }
+          await sessionService.nextWouldYouRatherPrompt(context.sessionId, context.participantId);
+        } else if (event.type === "wouldYouRather:startSubmittedRound") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can start submitted prompts.");
+          }
+          await sessionService.startWouldYouRatherSubmittedRound(context.sessionId, context.participantId);
         } else if (event.type === "icebreaker:startRound") {
           await sessionService.startIcebreakerRound(
             context.sessionId,

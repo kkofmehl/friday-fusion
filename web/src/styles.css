@@ -2190,6 +2190,87 @@ label {
   color: var(--rose-600);
 }
 
+.wyr-main-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.wyr-main-option {
+  aspect-ratio: 1 / 1;
+  min-height: 12.5rem;
+  border-radius: 20px;
+  border: 2px solid rgba(15, 23, 42, 0.18);
+  font-size: 1.06rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-shadow: 0 12px 20px -14px rgba(15, 23, 42, 0.5);
+}
+
+.wyr-main-option:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(15, 23, 42, 0.32);
+}
+
+.wyr-main-option.is-picked {
+  border-color: var(--indigo-700);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.35), 0 16px 28px -16px rgba(79, 70, 229, 0.6);
+}
+
+.wyr-main-option-results {
+  text-align: left;
+  justify-content: flex-start;
+  align-items: stretch;
+  cursor: default;
+}
+
+.wyr-result-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 0.45rem;
+}
+
+.wyr-result-title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+.wyr-result-percent {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--slate-900);
+}
+
+.wyr-result-names {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--slate-700);
+  line-height: 1.35;
+}
+
+.wyr-divider {
+  border: none;
+  border-top: 1px solid var(--slate-200);
+  margin: 1.25rem 0 1rem;
+}
+
+.wyr-custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-width: 28rem;
+}
+
+.wyr-custom-input {
+  max-width: 28rem;
+}
+
 .trivia-review {
   margin-top: 1.2rem;
   padding: 1rem;
@@ -2210,6 +2291,12 @@ label {
   justify-content: space-between;
   align-items: center;
   padding: 0.35rem 0;
+}
+
+@media (max-width: 760px) {
+  .wyr-main-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 .game-card-icebreaker .icebreaker-setup {

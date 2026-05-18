@@ -41,6 +41,12 @@ const GAMES: GameOption[] = [
     iconSrc: "/game_icons/trivia.png"
   },
   {
+    id: "wouldYouRather",
+    title: "Would You Rather",
+    description: "Pick option A, option B, or pass—then compare room results.",
+    iconSrc: "/game_icons/would_you_rather.png"
+  },
+  {
     id: "icebreaker",
     title: "Icebreaker Questions",
     description: "Fun prompts—share answers (and optional photos), then reveal together.",
@@ -156,6 +162,8 @@ export function LobbyScreen({
   const [pictionaryDrawSecs, setPictionaryDrawSecs] = useState(PICTORY_ROUND_DURATION_DEFAULT_MS / 1000);
   const [applesMode, setApplesMode] = useState<ApplesToApplesMode>("standard");
   const [yahtzeeMode, setYahtzeeMode] = useState<YahtzeeMode>("turns");
+  const [wouldYouRatherQuestions, setWouldYouRatherQuestions] = useState(10);
+  const [wouldYouRatherAllowSubmissions, setWouldYouRatherAllowSubmissions] = useState(true);
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -258,6 +266,20 @@ export function LobbyScreen({
       send({
         type: "game:start",
         payload: { game, options: { yahtzeeMode } }
+      });
+      return;
+    }
+    if (game === "wouldYouRather") {
+      const totalQuestions = Math.max(1, Math.min(200, Math.floor(wouldYouRatherQuestions) || 10));
+      send({
+        type: "game:start",
+        payload: {
+          game,
+          options: {
+            wouldYouRatherTotalQuestions: totalQuestions,
+            wouldYouRatherAllowParticipantSubmissions: wouldYouRatherAllowSubmissions
+          }
+        }
       });
       return;
     }
@@ -414,6 +436,31 @@ export function LobbyScreen({
                     onChange={(event) => setTwentyQMaxQuestions(Number(event.target.value))}
                   />
                   <p className="mode-option-hint">1–50 questions (default 20). Guessers take turns asking.</p>
+                </fieldset>
+              )}
+              {game.id === "wouldYouRather" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Round setup</legend>
+                  <label className="mode-picker-label" htmlFor="would-you-rather-count">
+                    How many prompts?
+                  </label>
+                  <input
+                    id="would-you-rather-count"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={wouldYouRatherQuestions}
+                    onChange={(event) => setWouldYouRatherQuestions(Number(event.target.value))}
+                  />
+                  <label className={`mode-option${wouldYouRatherAllowSubmissions ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={wouldYouRatherAllowSubmissions}
+                      onChange={(event) => setWouldYouRatherAllowSubmissions(event.target.checked)}
+                    />
+                    <span className="mode-option-title">Allow player-submitted prompts during the round</span>
+                    <span className="mode-option-hint">Host can approve or reject submissions before running them.</span>
+                  </label>
                 </fieldset>
               )}
               {game.id === "captionThis" && (
