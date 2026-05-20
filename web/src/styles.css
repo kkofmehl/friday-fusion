@@ -1095,9 +1095,13 @@ label {
   border-color: rgba(129, 140, 248, 0.75);
 }
 
-.mode-option input[type="radio"] {
+.mode-option input[type="radio"],
+.mode-option input[type="checkbox"] {
   grid-row: 1 / span 2;
   align-self: start;
+  justify-self: start;
+  width: 1rem;
+  height: 1rem;
   margin-top: 0.2rem;
 }
 

@@ -90,6 +90,28 @@ describe("LobbyScreen", () => {
     expect(list.textContent).toContain("Bob wants to play Trivia");
   });
 
+  it("sends Would You Rather setup including submission toggle", () => {
+    const send = vi.fn();
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />);
+
+    const card = screen.getByRole("heading", { name: "Would You Rather" }).closest("article");
+    if (!card) throw new Error("expected Would You Rather card");
+    fireEvent.change(card.querySelector("#would-you-rather-count")!, { target: { value: "12" } });
+    fireEvent.click(card.querySelector('input[type="checkbox"]')!);
+    fireEvent.click(card.querySelector(".btn-primary")!);
+
+    expect(send).toHaveBeenCalledWith({
+      type: "game:start",
+      payload: {
+        game: "wouldYouRather",
+        options: {
+          wouldYouRatherTotalQuestions: 12,
+          wouldYouRatherAllowParticipantSubmissions: false
+        }
+      }
+    });
+  });
+
   it("sends selected mode when starting Yahtzee", () => {
     const send = vi.fn();
     render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />);
