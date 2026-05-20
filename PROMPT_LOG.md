@@ -181,3 +181,7 @@
 90. User requested a new **Would You Rather** game for Friday Fusion with host-configured prompt count, a quality built-in prompt library, optional player-submitted prompts during the round, host visibility/moderation of submissions, reveal-after-all-answer flow, host-driven next prompt, and a subtle pass option.
 91. User confirmed product rules for implementation: **no scoring** and host controls to **approve/reject** submitted prompts before running submitted rounds.
 92. User requested full implementation of the approved plan and completion of all to-dos without editing the plan file.
+
+## 2026-05-19
+
+93. User reported that refreshing the browser kicks them out of an active session; assistant implemented `sessionStorage` persistence of session credentials and automatic rejoin via the existing join API on page load.

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ClientEvent,
   SessionChatMessage,
@@ -14,6 +14,11 @@ import { EmojiReactionsOverlay, type EmojiReactionBurst } from "./components/Emo
 import { LandingScreen, type LandingSuccess } from "./screens/LandingScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { GameScreen } from "./screens/GameScreen";
+import {
+  clearStoredSessionAuth,
+  readStoredSessionAuth,
+  writeStoredSessionAuth
+} from "./sessionPersistence";
 
 type AuthState = {
   sessionId: string;
@@ -30,6 +35,7 @@ export function App(): JSX.Element {
   const [notice, setNotice] = useState("");
   const [chatMessages, setChatMessages] = useState<SessionChatMessage[]>([]);
   const [emojiBursts, setEmojiBursts] = useState<EmojiReactionBurst[]>([]);
+  const [isRestoringSession, setIsRestoringSession] = useState(() => readStoredSessionAuth() !== null);
 
   const handleSession = useCallback((state: SessionState) => {
     setSession(state);
@@ -38,6 +44,7 @@ export function App(): JSX.Element {
     setError(message);
   }, []);
   const handleSessionClosed = useCallback((reason: SessionClosedReason) => {
+    clearStoredSessionAuth();
     setAuth(null);
     setSession(null);
     setChatMessages([]);
@@ -90,19 +97,79 @@ export function App(): JSX.Element {
     onEmojiReaction: handleEmojiReaction
   });
 
-  const handleLandingSuccess = (result: LandingSuccess) => {
-    setAuth({ sessionId: result.sessionId, participantId: result.participantId, displayName: result.displayName });
+  const enterSession = useCallback((result: LandingSuccess) => {
+    writeStoredSessionAuth({
+      sessionId: result.sessionId,
+      participantId: result.participantId,
+      displayName: result.displayName,
+      joinCode: result.state.joinCode
+    });
+    setAuth({
+      sessionId: result.sessionId,
+      participantId: result.participantId,
+      displayName: result.displayName
+    });
     setSession(result.state);
     setChatMessages([]);
     setEmojiBursts([]);
     setError("");
     setNotice("");
-  };
+  }, []);
+
+  useEffect(() => {
+    const stored = readStoredSessionAuth();
+    if (!stored) {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`${apiBase}/api/sessions/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            joinCode: stored.joinCode.trim().toUpperCase(),
+            displayName: stored.displayName.trim()
+          })
+        });
+        if (!response.ok) {
+          throw new Error("Could not rejoin session.");
+        }
+        const payload = (await response.json()) as {
+          sessionId: string;
+          participantId: string;
+          state: SessionState;
+        };
+        if (cancelled) {
+          return;
+        }
+        enterSession({ ...payload, displayName: stored.displayName.trim() });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        clearStoredSessionAuth();
+        setNotice("Could not rejoin your session. It may have ended.");
+        setError("");
+      } finally {
+        if (!cancelled) {
+          setIsRestoringSession(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enterSession]);
 
   const leaveSession = () => {
     if (auth) {
       send({ type: "session:leave", payload: {} });
     }
+    clearStoredSessionAuth();
     setAuth(null);
     setSession(null);
     setChatMessages([]);
@@ -118,13 +185,27 @@ export function App(): JSX.Element {
 
   const sendEvent = (event: ClientEvent) => send(event);
 
+  if (isRestoringSession) {
+    return (
+      <>
+        <div className="app-layout app-layout--landing">
+          <main className="landing-shell">
+            <p className="landing-restore-message">Reconnecting to your session…</p>
+          </main>
+          <AppFooter />
+        </div>
+        <Toast message="" onDismiss={() => setError("")} />
+      </>
+    );
+  }
+
   if (!auth || !session) {
     return (
       <>
         <div className="app-layout app-layout--landing">
           <LandingScreen
             apiBase={apiBase}
-            onSuccess={handleLandingSuccess}
+            onSuccess={enterSession}
             error={error || notice}
             onError={setError}
           />

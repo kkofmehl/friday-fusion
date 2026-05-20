@@ -751,6 +751,14 @@ label {
   min-height: 0;
 }
 
+.landing-restore-message {
+  margin: 2rem auto;
+  max-width: 28rem;
+  text-align: center;
+  font-size: 1.05rem;
+  color: var(--text-muted);
+}
+
 .landing-grid {
   width: 100%;
   max-width: 1280px;
