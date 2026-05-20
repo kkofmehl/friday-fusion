@@ -4539,6 +4539,30 @@ label {
   border: 1px solid var(--slate-200);
 }
 
+.scattergories-review-row--duplicate {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.scattergories-duplicate-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b91c1c;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.scattergories-auto-verdict {
+  font-size: 0.85rem;
+  color: var(--slate-500);
+  font-style: italic;
+}
+
+.scattergories-verdict-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .scattergories-review-main {
   display: flex;
   flex-wrap: wrap;

@@ -84,6 +84,7 @@ import {
   pickScattergoriesList,
   type ScattergoriesList
 } from "./scattergoriesCardLoader";
+import { participantHasDuplicateForPrompt } from "../../shared/scattergoriesDuplicates";
 import { countLetterWords } from "../../shared/scattergoriesScoring";
 import {
   advanceTurnAfterPlay,
@@ -5755,6 +5756,7 @@ export class SessionService {
     game.roundEndsAt = null;
     game.currentPromptIndex = 0;
     game.verdictsByPrompt = {};
+    this.scattergoriesApplyAutoVerdictsForPrompt(session, game, 0);
     session.updatedAt = Date.now();
     await this.persist();
     this.onSessionUpdated?.(sessionId);
@@ -5775,6 +5777,32 @@ export class SessionService {
     }
     participant.score += delta;
     game.roundScoreDelta[participantId] = (game.roundScoreDelta[participantId] ?? 0) + delta;
+  }
+
+  private scattergoriesApplyAutoVerdictsForPrompt(
+    session: SessionInternal,
+    game: ScattergoriesGameInternal,
+    promptIndex: number
+  ): void {
+    if (!game.verdictsByPrompt[promptIndex]) {
+      game.verdictsByPrompt[promptIndex] = {};
+    }
+    const verdicts = game.verdictsByPrompt[promptIndex]!;
+    for (const participant of activeParticipants(session)) {
+      const text = game.answers[participant.id]?.[promptIndex] ?? "";
+      if (text.trim().length === 0) {
+        verdicts[participant.id] = "invalid";
+      }
+    }
+  }
+
+  private scattergoriesIsDuplicateAnswer(
+    game: ScattergoriesGameInternal,
+    participantId: string,
+    promptIndex: number
+  ): boolean {
+    const answers = game.answers[participantId] ?? [];
+    return participantHasDuplicateForPrompt(answers, promptIndex);
   }
 
   private scattergoriesRevokeVerdictPoints(
@@ -5931,6 +5959,13 @@ export class SessionService {
     if (!activeParticipants(session).some((p) => p.id === targetParticipantId)) {
       throw new Error("Participant is not active in this session.");
     }
+    const answerText = game.answers[targetParticipantId]?.[promptIndex] ?? "";
+    if (answerText.trim().length === 0) {
+      throw new Error("Blank answers are scored automatically.");
+    }
+    if (valid && this.scattergoriesIsDuplicateAnswer(game, targetParticipantId, promptIndex)) {
+      throw new Error("Duplicate answers cannot be accepted.");
+    }
     this.scattergoriesRevokeVerdictPoints(session, game, promptIndex, targetParticipantId);
     if (!game.verdictsByPrompt[promptIndex]) {
       game.verdictsByPrompt[promptIndex] = {};
@@ -5966,6 +6001,7 @@ export class SessionService {
       return;
     }
     game.currentPromptIndex += 1;
+    this.scattergoriesApplyAutoVerdictsForPrompt(session, game, game.currentPromptIndex);
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -7530,7 +7566,8 @@ export class SessionService {
         const roster = activeParticipants(session);
         const revealedAnswers = roster.map((p) => ({
           participantId: p.id,
-          text: (game.answers[p.id]?.[game.currentPromptIndex] ?? "").trim()
+          text: game.answers[p.id]?.[game.currentPromptIndex] ?? "",
+          isDuplicate: this.scattergoriesIsDuplicateAnswer(game, p.id, game.currentPromptIndex)
         }));
         const promptVerdicts = game.verdictsByPrompt[game.currentPromptIndex] ?? {};
         const verdicts: Record<string, "valid" | "invalid" | null> = {};

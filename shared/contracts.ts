@@ -1010,7 +1010,8 @@ export const scattergoriesStateSchema = z.discriminatedUnion("status", [
     revealedAnswers: z.array(
       z.object({
         participantId: z.string(),
-        text: z.string()
+        text: z.string(),
+        isDuplicate: z.boolean()
       })
     ),
     verdicts: z.record(z.string(), scattergoriesVerdictSchema.nullable())

@@ -6,6 +6,7 @@ import {
   type ScattergoriesListSummary,
   type SessionState
 } from "../../../shared/contracts";
+import { isScattergoriesDuplicateAt } from "../../../shared/scattergoriesDuplicates";
 import { countLetterWords } from "../../../shared/scattergoriesScoring";
 import { activeParticipants } from "../utils/participants";
 
@@ -329,20 +330,32 @@ export function ScattergoriesGame({
         <ul className="scattergories-review-list">
           {state.revealedAnswers.map((row) => {
             const verdict = state.verdicts[row.participantId];
+            const isBlank = row.text.trim().length === 0;
             const preview =
               verdict === "valid" ? countLetterWords(row.text, state.letter) : 0;
             return (
-              <li key={row.participantId} className="scattergories-review-row">
+              <li
+                key={row.participantId}
+                className={`scattergories-review-row${
+                  row.isDuplicate ? " scattergories-review-row--duplicate" : ""
+                }`}
+              >
                 <div className="scattergories-review-main">
                   <strong>{nameFor(row.participantId)}</strong>
                   <span className="scattergories-review-answer">
-                    {row.text.trim().length > 0 ? row.text : <em>(blank)</em>}
+                    {isBlank ? <em>(blank)</em> : row.text}
                   </span>
+                  {row.isDuplicate && (
+                    <span className="scattergories-duplicate-badge">Duplicate word</span>
+                  )}
+                  {isBlank && (
+                    <span className="scattergories-auto-verdict">No point (blank)</span>
+                  )}
                   {preview > 0 && (
                     <span className="scattergories-points-preview">+{preview}</span>
                   )}
                 </div>
-                {isHost && (
+                {isHost && !isBlank && (
                   <div className="scattergories-verdicts">
                     <button
                       type="button"
@@ -350,6 +363,8 @@ export function ScattergoriesGame({
                         verdict === "valid" ? " is-active" : ""
                       }`}
                       aria-label={`Accept answer from ${nameFor(row.participantId)}`}
+                      disabled={row.isDuplicate}
+                      title={row.isDuplicate ? "Duplicate answers cannot be accepted" : undefined}
                       onClick={() =>
                         send({
                           type: "scattergories:markAnswer",
@@ -436,7 +451,9 @@ export function ScattergoriesGame({
         <ol className="scattergories-answer-grid">
           {state.prompts.map((prompt, index) => {
             const value = localAnswers[index] ?? "";
-            const invalid = answerFailsLetterCheck(value, state.letter);
+            const invalidLetter = answerFailsLetterCheck(value, state.letter);
+            const invalidDuplicate = isScattergoriesDuplicateAt(localAnswers, index);
+            const invalid = invalidLetter || invalidDuplicate;
             return (
               <li key={prompt} className="scattergories-answer-row">
                 <label className="scattergories-answer-label" htmlFor={`scat-ans-${index}`}>
@@ -446,6 +463,14 @@ export function ScattergoriesGame({
                   id={`scat-ans-${index}`}
                   type="text"
                   className={`scattergories-input${invalid ? " scattergories-input--invalid" : ""}`}
+                  aria-invalid={invalid || undefined}
+                  title={
+                    invalidDuplicate
+                      ? "Each answer must be a different word"
+                      : invalidLetter
+                      ? `Must start with ${state.letter}`
+                      : undefined
+                  }
                   value={value}
                   maxLength={SCATTERGORIES_ANSWER_MAX_CHARS}
                   disabled={!canPlay}

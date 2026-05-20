@@ -186,3 +186,7 @@
 
 93. User reported that refreshing the browser kicks them out of an active session; assistant implemented `sessionStorage` persistence of session credentials and automatic rejoin via the existing join API on page load.
 94. User reported the Would You Rather lobby checkbox grows oversized in certain views; assistant fixed `.mode-option` grid placement for checkboxes (matching radio inputs) and added regression coverage.
+
+## 2026-05-20
+
+95. User requested Scattergories duplicate-answer validation (red inputs while answering), host duplicate awareness during judging with accept disabled, and automatic no-point scoring for blank answers without host clicks.

@@ -2777,5 +2777,55 @@ describe("SessionService", () => {
       expect(guestScore).toBe(0);
       vi.useRealTimers();
     });
+
+    it("auto-marks blank answers invalid and rejects accepting duplicates", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "scattergories");
+      await setup.service.scattergoriesDrawLetter(host.sessionId, host.participantId);
+      await setup.service.scattergoriesStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(SCATTERGORIES_COUNTDOWN_MS + 100);
+      const game = setup.service.getState(host.sessionId).gameState;
+      if (game?.type !== "scattergories" || game.state.status !== "answering") {
+        throw new Error("expected answering");
+      }
+      const letter = game.state.letter;
+      const blanks = game.state.prompts.map(() => "");
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, guest.participantId, [
+        `${letter}poon`,
+        `${letter}poon`,
+        ...blanks.slice(2)
+      ]);
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, host.participantId, blanks);
+      await vi.advanceTimersByTimeAsync(game.state.answerDurationMs + 100);
+      const reviewing = setup.service.getState(host.sessionId).gameState;
+      if (reviewing?.type !== "scattergories" || reviewing.state.status !== "reviewing") {
+        throw new Error("expected reviewing");
+      }
+      expect(reviewing.state.verdicts[host.participantId]).toBe("invalid");
+      const guestRow = reviewing.state.revealedAnswers.find((r) => r.participantId === guest.participantId);
+      expect(guestRow?.isDuplicate).toBe(true);
+      await expect(
+        setup.service.scattergoriesMarkAnswer(
+          host.sessionId,
+          host.participantId,
+          0,
+          guest.participantId,
+          true
+        )
+      ).rejects.toThrow(/duplicate/i);
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        false
+      );
+      await setup.service.scattergoriesNextPrompt(host.sessionId, host.participantId);
+      vi.useRealTimers();
+    });
   });
 });
