@@ -5,9 +5,11 @@ import {
   grandTotalFromSheetRows,
   hasLargeStraight,
   hasSmallStraight,
+  hasUpperBonusFromSheetRows,
   isYahtzee,
   placementAward,
   scoreCategory,
+  scoredYahtzeeFromSheetRows,
   upperBonusFromSheet,
   upperSubtotalFromSheet
 } from "../../shared/yahtzeeScoring";
@@ -79,6 +81,24 @@ describe("upperBonusFromSheet", () => {
       sixes: 30
     };
     expect(upperBonusFromSheet(m)).toBe(0);
+  });
+});
+
+describe("scoredYahtzeeFromSheetRows and hasUpperBonusFromSheetRows", () => {
+  it("detects yahtzee row score and upper bonus from committed rows", () => {
+    const rows: YahtzeeSheetRow[] = [
+      { category: "ones", points: 3 },
+      { category: "twos", points: 6 },
+      { category: "threes", points: 9 },
+      { category: "fours", points: 12 },
+      { category: "fives", points: 15 },
+      { category: "sixes", points: 18 },
+      { category: "yahtzee", points: 50 }
+    ];
+    expect(scoredYahtzeeFromSheetRows(rows)).toBe(true);
+    expect(hasUpperBonusFromSheetRows(rows)).toBe(true);
+    expect(scoredYahtzeeFromSheetRows([{ category: "yahtzee", points: 0 }])).toBe(false);
+    expect(hasUpperBonusFromSheetRows([{ category: "ones", points: 5 }])).toBe(false);
   });
 });
 

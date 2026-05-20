@@ -148,6 +148,16 @@ export function grandTotalFromSheetRows(rows: readonly YahtzeeSheetRow[]): numbe
   return upperSubtotalFromSheet(map) + upperBonusFromSheet(map) + lowerTotalFromSheet(map);
 }
 
+/** True when the player scored 50 in the Yahtzee row (rolled five of a kind). */
+export function scoredYahtzeeFromSheetRows(rows: readonly YahtzeeSheetRow[]): boolean {
+  return rows.some((r) => r.category === "yahtzee" && r.points === 50);
+}
+
+/** True when all six upper rows are filled and their sum is at least 63 (+35 bonus). */
+export function hasUpperBonusFromSheetRows(rows: readonly YahtzeeSheetRow[]): boolean {
+  return upperBonusFromSheet(sheetRowsToMap(rows)) > 0;
+}
+
 export function placementAward(place: number, playerCount: number): number {
   if (playerCount < 1 || place < 1 || place > playerCount) {
     return 0;

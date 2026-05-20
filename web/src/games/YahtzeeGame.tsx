@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { ClientEvent, SessionState, YahtzeeCategory } from "../../../shared/contracts";
 import {
+  computeYahtzeePlacement,
   grandTotalFromSheetRows,
+  hasUpperBonusFromSheetRows,
   scoreCategory,
+  scoredYahtzeeFromSheetRows,
   YAHTZEE_CATEGORY_ORDER,
   YAHTZEE_UPPER_CATEGORIES
 } from "../../../shared/yahtzeeScoring";
@@ -107,6 +110,22 @@ function diceFingerprint(
   currentPlayerId: string
 ): string {
   return `${currentPlayerId}:${rollsUsed}:${dice.join(",")}`;
+}
+
+function LeaderboardCheck({
+  checked,
+  label
+}: {
+  checked: boolean;
+  label: string;
+}): JSX.Element {
+  return (
+    <span
+      className={`yahtzee-lb-check${checked ? " yahtzee-lb-check--yes" : ""}`}
+      role="img"
+      aria-label={`${label}: ${checked ? "yes" : "no"}`}
+    />
+  );
 }
 
 export function YahtzeeGame({
@@ -291,29 +310,95 @@ export function YahtzeeGame({
   };
 
   if (state.status === "finished") {
-    const ordered = [...state.playerOrder].sort(
-      (a, b) => (state.yahtzeeGrandTotals[b] ?? 0) - (state.yahtzeeGrandTotals[a] ?? 0)
-    );
+    const standings = computeYahtzeePlacement(state.playerOrder, state.yahtzeeGrandTotals);
+    const youWon = state.winnerParticipantId === currentParticipantId;
     return (
       <div className="yahtzee yahtzee--finished">
-        <header className="yahtzee-head">
-          <h2>Yahtzee — finished</h2>
-          <p className="yahtzee-muted">
-            Winner (sheet): <strong>{nameFor(state.winnerParticipantId)}</strong>
-          </p>
+        <header className="yahtzee-head yahtzee-head--finished">
+          <h2>Yahtzee</h2>
+          <span className="pill pill-status pill-status-finished">Game over</span>
         </header>
-        <div className="yahtzee-summary yahtzee-summary--final">
-          <h3>This game</h3>
-          <ul>
-            {ordered.map((id) => (
-              <li key={id}>
-                <span>{nameFor(id)}</span>
-                <span className="yahtzee-summary-total">{state.yahtzeeGrandTotals[id] ?? 0}</span>
-                <span className="yahtzee-muted">+{state.placementAwards[id] ?? 0} Friday Fusion pts</span>
-              </li>
-            ))}
-          </ul>
+        <p className="yahtzee-finished-winner" role="status">
+          {youWon ? (
+            <>
+              You won with <strong>{state.yahtzeeGrandTotals[currentParticipantId] ?? 0}</strong> points!
+            </>
+          ) : (
+            <>
+              Winner: <strong>{nameFor(state.winnerParticipantId)}</strong>
+              {" — "}
+              {state.yahtzeeGrandTotals[state.winnerParticipantId] ?? 0} points
+            </>
+          )}
+        </p>
+        <div className="yahtzee-leaderboard-wrap">
+          <h3 className="yahtzee-leaderboard-title">Final standings</h3>
+          <table className="yahtzee-leaderboard">
+            <thead>
+              <tr>
+                <th scope="col" className="yahtzee-lb-col-rank">
+                  #
+                </th>
+                <th scope="col">Player</th>
+                <th scope="col" className="yahtzee-lb-col-score">
+                  Score
+                </th>
+                <th scope="col" className="yahtzee-lb-col-check" title="Scored 50 in the Yahtzee row">
+                  Yahtzee
+                </th>
+                <th scope="col" className="yahtzee-lb-col-check" title="Upper section 63+ bonus (+35)">
+                  63+ bonus
+                </th>
+                <th scope="col" className="yahtzee-lb-col-ff">
+                  FF pts
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((row) => {
+                const sheet = state.sheetsByParticipant[row.participantId] ?? [];
+                const isWinner = row.participantId === state.winnerParticipantId;
+                return (
+                  <tr
+                    key={row.participantId}
+                    className={isWinner ? "yahtzee-lb-row--winner" : undefined}
+                  >
+                    <td className="yahtzee-lb-col-rank">
+                      <span className="yahtzee-lb-rank">{row.place}</span>
+                    </td>
+                    <th scope="row" className="yahtzee-lb-name">
+                      {nameFor(row.participantId)}
+                      {isWinner ? (
+                        <span className="yahtzee-lb-winner-badge" aria-hidden>
+                          Winner
+                        </span>
+                      ) : null}
+                    </th>
+                    <td className="yahtzee-lb-col-score">
+                      <span className="yahtzee-lb-score">{row.grandTotal}</span>
+                    </td>
+                    <td className="yahtzee-lb-col-check">
+                      <LeaderboardCheck
+                        checked={scoredYahtzeeFromSheetRows(sheet)}
+                        label="Yahtzee"
+                      />
+                    </td>
+                    <td className="yahtzee-lb-col-check">
+                      <LeaderboardCheck
+                        checked={hasUpperBonusFromSheetRows(sheet)}
+                        label="63+ upper bonus"
+                      />
+                    </td>
+                    <td className="yahtzee-lb-col-ff">
+                      <span className="yahtzee-lb-ff">+{row.award}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+        <p className="yahtzee-muted scores-note">Friday Fusion session scores are in the sidebar.</p>
       </div>
     );
   }

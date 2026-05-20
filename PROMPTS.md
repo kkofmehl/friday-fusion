@@ -59,4 +59,6 @@ Return: files changed, brief summary of behavior, test commands run and results,
 
 **2026-05-14:** Yahtzee UI/sound tweaks: show only the viewer’s scorecard; open rows use “Score #” buttons with potential points; stronger green hold ring on dice; light blue panel + bold “Your turn” on the roller’s view; dice SFX reworked as many short band-limited taps plus a low settle thud.
 
+**2026-05-19:** Polish Yahtzee end-of-game UI: leaderboard table with rank, final score, Yahtzee and 63+ upper bonus checkmarks, and Friday Fusion placement points.
+
 **2026-05-16:** Build Scattergories into Friday Fusion: host picks or randomizes category card and letter, configurable answer timer (60/90/120/180s), 3-second countdown, timed answer entry with client letter validation, host review with per-answer accept/reject and multi-word scoring, another round in-session without leaving the game.

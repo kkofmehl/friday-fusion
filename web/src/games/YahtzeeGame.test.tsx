@@ -94,6 +94,53 @@ describe("YahtzeeGame", () => {
     expect(screen.getByText(/Bonus target met/i)).toBeTruthy();
   });
 
+  it("renders finished leaderboard with yahtzee and upper bonus checkmarks", () => {
+    const send = vi.fn();
+    const upperBonusRows: YahtzeeSheetRow[] = [
+      { category: "ones", points: 3 },
+      { category: "twos", points: 6 },
+      { category: "threes", points: 9 },
+      { category: "fours", points: 12 },
+      { category: "fives", points: 15 },
+      { category: "sixes", points: 18 },
+      { category: "threeOfAKind", points: 0 },
+      { category: "fourOfAKind", points: 0 },
+      { category: "fullHouse", points: 0 },
+      { category: "smallStraight", points: 0 },
+      { category: "largeStraight", points: 0 },
+      { category: "yahtzee", points: 50 },
+      { category: "chance", points: 10 }
+    ];
+    const session: SessionState = {
+      ...playingSession(),
+      gameState: {
+        type: "yahtzee",
+        state: {
+          status: "finished",
+          mode: "turns",
+          playerOrder: ["p1", "p2"],
+          sheetsByParticipant: {
+            p1: upperBonusRows,
+            p2: [{ category: "chance", points: 12 }]
+          },
+          yahtzeeGrandTotals: { p1: 168, p2: 12 },
+          placementAwards: { p1: 2, p2: 1 },
+          winnerParticipantId: "p1"
+        }
+      }
+    };
+    render(
+      <YahtzeeGame session={session} currentParticipantId="p1" isHost canPlay send={send} />
+    );
+    expect(screen.getByRole("heading", { name: /Final standings/i })).toBeTruthy();
+    expect(screen.getByText(/You won with/i)).toBeTruthy();
+    const aliceRow = screen.getByRole("rowheader", { name: /Alice/i }).closest("tr");
+    expect(aliceRow).toBeTruthy();
+    expect(aliceRow?.querySelectorAll(".yahtzee-lb-check--yes")).toHaveLength(2);
+    const bobRow = screen.getByRole("rowheader", { name: /Bob/i }).closest("tr");
+    expect(bobRow?.querySelectorAll(".yahtzee-lb-check--yes")).toHaveLength(0);
+  });
+
   it("shows live progress and yahtzee announcement in simultaneous mode", () => {
     const send = vi.fn();
     const session = playingSession([], "simultaneous");
