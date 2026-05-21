@@ -1,5 +1,7 @@
 import { useEffect, useState, type JSX } from "react";
 import type { ClientEvent, SessionState, UnoActiveColor, UnoCard } from "../../../shared/contracts";
+import { AvatarShower } from "../components/AvatarShower";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 const RANK_LABEL: Record<string, string> = {
@@ -69,6 +71,9 @@ export function UnoGame({
 
   const roster = activeParticipants(session.participants);
   const nameFor = (id: string): string => roster.find((p) => p.id === id)?.displayName ?? "Player";
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   if (state.status === "finished") {
     const winnerId = state.winnerParticipantId;
@@ -78,21 +83,24 @@ export function UnoGame({
 
     return (
       <section className="card game-surface" aria-label="UNO finished">
+        {winnerParticipant?.avatar && (
+          <AvatarShower avatar={winnerParticipant.avatar} variant="rain" active />
+        )}
         <div className="uno-winner-banner" role="status">
           <p className="uno-winner-title">Hand over</p>
           <p className="uno-winner-name">
             {youWon ? (
               <>
-                You won, <strong>{nameFor(winnerId)}</strong>!
+                You won, <strong>{nameNode(winnerId, "xl")}</strong>!
               </>
             ) : (
               <>
-                Winner: <strong>{nameFor(winnerId)}</strong>
+                Winner: <strong>{nameNode(winnerId, "xl")}</strong>
               </>
             )}
           </p>
           <p className="uno-winner-score">
-            {nameFor(winnerId)}&rsquo;s score is now <strong>{winnerScore}</strong> (everyone else&rsquo;s totals are in the player list).
+            {nameNode(winnerId, "sm")}&rsquo;s score is now <strong>{winnerScore}</strong> (everyone else&rsquo;s totals are in the player list).
           </p>
         </div>
         <header className="card-head">
@@ -168,13 +176,15 @@ export function UnoGame({
     <section className="card game-surface" aria-label="UNO">
       <header className="card-head">
         <h2>UNO</h2>
-        <span className="pill pill-muted">{isMyTurn ? "Your turn" : `${nameFor(playing.currentPlayerId)}'s turn`}</span>
+        <span className="pill pill-muted">
+          {isMyTurn ? "Your turn" : <PlayerName participantId={playing.currentPlayerId} participants={session.participants} size="md" inline />}
+        </span>
       </header>
 
       <div className={`uno-table${isMyTurn ? " game-area-turn game-area-turn--active" : ""}`} aria-label={isMyTurn ? "Main table — your turn" : "Main table"}>
         {announceId ? (
           <div className="uno-announce-banner" role="status">
-            <strong>{nameFor(announceId)}</strong> called UNO!
+            <strong>{nameNode(announceId, "md")}</strong> called UNO!
           </div>
         ) : null}
 

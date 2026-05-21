@@ -5,6 +5,7 @@ import {
   type ClientEvent,
   type SessionState
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 import { activeParticipants, participantIsActive } from "../utils/participants";
 
@@ -347,7 +348,9 @@ export function IcebreakerGame({
               const participant = session.participants.find((p) => p.id === entry.participantId);
               return (
                 <li key={entry.participantId} className="icebreaker-reveal-card">
-                  <strong>{participant?.displayName ?? entry.participantId}</strong>
+                  <strong>
+                    <PlayerName participantId={entry.participantId} participants={session.participants} size="sm" inline />
+                  </strong>
                   {entry.text.trim().length > 0 && <p>{entry.text}</p>}
                   {entry.imageUrl && (
                     <img
@@ -443,7 +446,9 @@ export function IcebreakerGame({
                   const participant = session.participants.find((p) => p.id === entry.participantId);
                   return (
                     <li key={entry.participantId} className="icebreaker-reveal-card">
-                      <strong>{participant?.displayName ?? entry.participantId}</strong>
+                      <strong>
+                        <PlayerName participantId={entry.participantId} participants={session.participants} size="sm" inline />
+                      </strong>
                       {entry.text.trim().length > 0 && <p>{entry.text}</p>}
                       {entry.imageUrl && (
                         <img

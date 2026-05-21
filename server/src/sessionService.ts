@@ -101,6 +101,7 @@ import {
   unoCanPlayCard
 } from "./unoGameHelpers";
 import { FileStore } from "./storage/fileStore";
+import type { ProfileService } from "./profileService";
 import {
   createTriviaQuestionLoader,
   type TriviaQuestionLoadProgress,
@@ -1610,6 +1611,7 @@ export class SessionService {
   private readonly triviaQuestionLoader: TriviaQuestionLoader;
   private readonly dataDirectory: string;
   private onSessionUpdated?: (sessionId: string) => void;
+  private profileService?: Pick<ProfileService, "getAvatarViewByUsername" | "normalizeUsername">;
   private readonly guessImageResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pictionaryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly catchPhraseResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1628,6 +1630,10 @@ export class SessionService {
 
   public getDataDirectory(): string {
     return this.dataDirectory;
+  }
+
+  public setProfileService(profileService: Pick<ProfileService, "getAvatarViewByUsername" | "normalizeUsername">): void {
+    this.profileService = profileService;
   }
 
   public assertIcebreakerUploadAllowed(sessionId: string, participantId: string): { questionIndex: number } {
@@ -1700,6 +1706,19 @@ export class SessionService {
 
   public setStateUpdateListener(listener: ((sessionId: string) => void) | undefined): void {
     this.onSessionUpdated = listener;
+  }
+
+  public rebroadcastSessionsForProfile(username: string): void {
+    const normalized = this.profileService?.normalizeUsername(username) ?? username.trim().toLowerCase();
+    if (!normalized) {
+      return;
+    }
+    for (const session of this.sessions.values()) {
+      if (!session.participants.some((participant) => participant.profileUsername === normalized)) {
+        continue;
+      }
+      this.onSessionUpdated?.(session.sessionId);
+    }
   }
 
   public async load(): Promise<void> {
@@ -6841,14 +6860,18 @@ export class SessionService {
       sessionId: session.sessionId,
       sessionName: session.sessionName,
       joinCode: session.joinCode,
-      participants: session.participants.map((p) => ({
-        id: p.id,
-        displayName: p.displayName,
-        score: p.score,
-        isHost: p.isHost,
-        isActive: participantIsActive(p),
-        hasProfile: Boolean(p.profileUsername)
-      })),
+      participants: session.participants.map((p) => {
+        const avatar = p.profileUsername ? this.profileService?.getAvatarViewByUsername(p.profileUsername) ?? null : null;
+        return {
+          id: p.id,
+          displayName: p.displayName,
+          score: p.score,
+          isHost: p.isHost,
+          isActive: participantIsActive(p),
+          hasProfile: Boolean(p.profileUsername),
+          ...(avatar ? { avatar } : {})
+        };
+      }),
       ...(session.scoreEditingParticipantId
         ? { scoreEditingParticipantId: session.scoreEditingParticipantId }
         : {})

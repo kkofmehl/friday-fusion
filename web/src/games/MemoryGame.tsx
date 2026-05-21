@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { ClientEvent, MemoryCardPublic, SessionState } from "../../../shared/contracts";
 import { getMemorySymbolById } from "../../../shared/memorySymbols";
+import { PlayerName } from "../components/PlayerName";
 
 export function MemoryGame({
   session,
@@ -23,7 +24,6 @@ export function MemoryGame({
     .filter((p) => p.isActive !== false)
     .map((p) => ({
       id: p.id,
-      name: p.displayName,
       points: state.scores[p.id] ?? 0
     }))
     .sort((a, b) => b.points - a.points);
@@ -54,7 +54,6 @@ export function MemoryGame({
       .filter((p) => p.isActive !== false)
       .map((p) => ({
         id: p.id,
-        name: p.displayName,
         points: state.finalScores[p.id] ?? state.scores[p.id] ?? 0
       }))
       .sort((a, b) => b.points - a.points);
@@ -77,7 +76,9 @@ export function MemoryGame({
             {rows.map((row, idx) => (
               <li key={row.id} className="memory-lb-row">
                 <span className="memory-lb-rank">{idx + 1}.</span>
-                <span className="memory-lb-name">{row.name}</span>
+                <span className="memory-lb-name">
+                  <PlayerName participantId={row.id} participants={session.participants} size="xs" inline />
+                </span>
                 <span className="memory-lb-pts">{row.points}</span>
               </li>
             ))}
@@ -88,7 +89,6 @@ export function MemoryGame({
   }
 
   const isMyTurn = state.currentPlayerId === currentParticipantId;
-  const turnName = session.participants.find((p) => p.id === state.currentPlayerId)?.displayName ?? "Player";
   const boardLabel = state.boardSize === "36" ? "36 cards" : "30 cards";
 
   return (
@@ -100,8 +100,13 @@ export function MemoryGame({
             ? "No match — cards flip back in a moment."
             : isMyTurn
               ? "Your turn — pick two cards."
-              : `Waiting on ${turnName}.`}
+              : "Waiting on another player."}
         </p>
+        {!isMyTurn && (
+          <p className="memory-sub">
+            <PlayerName participantId={state.currentPlayerId} participants={session.participants} size="md" inline />
+          </p>
+        )}
       </header>
 
       <div className="memory-meta">
@@ -114,7 +119,9 @@ export function MemoryGame({
       <ul className="memory-scores" aria-label="Match scores this game">
         {scoreRows.map((row) => (
           <li key={row.id} className={row.id === currentParticipantId ? "memory-score is-me" : "memory-score"}>
-            <span className="memory-score-name">{row.name}</span>
+            <span className="memory-score-name">
+              <PlayerName participantId={row.id} participants={session.participants} size="xs" inline />
+            </span>
             <span className="memory-score-val">{row.points}</span>
           </li>
         ))}

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { activeParticipants } from "../utils/participants";
+import { AvatarShower } from "../components/AvatarShower";
+import { PlayerName } from "../components/PlayerName";
 import {
   CATCH_PHRASE_SIGNAL_INTERVAL_MS,
   catchPhraseSignalStage,
@@ -8,10 +10,6 @@ import {
 } from "./catchPhraseSignals";
 
 const CATCH_PHRASE_SOUND_STORAGE_KEY = "fridayFusion.catchPhraseBeepSound";
-
-function displayNameFor(session: SessionState, participantId: string): string {
-  return session.participants.find((participant) => participant.id === participantId)?.displayName ?? "Someone";
-}
 
 function readStoredCatchPhraseSoundEnabled(): boolean {
   if (typeof window === "undefined") {
@@ -204,7 +202,9 @@ export function CatchPhraseGame({
             const onB = draftTeamB.includes(participant.id);
             return (
               <li key={participant.id} className="pictionary-team-pick-row">
-                <span className="pictionary-team-pick-name">{participant.displayName}</span>
+                <span className="pictionary-team-pick-name">
+                  <PlayerName participant={participant} size="xs" inline />
+                </span>
                 <div className="pictionary-team-pick-actions">
                   <label className="pictionary-team-radio">
                     <input
@@ -279,8 +279,14 @@ export function CatchPhraseGame({
 
   if (state.status === "finished") {
     const winnerLabel = state.winnerTeam === "A" ? "Team A" : "Team B";
+    const winningIds = state.winnerTeam === "A" ? state.teamAIds : state.teamBIds;
+    const winningAvatars = session.participants
+      .filter((participant) => winningIds.includes(participant.id))
+      .map((participant) => participant.avatar)
+      .filter((avatar): avatar is NonNullable<typeof avatar> => Boolean(avatar && avatar.type !== "none"));
     return (
       <section className="card catchphrase-card">
+        {winningAvatars.length > 0 && <AvatarShower avatars={winningAvatars} variant="rain" density="team" active />}
         <header className="card-head">
           <h2>Catch Phrase complete</h2>
         </header>
@@ -291,10 +297,9 @@ export function CatchPhraseGame({
     );
   }
 
-  const holderName = displayNameFor(session, state.holderId);
   const isHolder = currentParticipantId === state.holderId;
-  const teamANameList = state.teamAIds.map((id) => displayNameFor(session, id)).join(", ");
-  const teamBNameList = state.teamBIds.map((id) => displayNameFor(session, id)).join(", ");
+  const teamAIds = state.teamAIds;
+  const teamBIds = state.teamBIds;
   const canStartRound = state.roundPhase === "awaitingRoundStart" && isHolder;
   const phrase = state.roundPhase === "live" ? state.myPhrase : null;
 
@@ -332,10 +337,15 @@ export function CatchPhraseGame({
         aria-label={isHolder ? "Catch Phrase — your turn with the device" : "Catch Phrase"}
       >
         <p className="catchphrase-meta">
-          Device holder: <strong>{holderName}</strong>
+          Device holder:{" "}
+          <strong>
+            <PlayerName participantId={state.holderId} participants={session.participants} size="md" inline />
+          </strong>
         </p>
         <p className="catchphrase-meta catchphrase-meta-subtle">
-          Team A: {teamANameList || "none"} | Team B: {teamBNameList || "none"}
+          Team A: {teamAIds.length ? teamAIds.map((id) => <PlayerName key={id} participantId={id} participants={session.participants} size="xs" inline />) : "none"}
+          {" | "}
+          Team B: {teamBIds.length ? teamBIds.map((id) => <PlayerName key={id} participantId={id} participants={session.participants} size="xs" inline />) : "none"}
         </p>
 
         <div className="catchphrase-signal-row" aria-live="polite">
@@ -355,14 +365,14 @@ export function CatchPhraseGame({
           <p className="catchphrase-help">
             {isHolder
               ? "Your turn. Tap start to reveal the next word and begin the hidden timer."
-              : `Waiting for ${holderName} to tap start.`}
+              : "Waiting for the device holder to tap start."}
           </p>
         ) : (
           <div className="catchphrase-phrase-wrap">
             <p className="catchphrase-help">
               {isHolder
                 ? "Give clues to your team. When they get it, pass immediately."
-                : `Listen for clues. ${holderName} is currently holding the device.`}
+                : "Listen for clues. Another player is currently holding the device."}
             </p>
             <p className={`catchphrase-phrase${phrase ? "" : " is-hidden"}`}>
               {phrase ?? "Word hidden"}

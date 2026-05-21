@@ -81,6 +81,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
   const app = Fastify({ logger: true });
   const sessionService = options.sessionService ?? createSessionService();
   const profileService = options.profileService ?? createProfileService(sessionService.getDataDirectory());
+  sessionService.setProfileService(profileService);
   await app.register(cors, { origin: true });
   await app.register(multipart, {
     limits: { fileSize: ICEBREAKER_MAX_UPLOAD_BYTES }
@@ -323,6 +324,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
         avatar: body.avatar
       }
     );
+    sessionService.rebroadcastSessionsForProfile(updated.username);
     return reply.send(updated.profile);
   });
 
@@ -368,6 +370,7 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       fileId = `${nanoid(18)}${ext}`;
       await writeFile(path.join(dir, fileId), fileBuffer);
       await profileService.setUploadedAvatar(canonicalUsername, fileId);
+      sessionService.rebroadcastSessionsForProfile(canonicalUsername);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload rejected.";
       return reply.code(400).send({ message });

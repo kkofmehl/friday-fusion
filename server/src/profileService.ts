@@ -1,4 +1,4 @@
-import type { ProfileAvatarSelection, PublicProfile } from "../../shared/contracts";
+import type { ProfileAvatarSelection, ProfileAvatarView, PublicProfile } from "../../shared/contracts";
 import { FileStore } from "./storage/fileStore";
 import { deleteProfileStoredFile } from "./profileUploads";
 
@@ -50,43 +50,35 @@ const sanitizeMutableFields = (fields: ProfileMutableFields): ProfileMutableFiel
   return next;
 };
 
-const mapPublicProfile = (profile: StoredProfile): PublicProfile => {
+const mapAvatarView = (profile: StoredProfile): ProfileAvatarView => {
   if (profile.avatar.type === "upload") {
     return {
-      name: profile.name,
-      aboutMe: profile.aboutMe,
-      favorites: profile.favorites,
-      dreamJob: profile.dreamJob,
-      avatar: {
-        type: "upload",
-        avatarUrl: avatarUploadUrl(profile.username, profile.avatar.fileId),
-        fileId: profile.avatar.fileId,
-        crop: profile.avatar.crop ?? { x: 0.5, y: 0.5, zoom: 0.85 }
-      }
+      type: "upload",
+      avatarUrl: avatarUploadUrl(profile.username, profile.avatar.fileId),
+      fileId: profile.avatar.fileId,
+      crop: profile.avatar.crop ?? { x: 0.5, y: 0.5, zoom: 0.85 }
     };
   }
   if (profile.avatar.type === "stock") {
     return {
-      name: profile.name,
-      aboutMe: profile.aboutMe,
-      favorites: profile.favorites,
-      dreamJob: profile.dreamJob,
-      avatar: {
-        type: "stock",
-        id: profile.avatar.id,
-        avatarUrl: avatarStockUrl(profile.avatar.id)
-      }
+      type: "stock",
+      id: profile.avatar.id,
+      avatarUrl: avatarStockUrl(profile.avatar.id)
     };
   }
+  return {
+    type: "none",
+    avatarUrl: null
+  };
+};
+
+const mapPublicProfile = (profile: StoredProfile): PublicProfile => {
   return {
     name: profile.name,
     aboutMe: profile.aboutMe,
     favorites: profile.favorites,
     dreamJob: profile.dreamJob,
-    avatar: {
-      type: "none",
-      avatarUrl: null
-    }
+    avatar: mapAvatarView(profile)
   };
 };
 
@@ -143,6 +135,15 @@ export class ProfileService {
       return null;
     }
     return mapPublicProfile(profile);
+  }
+
+  public getAvatarViewByUsername(username: string): ProfileAvatarView | null {
+    const key = normalizeUsername(username);
+    const profile = this.profiles[key];
+    if (!profile) {
+      return null;
+    }
+    return mapAvatarView(profile);
   }
 
   public async openProfile(

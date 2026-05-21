@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { SessionChatMessage } from "../../../shared/contracts";
+import type { Participant, SessionChatMessage } from "../../../shared/contracts";
 import { SessionChatPanel } from "./SessionChatPanel";
 
 const buildMessage = (overrides: Partial<SessionChatMessage> = {}): SessionChatMessage => ({
@@ -13,12 +13,18 @@ const buildMessage = (overrides: Partial<SessionChatMessage> = {}): SessionChatM
   ...overrides
 });
 
+const participants: Participant[] = [
+  { id: "p1", displayName: "Host", score: 0, isHost: true, isActive: true },
+  { id: "p2", displayName: "Guest", score: 0, isHost: false, isActive: true }
+];
+
 describe("SessionChatPanel", () => {
   it("sends a trimmed chat message and clears the input", () => {
     const onSendMessage = vi.fn();
     render(
       <SessionChatPanel
         messages={[]}
+        participants={participants}
         currentParticipantId="p1"
         onSendMessage={onSendMessage}
         onSendReaction={vi.fn()}
@@ -38,6 +44,7 @@ describe("SessionChatPanel", () => {
     render(
       <SessionChatPanel
         messages={[]}
+        participants={participants}
         currentParticipantId="p1"
         onSendMessage={vi.fn()}
         onSendReaction={onSendReaction}
@@ -55,6 +62,7 @@ describe("SessionChatPanel", () => {
           buildMessage({ id: "m1", participantId: "p1", displayName: "Host", text: "First" }),
           buildMessage({ id: "m2", participantId: "p2", displayName: "Guest", text: "Second" })
         ]}
+        participants={participants}
         currentParticipantId="p1"
         onSendMessage={vi.fn()}
         onSendReaction={vi.fn()}

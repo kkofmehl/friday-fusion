@@ -1,4 +1,6 @@
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { AvatarShower } from "../components/AvatarShower";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 export function ApplesToApplesGame({
@@ -22,6 +24,9 @@ export function ApplesToApplesGame({
 
   const roster = activeParticipants(session.participants);
   const nameFor = (id: string): string => roster.find((p) => p.id === id)?.displayName ?? "Player";
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   if (state.status === "finished") {
     return (
@@ -39,8 +44,10 @@ export function ApplesToApplesGame({
   }
 
   if (state.status === "roundResult") {
+    const winnerAvatar = session.participants.find((participant) => participant.id === state.winnerParticipantId)?.avatar;
     return (
       <section className="card game-surface" aria-label="Apples to Apples round result">
+        {winnerAvatar && <AvatarShower avatar={winnerAvatar} variant="burst" active />}
         <header className="card-head">
           <h2>Round {state.roundNumber} result</h2>
           <span className="pill pill-muted">{state.mode === "finite" ? "Finite" : "Standard"}</span>
@@ -52,7 +59,7 @@ export function ApplesToApplesGame({
           Winning card: <strong>{state.winningText}</strong>
         </p>
         <p>
-          Winner: <strong>{nameFor(state.winnerParticipantId)}</strong>
+          Winner: <strong>{nameNode(state.winnerParticipantId, "lg")}</strong>
         </p>
         {state.revealedSubmissions.length > 0 ? (
           <>
@@ -68,7 +75,7 @@ export function ApplesToApplesGame({
                     <p className="apples-reveal-text">{row.text}</p>
                     <p className="apples-reveal-author">
                       {isWinner ? "Winner — " : ""}
-                      {nameFor(row.participantId)}
+                      {nameNode(row.participantId, "xs")}
                     </p>
                   </li>
                 );
@@ -127,7 +134,7 @@ export function ApplesToApplesGame({
         ) : (
           <>
             <p className="mode-option-hint">
-              Everyone has submitted. {nameFor(state.judgeId)} is picking a winner.
+              Everyone has submitted. {nameNode(state.judgeId, "sm")} is picking a winner.
             </p>
             <ul className="apples-judge-wait-list" aria-label="Submitted responses">
               {state.anonymousOptions.map((opt) => (
@@ -157,7 +164,7 @@ export function ApplesToApplesGame({
         Topic: <strong>{state.topicText}</strong>
       </p>
       <p>
-        Judge: <strong>{nameFor(state.judgeId)}</strong>
+        Judge: <strong>{nameNode(state.judgeId, "sm")}</strong>
       </p>
       {state.isJudge ? (
         <p className="mode-option-hint">You are judging this round. Wait while everyone else plays a card.</p>

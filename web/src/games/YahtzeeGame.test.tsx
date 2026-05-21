@@ -151,6 +151,6 @@ describe("YahtzeeGame", () => {
     render(<YahtzeeGame session={session} currentParticipantId="p1" isHost canPlay send={send} />);
     expect(screen.getByText(/Simultaneous mode/i)).toBeTruthy();
     expect(screen.getByText(/Live progress/i)).toBeTruthy();
-    expect(screen.getByText(/Bob got a YAHTZEE!/i)).toBeTruthy();
+    expect(screen.getAllByText((_, element) => Boolean(element?.textContent?.includes("Bob got a YAHTZEE!"))).length).toBeGreaterThan(0);
   });
 });

@@ -151,9 +151,9 @@ describe("HangmanGame", () => {
       <HangmanGame session={session} currentParticipantId="p2" isHost={false} send={vi.fn()} />
     );
 
-    expect(screen.getByText("Bob guessed A right")).toBeDefined();
-    expect(screen.getByText("Carol guessed Z wrong")).toBeDefined();
-    expect(screen.getByText("Bob is attempting to solve the puzzle")).toBeDefined();
+    expect(screen.getByText((_, element) => element?.textContent === "Bob guessed A right")).toBeDefined();
+    expect(screen.getByText((_, element) => element?.textContent === "Carol guessed Z wrong")).toBeDefined();
+    expect(screen.getByText((_, element) => element?.textContent === "Bob is attempting to solve the puzzle")).toBeDefined();
   });
 
   it("offers a rotated default creator for the next round when game is over", () => {

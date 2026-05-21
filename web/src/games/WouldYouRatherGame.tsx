@@ -4,6 +4,7 @@ import {
   type ClientEvent,
   type SessionState
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 const ratio = (value: number, total: number): number => {
@@ -98,12 +99,12 @@ export function WouldYouRatherGame({
     }
   }, [state.activePrompt?.id]);
 
-  const optionAChooserNames = roster
+  const optionAChooserIds = roster
     .filter((participant) => state.optionASelectedParticipantIds.includes(participant.id))
-    .map((participant) => participant.displayName);
-  const optionBChooserNames = roster
+    .map((participant) => participant.id);
+  const optionBChooserIds = roster
     .filter((participant) => state.optionBSelectedParticipantIds.includes(participant.id))
-    .map((participant) => participant.displayName);
+    .map((participant) => participant.id);
 
   return (
     <section className="card game-card-icebreaker">
@@ -132,7 +133,17 @@ export function WouldYouRatherGame({
                     {ratio(state.results.optionACount, state.results.totalResponses)}%
                   </span>
                   <span className="wyr-result-names">
-                    {optionAChooserNames.length > 0 ? optionAChooserNames.join(", ") : "No one selected this"}
+                    {optionAChooserIds.length > 0 ? (
+                      optionAChooserIds.map((participantId) => (
+                        <PlayerName
+                          key={participantId}
+                          participantId={participantId}
+                          participants={session.participants}
+                          size="xs"
+                          inline
+                        />
+                      ))
+                    ) : "No one selected this"}
                   </span>
                 </span>
               ) : (
@@ -153,7 +164,17 @@ export function WouldYouRatherGame({
                     {ratio(state.results.optionBCount, state.results.totalResponses)}%
                   </span>
                   <span className="wyr-result-names">
-                    {optionBChooserNames.length > 0 ? optionBChooserNames.join(", ") : "No one selected this"}
+                    {optionBChooserIds.length > 0 ? (
+                      optionBChooserIds.map((participantId) => (
+                        <PlayerName
+                          key={participantId}
+                          participantId={participantId}
+                          participants={session.participants}
+                          size="xs"
+                          inline
+                        />
+                      ))
+                    ) : "No one selected this"}
                   </span>
                 </span>
               ) : (

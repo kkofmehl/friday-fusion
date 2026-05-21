@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { STORY_BUILDER_SENTENCE_MAX_CHARS } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 
 export function StoryBuilderGame({
   session,
@@ -37,9 +38,6 @@ export function StoryBuilderGame({
     return null;
   }
 
-  const displayNameFor = (participantId: string): string =>
-    session.participants.find((participant) => participant.id === participantId)?.displayName ?? "Someone";
-
   if (game.status === "complete") {
     return (
       <div className="story-builder card">
@@ -53,7 +51,14 @@ export function StoryBuilderGame({
         <ul className="story-builder-byline" aria-label="Sentences by author">
           {game.sentences.map((row, index) => (
             <li key={`${index}-${row.participantId ?? "starter"}-${row.text.slice(0, 12)}`}>
-              <strong>{row.participantId === null ? "Story starter" : displayNameFor(row.participantId)}:</strong>{" "}
+              <strong>
+                {row.participantId === null ? (
+                  "Story starter"
+                ) : (
+                  <PlayerName participantId={row.participantId} participants={session.participants} size="xs" inline />
+                )}
+                :
+              </strong>{" "}
               {row.text}
             </li>
           ))}
@@ -100,7 +105,11 @@ export function StoryBuilderGame({
           </span>
         ) : (
           <span>
-            Waiting for <strong>{displayNameFor(game.currentTurnParticipantId)}</strong> to add a sentence.
+            Waiting for{" "}
+            <strong>
+              <PlayerName participantId={game.currentTurnParticipantId} participants={session.participants} size="md" inline />
+            </strong>{" "}
+            to add a sentence.
           </span>
         )}
       </p>

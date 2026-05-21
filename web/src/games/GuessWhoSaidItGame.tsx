@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClipboardEvent } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 import { activeParticipants } from "../utils/participants";
 
@@ -175,9 +176,6 @@ export function GuessWhoSaidItGame({
     send({ type: "guessWhoSaidIt:setVotes", payload: { votes: { ...draftVotes } } });
   };
 
-  const displayName = (id: string): string =>
-    session.participants.find((p) => p.id === id)?.displayName ?? id;
-
   if (state.status === "idle") {
     return (
       <section className="card game-card-guess-who">
@@ -223,7 +221,9 @@ export function GuessWhoSaidItGame({
             return (
               <li key={row.participantId} className="guess-who-standing-row">
                 <span className="guess-who-standing-rank">{i + 1}.</span>
-                <span className="guess-who-standing-name">{p?.displayName ?? row.participantId}</span>
+                <span className="guess-who-standing-name">
+                  <PlayerName participantId={row.participantId} participants={session.participants} size="xs" inline />
+                </span>
                 <span className="guess-who-standing-score">{row.correctGuesses} correct</span>
               </li>
             );
@@ -264,7 +264,9 @@ export function GuessWhoSaidItGame({
           <ul className="guess-who-reveal-cards">
             {reveal.revealedAnswers.map((ans) => (
               <li key={ans.slotId} className="guess-who-reveal-card">
-                <div className="guess-who-reveal-author">{displayName(ans.authorId)}</div>
+                <div className="guess-who-reveal-author">
+                  <PlayerName participantId={ans.authorId} participants={session.participants} size="sm" inline />
+                </div>
                 {ans.text.trim().length > 0 && <p>{ans.text}</p>}
                 {ans.imageUrl && (
                   <img
@@ -287,8 +289,14 @@ export function GuessWhoSaidItGame({
                 <li key={row.slotId} className={`guess-who-your-row${row.correct ? " is-correct" : " is-wrong"}`}>
                   <span className="guess-who-your-mark">{row.correct ? "✓" : "✗"}</span>
                   <span>
-                    You guessed <strong>{displayName(row.guessedParticipantId)}</strong> — actually{" "}
-                    <strong>{displayName(row.actualAuthorId)}</strong>
+                    You guessed{" "}
+                    <strong>
+                      <PlayerName participantId={row.guessedParticipantId} participants={session.participants} size="sm" inline />
+                    </strong>{" "}
+                    — actually{" "}
+                    <strong>
+                      <PlayerName participantId={row.actualAuthorId} participants={session.participants} size="sm" inline />
+                    </strong>
                   </span>
                   {row.pointsEarned > 0 && <span className="guess-who-points-pill">+{row.pointsEarned}</span>}
                 </li>
@@ -305,7 +313,9 @@ export function GuessWhoSaidItGame({
           <div className="guess-who-voter-grid">
             {reveal.byVoter.map((bv) => (
               <div key={bv.voterId} className="guess-who-voter-block">
-                <strong>{displayName(bv.voterId)}</strong>
+                <strong>
+                  <PlayerName participantId={bv.voterId} participants={session.participants} size="xs" inline />
+                </strong>
                 <span className="guess-who-voter-pts">{bv.pointsThisPrompt} pt{bv.pointsThisPrompt === 1 ? "" : "s"}</span>
               </div>
             ))}

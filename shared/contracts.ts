@@ -30,7 +30,8 @@ export const participantSchema = z.object({
   isHost: z.boolean(),
   /** When false, the player stays in the session but cannot take part in games. */
   isActive: z.boolean().optional().default(true),
-  hasProfile: z.boolean().optional()
+  hasProfile: z.boolean().optional(),
+  avatar: z.lazy(() => profileAvatarViewSchema).optional()
 });
 export type Participant = z.infer<typeof participantSchema>;
 

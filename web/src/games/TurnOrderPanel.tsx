@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from "react";
 import type { ClientEvent, Participant, SessionState } from "../../../shared/contracts";
 import { activeParticipants, participantIsActive } from "../utils/participants";
+import { PlayerName } from "../components/PlayerName";
 
 type Props = {
   session: SessionState;
@@ -137,7 +138,9 @@ export function TurnOrderPanel({
                   <span className="turn-order-index" aria-hidden="true">
                     {index + 1}
                   </span>
-                  <span className="turn-order-name">{participant.displayName}</span>
+                  <span className="turn-order-name">
+                    <PlayerName participant={participant} size="xs" inline />
+                  </span>
                   {isYou && <span className="turn-order-you">you</span>}
                   {isCurrent && <span className="turn-order-current" aria-label="Current turn">●</span>}
                 </button>
@@ -146,7 +149,9 @@ export function TurnOrderPanel({
                   <span className="turn-order-index" aria-hidden="true">
                     {index + 1}
                   </span>
-                  <span className="turn-order-name">{participant.displayName}</span>
+                  <span className="turn-order-name">
+                    <PlayerName participant={participant} size="xs" inline />
+                  </span>
                   {isYou && <span className="turn-order-you">you</span>}
                   {isCurrent && <span className="turn-order-current" aria-label="Current turn">●</span>}
                 </div>

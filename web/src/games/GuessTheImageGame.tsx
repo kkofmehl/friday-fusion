@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClipboardEvent } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 import { activeParticipants } from "../utils/participants";
 
@@ -275,6 +276,9 @@ export function GuessTheImageGame({
   }
 
   const roster = activeParticipants(session.participants);
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   const mySubmitted =
     state.status === "playing" && state.submittedParticipantIds.includes(currentParticipantId);
@@ -297,8 +301,6 @@ export function GuessTheImageGame({
     const everyoneMode = state.setupMode === "everyone";
     const everyoneBetweenRounds = everyoneMode && state.everyoneBetweenRounds;
     const isSetupPlayer = everyoneMode || currentParticipantId === state.setupParticipantId;
-    const setupDisplayName =
-      session.participants.find((p) => p.id === state.setupParticipantId)?.displayName ?? "the setup player";
     const mySaved = everyoneMode ? Boolean(state.everyoneMySetup?.configured) : state.configured;
     const setupImagePreviewPath =
       everyoneMode && state.everyoneMySetup?.imageUrl ? state.everyoneMySetup.imageUrl : state.imageUrl;
@@ -372,11 +374,9 @@ export function GuessTheImageGame({
                 </p>
                 <ul className="guess-image-everyone-peers">
                   {state.everyonePeers.map((row) => {
-                    const name =
-                      session.participants.find((p) => p.id === row.participantId)?.displayName ?? row.participantId;
                     return (
                       <li key={row.participantId}>
-                        <span>{name}</span>
+                        <span>{nameNode(row.participantId, "xs")}</span>
                         <span className="guess-image-peer-status">{row.configured ? "✓ Saved" : "… Not yet"}</span>
                       </li>
                     );
@@ -492,7 +492,7 @@ export function GuessTheImageGame({
           </div>
         ) : (
           <p>
-            Waiting for <strong>{setupDisplayName}</strong> to finish setup…
+            Waiting for <strong>{nameNode(state.setupParticipantId, "md")}</strong> to finish setup…
           </p>
         )}
       </div>
@@ -574,12 +574,11 @@ export function GuessTheImageGame({
       </p>
       <ul className="guess-image-results">
         {state.results.map((r) => {
-          const name = session.participants.find((p) => p.id === r.participantId)?.displayName ?? r.participantId;
           const picked =
             r.choiceDisplayIndex === null ? "—" : state.options[r.choiceDisplayIndex] ?? `#${r.choiceDisplayIndex}`;
           return (
             <li key={r.participantId}>
-              <span className="guess-image-result-name">{name}</span>
+              <span className="guess-image-result-name">{nameNode(r.participantId, "xs")}</span>
               <span className="guess-image-result-pick">{picked}</span>
               <span className="guess-image-result-meta">
                 {r.correct ? `+${r.pointsAwarded} pts` : "0 pts"}

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SessionChatMessage } from "../../../shared/contracts";
+import type { Participant, SessionChatMessage } from "../../../shared/contracts";
+import { PlayerName } from "./PlayerName";
 
 const EMOJI_PACK = ["😀", "😂", "😎", "🔥", "👏", "💀", "🎉", "😈"] as const;
 
 type SessionChatPanelProps = {
   messages: SessionChatMessage[];
+  participants: Participant[];
   currentParticipantId: string;
   onSendMessage: (text: string) => void;
   onSendReaction: (emoji: string) => void;
@@ -18,6 +20,7 @@ const formatTime = (createdAt: number): string =>
 
 export function SessionChatPanel({
   messages,
+  participants,
   currentParticipantId,
   onSendMessage,
   onSendReaction
@@ -63,7 +66,13 @@ export function SessionChatPanel({
                 className={`session-chat-message${mine ? " session-chat-message-mine" : ""}`}
               >
                 <p className="session-chat-meta">
-                  <strong>{mine ? "You" : message.displayName}</strong>
+                  {mine ? (
+                    <strong>You</strong>
+                  ) : (
+                    <strong>
+                      <PlayerName participantId={message.participantId} participants={participants} size="xs" inline />
+                    </strong>
+                  )}
                   <span>{formatTime(message.createdAt)}</span>
                 </p>
                 <p className="session-chat-text">{message.text}</p>

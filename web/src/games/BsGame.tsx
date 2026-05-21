@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
 import type { BsCard, ClientEvent, SessionState } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 const SUIT_SYMBOL: Record<BsCard["suit"], string> = {
@@ -67,6 +68,9 @@ export function BsGame({
   const state = game.state;
   const roster = activeParticipants(session.participants);
   const nameFor = (id: string): string => roster.find((p) => p.id === id)?.displayName ?? "Player";
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   const isCurrentPlayer =
     state.status !== "finished" && state.currentPlayerId === currentParticipantId;
@@ -147,7 +151,7 @@ export function BsGame({
             <span className="pill pill-muted">Game over</span>
           ) : (
             <span className="pill pill-muted">
-              {isCurrentPlayer ? "Your turn" : `${nameFor(state.currentPlayerId)}'s turn`}
+              {isCurrentPlayer ? "Your turn" : <PlayerName participantId={state.currentPlayerId} participants={session.participants} size="md" inline />}
             </span>
           )}
         </div>
@@ -198,7 +202,7 @@ export function BsGame({
                   </button>
                 </>
               ) : (
-                <p>Waiting for {nameFor(state.currentPlayerId)} to play cards.</p>
+                <p>Waiting for {nameNode(state.currentPlayerId, "sm")} to play cards.</p>
               )}
             </>
           )}
@@ -206,7 +210,7 @@ export function BsGame({
           {state.status === "challenging" && (
             <>
               <p>
-                {nameFor(state.currentPlayerId)} played <strong>{state.playedCount}</strong> card
+                {nameNode(state.currentPlayerId, "sm")} played <strong>{state.playedCount}</strong> card
                 {state.playedCount === 1 ? "" : "s"} as <strong>{state.currentRank}</strong>.
               </p>
               {isCurrentPlayer ? (
@@ -237,7 +241,7 @@ export function BsGame({
           {state.status === "challenged" && challengedRevealUi && (
             <>
               <p>
-                {nameFor(state.calledBsParticipantId)} called BS on {nameFor(state.currentPlayerId)}.
+                {nameNode(state.calledBsParticipantId, "sm")} called BS on {nameNode(state.currentPlayerId, "sm")}.
               </p>
               <p>
                 Call was <strong>{challengedRevealUi.callRank}</strong>, revealed cards:{" "}
@@ -277,7 +281,9 @@ export function BsGame({
             {scoreRows.map((participant) => (
               <li key={participant.id} className="player-row">
                 <div className="player-identity">
-                  <span className="player-name">{participant.displayName}</span>
+                  <span className="player-name">
+                    <PlayerName participant={participant} size="xs" inline />
+                  </span>
                 </div>
                 <div className="player-row-right">
                   <span className="player-score">{state.scores[participant.id] ?? participant.score}</span>

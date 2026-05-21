@@ -4,6 +4,7 @@ import {
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 
 const DRAFT_DEBOUNCE_MS = 120;
 
@@ -151,19 +152,21 @@ export function TwentyQuestionsGame({
       <header className="card-head">
         <h2>20 Questions</h2>
         <p className="mode-option-hint">
-          Questions used: {state.questionsUsed} / {state.maxQuestions}. Oracle: {selectorName}
+          Questions used: {state.questionsUsed} / {state.maxQuestions}. Oracle:{" "}
+          <PlayerName participantId={state.itemSelectorId} participants={session.participants} size="sm" inline />
         </p>
       </header>
 
       <section className="twenty-questions-stack" aria-live="polite">
         <p>
-          <strong>Turn to ask:</strong> {asker?.displayName ?? "—"}
+          <strong>Turn to ask:</strong>{" "}
+          {asker ? <PlayerName participant={asker} size="md" inline /> : "—"}
         </p>
         {state.questionDraft && (
           <div className="twenty-questions-draft">
             <span className="twenty-questions-muted">Typing…</span>{" "}
             <span>
-              {session.participants.find((p) => p.id === state.questionDraft!.participantId)?.displayName ?? "Someone"}
+              <PlayerName participantId={state.questionDraft!.participantId} participants={session.participants} size="xs" inline />
               : {state.questionDraft.text || "(empty)"}
             </span>
           </div>
@@ -247,12 +250,14 @@ export function TwentyQuestionsGame({
         ) : (
           <ol className="twenty-questions-log-list">
             {state.questionLog.map((entry) => {
-              const who = session.participants.find((p) => p.id === entry.participantId)?.displayName ?? "Player";
               const ans =
                 entry.answer === null ? "…" : entry.answer === "yes" ? "Yes" : "No";
               return (
                 <li key={entry.id}>
-                  <span className="twenty-questions-log-who">{who}:</span> {entry.text}{" "}
+                  <span className="twenty-questions-log-who">
+                    <PlayerName participantId={entry.participantId} participants={session.participants} size="xs" inline />:
+                  </span>{" "}
+                  {entry.text}{" "}
                   <span className="twenty-questions-muted">— {ans}</span>
                 </li>
               );

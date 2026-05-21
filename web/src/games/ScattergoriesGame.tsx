@@ -8,6 +8,7 @@ import {
 } from "../../../shared/contracts";
 import { isScattergoriesDuplicateAt } from "../../../shared/scattergoriesDuplicates";
 import { countLetterWords } from "../../../shared/scattergoriesScoring";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 const DURATION_LABELS: Record<number, string> = {
@@ -127,6 +128,9 @@ export function ScattergoriesGame({
   const roster = useMemo(() => activeParticipants(session.participants), [session.participants]);
   const nameFor = (id: string): string =>
     roster.find((p) => p.id === id)?.displayName ?? "Player";
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   if (!game || !state) {
     return null;
@@ -266,7 +270,7 @@ export function ScattergoriesGame({
           {state.roundScores.map((row, i) => (
             <li key={row.participantId} className="scattergories-standing-row">
               <span className="scattergories-standing-rank">{i + 1}.</span>
-              <span>{nameFor(row.participantId)}</span>
+              <span>{nameNode(row.participantId, "xs")}</span>
               <span className="scattergories-standing-pts">+{row.pointsThisRound} this round</span>
             </li>
           ))}
@@ -341,7 +345,7 @@ export function ScattergoriesGame({
                 }`}
               >
                 <div className="scattergories-review-main">
-                  <strong>{nameFor(row.participantId)}</strong>
+                  <strong>{nameNode(row.participantId, "xs")}</strong>
                   <span className="scattergories-review-answer">
                     {isBlank ? <em>(blank)</em> : row.text}
                   </span>

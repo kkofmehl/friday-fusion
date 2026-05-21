@@ -15,6 +15,8 @@ import {
   readStoredYahtzeeDiceSoundEnabled,
   YAHTZEE_DICE_SOUND_STORAGE_KEY
 } from "./yahtzeeDiceRollSound";
+import { AvatarShower } from "../components/AvatarShower";
+import { PlayerName } from "../components/PlayerName";
 
 const CATEGORY_LABEL: Record<YahtzeeCategory, string> = {
   ones: "Aces",
@@ -148,6 +150,9 @@ export function YahtzeeGame({
   const state = gs.state;
   const roster = activeParticipants(session.participants);
   const nameFor = (id: string): string => roster.find((p) => p.id === id)?.displayName ?? "Player";
+  const nameNode = (id: string, size: "xs" | "sm" | "md" | "lg" | "xl" = "sm"): JSX.Element => (
+    <PlayerName participantId={id} participants={session.participants} size={size} inline />
+  );
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => readStoredYahtzeeDiceSoundEnabled());
   const soundEnabledRef = useRef(soundEnabled);
@@ -314,6 +319,13 @@ export function YahtzeeGame({
     const youWon = state.winnerParticipantId === currentParticipantId;
     return (
       <div className="yahtzee yahtzee--finished">
+        {session.participants.find((participant) => participant.id === state.winnerParticipantId)?.avatar && (
+          <AvatarShower
+            avatar={session.participants.find((participant) => participant.id === state.winnerParticipantId)?.avatar}
+            variant="rain"
+            active
+          />
+        )}
         <header className="yahtzee-head yahtzee-head--finished">
           <h2>Yahtzee</h2>
           <span className="pill pill-status pill-status-finished">Game over</span>
@@ -325,7 +337,7 @@ export function YahtzeeGame({
             </>
           ) : (
             <>
-              Winner: <strong>{nameFor(state.winnerParticipantId)}</strong>
+              Winner: <strong>{nameNode(state.winnerParticipantId, "xl")}</strong>
               {" — "}
               {state.yahtzeeGrandTotals[state.winnerParticipantId] ?? 0} points
             </>
@@ -367,7 +379,7 @@ export function YahtzeeGame({
                       <span className="yahtzee-lb-rank">{row.place}</span>
                     </td>
                     <th scope="row" className="yahtzee-lb-name">
-                      {nameFor(row.participantId)}
+                      {nameNode(row.participantId, isWinner ? "lg" : "xs")}
                       {isWinner ? (
                         <span className="yahtzee-lb-winner-badge" aria-hidden>
                           Winner
@@ -408,15 +420,25 @@ export function YahtzeeGame({
   const rollsLeft = 3 - state.rollsUsed;
   const pending = state.pendingCategory;
   const pendingPreview = pending ? scoreCategory(dice, pending) : null;
-  const yahtzeeAnnouncementText = activeYahtzeeAnnouncement
-    ? `${nameFor(activeYahtzeeAnnouncement.participantId)} got a YAHTZEE!`
-    : null;
+  const yahtzeeAnnouncementId = activeYahtzeeAnnouncement?.participantId ?? null;
 
   return (
     <div className={`yahtzee${isCurrentRoller ? " yahtzee--your-turn" : ""}`}>
+      {yahtzeeAnnouncementId && (
+        <AvatarShower
+          avatar={session.participants.find((participant) => participant.id === yahtzeeAnnouncementId)?.avatar}
+          variant="burst"
+          active
+          density="normal"
+        />
+      )}
       <header className="yahtzee-head">
         <h2>Yahtzee</h2>
-        {yahtzeeAnnouncementText && <p className="yahtzee-announce">{yahtzeeAnnouncementText}</p>}
+        {yahtzeeAnnouncementId && (
+          <p className="yahtzee-announce">
+            {nameNode(yahtzeeAnnouncementId, "lg")} got a YAHTZEE!
+          </p>
+        )}
         <p className="yahtzee-turn-line">
           {isSimultaneousMode ? (
             <>
@@ -432,7 +454,7 @@ export function YahtzeeGame({
             </>
           ) : (
             <>
-              {nameFor(currentPlayerId)}&apos;s turn — {rollsLeft} roll{rollsLeft === 1 ? "" : "s"} left
+              {nameNode(currentPlayerId, "md")}&apos;s turn — {rollsLeft} roll{rollsLeft === 1 ? "" : "s"} left
             </>
           )}
         </p>
@@ -443,7 +465,9 @@ export function YahtzeeGame({
           <ul className="yahtzee-summary-list">
             {roster.map((p) => (
               <li key={p.id}>
-                <span>{p.displayName}</span>
+                <span>
+                  <PlayerName participant={p} size="xs" inline />
+                </span>
                 <span className="yahtzee-summary-total">{yahtzeeTotals[p.id] ?? 0}</span>
                 <span className="yahtzee-muted">
                   {Math.max(0, 13 - (state.sheetsByParticipant[p.id]?.length ?? 0))} rounds left

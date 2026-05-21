@@ -1,4 +1,4 @@
-import { FormEvent, type CSSProperties, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   PROFILE_STOCK_AVATAR_IDS,
   type ClientEvent,
@@ -7,6 +7,7 @@ import {
   type PublicProfile
 } from "../../../shared/contracts";
 import { readStoredProfileUsername, writeStoredProfileUsername } from "../profilePersistence";
+import { STOCK_AVATAR_EMOJI, avatarImageStyle, normalizedUploadUrl } from "../utils/avatarHelpers";
 
 export type ProfileAuth = {
   username: string;
@@ -16,36 +17,6 @@ type AvatarDraft =
   | { type: "none" }
   | { type: "stock"; id: ProfileStockAvatarId }
   | { type: "upload"; fileId: string; avatarUrl: string; crop: ProfileAvatarCrop };
-
-const STOCK_AVATAR_EMOJI: Record<ProfileStockAvatarId, string> = {
-  "avatar-astronaut": "🧑‍🚀",
-  "avatar-lightbulb": "💡",
-  "avatar-mountain": "🏔️"
-};
-
-const toAbsoluteUrl = (apiBase: string, pathOrUrl: string): string => {
-  if (!pathOrUrl) {
-    return pathOrUrl;
-  }
-  if (/^https?:\/\//i.test(pathOrUrl)) {
-    return pathOrUrl;
-  }
-  return new URL(pathOrUrl, apiBase).toString();
-};
-
-const normalizedUploadUrl = (apiBase: string, avatarUrl: string, fileId: string): string => {
-  const fixedPath = avatarUrl.endsWith("/") && fileId ? `${avatarUrl}${encodeURIComponent(fileId)}` : avatarUrl;
-  return toAbsoluteUrl(apiBase, fixedPath);
-};
-
-const avatarImageStyle = (crop: ProfileAvatarCrop): CSSProperties => {
-  const panStrength = Math.max(0.2, 0.65 + (crop.zoom - 1) * 1.35);
-  const translateX = (0.5 - crop.x) * panStrength * 220;
-  const translateY = (0.5 - crop.y) * panStrength * 220;
-  return {
-    transform: `translate(${translateX}%, ${translateY}%) scale(${crop.zoom})`
-  };
-};
 
 const mapPublicToAvatar = (apiBase: string, profile: PublicProfile): AvatarDraft => {
   if (profile.avatar.type === "upload") {

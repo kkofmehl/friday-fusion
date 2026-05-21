@@ -126,7 +126,7 @@ describe("PictionaryGame", () => {
       />
     );
     expect(screen.queryByText(/Moon landing/i)).toBeNull();
-    expect(screen.getByText(/Alice is drawing/i)).toBeTruthy();
+    expect(screen.getAllByText((_, element) => Boolean(element?.textContent?.includes("Alice is drawing."))).length).toBeGreaterThan(0);
   });
 
   it("drawer guess button sends teamGuessed", () => {

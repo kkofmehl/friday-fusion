@@ -53,8 +53,8 @@ describe("TwoTruthsGame", () => {
     );
     expect(screen.getAllByText("Lie").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Truth").length).toBe(2);
-    expect(screen.getByText(/Alice's truth/)).toBeDefined();
-    expect(screen.getByText("Voted by: Bob")).toBeDefined();
+    expect(screen.getAllByText((_, element) => Boolean(element?.textContent?.includes("Alice's truth"))).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((_, element) => Boolean(element?.textContent?.includes("Voted by: Bob"))).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Voted by: No one")).toHaveLength(2);
   });
 

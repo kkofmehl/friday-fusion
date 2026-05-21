@@ -70,7 +70,7 @@ describe("StoryBuilderGame", () => {
       />
     );
 
-    expect(screen.getByText("Bob", { selector: "strong" })).toBeDefined();
+    expect(screen.getByText("Bob")).toBeDefined();
     expect(screen.getByText(/to add a sentence/i)).toBeDefined();
     expect(screen.queryByLabelText("Your sentence")).toBeNull();
   });

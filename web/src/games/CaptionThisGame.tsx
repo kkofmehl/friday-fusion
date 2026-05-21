@@ -5,6 +5,7 @@ import {
   type ClientEvent,
   type SessionState
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { imageFileFromClipboard } from "../utils/imageClipboardPaste";
 import { activeParticipants } from "../utils/participants";
 
@@ -125,7 +126,9 @@ export function CaptionThisGame({
           <span className="pill pill-muted">Round {state.roundNumber}</span>
         </header>
         <p className="game-lede">
-          <strong>{session.participants.find((p) => p.id === state.imageProviderId)?.displayName ?? "The provider"}</strong>{" "}
+          <strong>
+            <PlayerName participantId={state.imageProviderId} participants={session.participants} size="md" inline />
+          </strong>{" "}
           chooses an image for everyone to caption.
         </p>
         {isHost && (
@@ -307,14 +310,15 @@ export function CaptionThisGame({
       </figure>
       <ol className="caption-this-results">
         {sorted.map((t) => {
-          const name = session.participants.find((p) => p.id === t.authorId)?.displayName ?? "Player";
           const won = state.winnerEntryIds.includes(t.entryId);
           return (
             <li key={t.entryId} className={won ? "caption-this-result-row is-winner" : "caption-this-result-row"}>
               <span className="caption-this-result-votes">{t.voteCount}</span>
               <div>
                 <div className="caption-this-result-text">{t.text}</div>
-                <div className="caption-this-result-author">{name}</div>
+                <div className="caption-this-result-author">
+                  <PlayerName participantId={t.authorId} participants={session.participants} size={won ? "lg" : "xs"} inline />
+                </div>
               </div>
             </li>
           );

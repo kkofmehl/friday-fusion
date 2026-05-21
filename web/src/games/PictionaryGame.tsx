@@ -5,6 +5,7 @@ import type {
   PictionaryState,
   SessionState
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { ScoreBoard } from "../components/ScoreBoard";
 import { activeParticipants } from "../utils/participants";
 
@@ -163,7 +164,7 @@ export function PictionaryGame({
             return (
               <li key={p.id} className="pictionary-team-pick-row">
                 <span className="pictionary-team-pick-name">
-                  {p.displayName}
+                  <PlayerName participant={p} size="xs" inline />
                   {p.isHost ? " (host)" : ""}
                 </span>
                 <div className="pictionary-team-pick-actions" role="group" aria-label={`Team for ${p.displayName}`}>
@@ -415,7 +416,7 @@ function PictionaryDrawingView({
           )}
           {!isDrawer && (
             <p className="pictionary-prompt-muted">
-              {`${session.participants.find((p) => p.id === state.drawerId)?.displayName ?? "Someone"} is drawing.`}
+              <PlayerName participantId={state.drawerId} participants={session.participants} size="md" inline /> is drawing.
             </p>
           )}
           <div ref={wrapRef} className="pictionary-canvas-wrap">
@@ -481,17 +482,15 @@ function PictionaryDrawingView({
           <div className="pictionary-team-legend">
             <p>
               <span className="pictionary-legend-a">Team A</span>:{" "}
-              {state.teamAIds
-                .map((id) => session.participants.find((p) => p.id === id)?.displayName)
-                .filter(Boolean)
-                .join(", ")}
+              {state.teamAIds.map((id) => (
+                <PlayerName key={id} participantId={id} participants={session.participants} size="xs" inline />
+              ))}
             </p>
             <p>
               <span className="pictionary-legend-b">Team B</span>:{" "}
-              {state.teamBIds
-                .map((id) => session.participants.find((p) => p.id === id)?.displayName)
-                .filter(Boolean)
-                .join(", ")}
+              {state.teamBIds.map((id) => (
+                <PlayerName key={id} participantId={id} participants={session.participants} size="xs" inline />
+              ))}
             </p>
           </div>
         </aside>

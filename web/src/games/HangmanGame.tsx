@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { TurnOrderPanel } from "./TurnOrderPanel";
 import { activeParticipants } from "../utils/participants";
+import { PlayerName } from "../components/PlayerName";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -138,13 +139,13 @@ export function HangmanGame({
   }, [state.status]);
 
   const activityRows = state.activityLog.map((entry) => {
-    const actor = session.participants.find((participant) => participant.id === entry.participantId)?.displayName ?? "Someone";
     if (entry.kind === "letterCorrect") {
       return {
         key: `${entry.createdAt}-${entry.participantId}-${entry.letter ?? "x"}`,
         className: "hangman-activity-correct",
         icon: "✓",
-        text: `${actor} guessed ${entry.letter} right`
+        actorId: entry.participantId,
+        textSuffix: `guessed ${entry.letter} right`
       };
     }
     if (entry.kind === "letterWrong") {
@@ -152,7 +153,8 @@ export function HangmanGame({
         key: `${entry.createdAt}-${entry.participantId}-${entry.letter ?? "x"}`,
         className: "hangman-activity-wrong",
         icon: "X",
-        text: `${actor} guessed ${entry.letter} wrong`
+        actorId: entry.participantId,
+        textSuffix: `guessed ${entry.letter} wrong`
       };
     }
     if (entry.kind === "solveCancelled") {
@@ -160,14 +162,16 @@ export function HangmanGame({
         key: `${entry.createdAt}-${entry.participantId}-cancel`,
         className: "hangman-activity-neutral",
         icon: "-",
-        text: `${actor} cancelled solve`
+        actorId: entry.participantId,
+        textSuffix: "cancelled solve"
       };
     }
     return {
       key: `${entry.createdAt}-${entry.participantId}-solve`,
       className: "hangman-activity-neutral",
       icon: "...",
-      text: `${actor} is attempting to solve the puzzle`
+      actorId: entry.participantId,
+      textSuffix: "is attempting to solve the puzzle"
     };
   });
   const currentCreatorIndex = roster.findIndex((participant) => participant.id === state.puzzleCreatorId);
@@ -211,7 +215,11 @@ export function HangmanGame({
             </>
           ) : (
             <>
-              Waiting on <strong>{currentGuesser?.displayName ?? "the next guesser"}</strong>...
+              Waiting on{" "}
+              <strong>
+                {currentGuesser ? <PlayerName participant={currentGuesser} size="md" inline /> : "the next guesser"}
+              </strong>
+              ...
             </>
           )}
         </p>
@@ -234,7 +242,9 @@ export function HangmanGame({
             activityRows.map((row) => (
               <p key={row.key} className={`hangman-activity-row ${row.className}`}>
                 <span className="hangman-activity-icon" aria-hidden="true">{row.icon}</span>
-                <span>{row.text}</span>
+                <span>
+                  <PlayerName participantId={row.actorId} participants={session.participants} size="xs" inline /> {row.textSuffix}
+                </span>
               </p>
             ))
           ) : (
@@ -275,7 +285,11 @@ export function HangmanGame({
               </form>
             ) : (
               <p className="hangman-waiting">
-                Waiting for <strong>{creator?.displayName ?? "the creator"}</strong> to pick a word...
+                Waiting for{" "}
+                <strong>
+                  {creator ? <PlayerName participant={creator} size="md" inline /> : "the creator"}
+                </strong>{" "}
+                to pick a word...
               </p>
             )
           ) : (

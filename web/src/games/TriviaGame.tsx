@@ -5,6 +5,7 @@ import type {
   TriviaCategory,
   TriviaDifficulty
 } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 const DIFFICULTY_ORDER: TriviaDifficulty[] = ["easy", "medium", "hard"];
@@ -292,7 +293,9 @@ export function TriviaGame({
                   const correct = answer === question.correctAnswer;
                   return (
                     <li key={participantId}>
-                      <span>{participant?.displayName ?? participantId}</span>
+                      <span>
+                        <PlayerName participantId={participantId} participants={session.participants} size="xs" inline />
+                      </span>
                       <span className={correct ? "tag tag-truth" : "tag tag-lie"}>
                         {correct ? "Correct" : answer}
                       </span>

@@ -1,4 +1,5 @@
 import type { Participant } from "../../../shared/contracts";
+import { PlayerName } from "./PlayerName";
 
 export function ScoreBoard({ participants }: { participants: Participant[] }): JSX.Element {
   const ranked = [...participants].sort((a, b) => b.score - a.score);
@@ -10,7 +11,9 @@ export function ScoreBoard({ participants }: { participants: Participant[] }): J
         return (
           <li key={participant.id} className={`scoreboard-row${isLeader ? " scoreboard-leader" : ""}`}>
             <span className="scoreboard-rank">#{index + 1}</span>
-            <span className="scoreboard-name">{participant.displayName}</span>
+            <span className="scoreboard-name">
+              <PlayerName participant={participant} size="xs" inline />
+            </span>
             <span className="scoreboard-score">{participant.score}</span>
           </li>
         );

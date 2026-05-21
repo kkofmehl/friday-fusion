@@ -1,35 +1,6 @@
-import { type CSSProperties, useEffect, useState } from "react";
-import type { ProfileAvatarCrop, ProfileStockAvatarId, PublicProfile } from "../../../shared/contracts";
-
-const STOCK_AVATAR_EMOJI: Record<ProfileStockAvatarId, string> = {
-  "avatar-astronaut": "🧑‍🚀",
-  "avatar-lightbulb": "💡",
-  "avatar-mountain": "🏔️"
-};
-
-const toAbsoluteUrl = (apiBase: string, pathOrUrl: string): string => {
-  if (!pathOrUrl) {
-    return pathOrUrl;
-  }
-  if (/^https?:\/\//i.test(pathOrUrl)) {
-    return pathOrUrl;
-  }
-  return new URL(pathOrUrl, apiBase).toString();
-};
-
-const normalizedUploadUrl = (apiBase: string, avatarUrl: string, fileId?: string): string => {
-  const fixedPath = avatarUrl.endsWith("/") && fileId ? `${avatarUrl}${encodeURIComponent(fileId)}` : avatarUrl;
-  return toAbsoluteUrl(apiBase, fixedPath);
-};
-
-const avatarImageStyle = (crop: ProfileAvatarCrop): CSSProperties => {
-  const panStrength = Math.max(0.2, 0.65 + (crop.zoom - 1) * 1.35);
-  const translateX = (0.5 - crop.x) * panStrength * 220;
-  const translateY = (0.5 - crop.y) * panStrength * 220;
-  return {
-    transform: `translate(${translateX}%, ${translateY}%) scale(${crop.zoom})`
-  };
-};
+import { useEffect, useState } from "react";
+import type { PublicProfile } from "../../../shared/contracts";
+import { STOCK_AVATAR_EMOJI, avatarImageStyle, normalizedUploadUrl } from "../utils/avatarHelpers";
 
 export function ProfileViewModal({
   apiBase,

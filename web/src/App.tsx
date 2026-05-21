@@ -234,6 +234,7 @@ export function App(): JSX.Element {
         joinCode={session.joinCode}
         status={status}
         chatMessages={chatMessages}
+        participants={session.participants}
         currentParticipantId={auth.participantId}
         onSendChatMessage={(text) => send({ type: "chat:sendMessage", payload: { text } })}
         onSendEmojiReaction={(emoji) => send({ type: "chat:sendReaction", payload: { emoji } })}

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { PlayerName } from "../components/PlayerName";
 import { activeParticipants } from "../utils/participants";
 
 export function TwoTruthsGame({
@@ -28,10 +29,6 @@ export function TwoTruthsGame({
   const presenterSubmission = truthState?.currentPresenterId
     ? truthState.submissions[truthState.currentPresenterId]
     : null;
-  const participantNameById = useMemo(
-    () => new Map(session.participants.map((participant) => [participant.id, participant.displayName])),
-    [session.participants]
-  );
   const activeRoster = useMemo(() => activeParticipants(session.participants), [session.participants]);
   const activeRosterIds = useMemo(() => new Set(activeRoster.map((p) => p.id)), [activeRoster]);
   const availablePresenterIds = useMemo(() => {
@@ -93,7 +90,7 @@ export function TwoTruthsGame({
   const votersForStatement = (index: number): string[] =>
     Object.entries(truthState.votes)
       .filter(([, vote]) => vote === index)
-      .map(([voterId]) => participantNameById.get(voterId) ?? voterId);
+      .map(([voterId]) => voterId);
 
   const statusLabel =
     truthState.status === "collecting"
@@ -202,7 +199,7 @@ export function TwoTruthsGame({
         <div className="truths-phase">
           <div className="truths-voting">
             <h3>
-              {presenter ? `${presenter.displayName}'s statements` : "Statements"}
+              {presenter ? <PlayerName participant={presenter} size="md" inline /> : "Presenter"}&apos;s statements
             </h3>
             {isPresenter ? (
               <p className="truths-hint">You're the presenter — sit back and watch!</p>
@@ -250,7 +247,7 @@ export function TwoTruthsGame({
         <div className="truths-phase">
           <div className="truths-reveal">
             <h3>
-              {presenter ? `${presenter.displayName}'s truth` : "Reveal"}
+              {presenter ? <PlayerName participant={presenter} size="md" inline /> : "Presenter"}&apos;s truth
             </h3>
             <ol className="truths-reveal-list">
               {presenterSubmission.statements.map((statement, index) => {
@@ -270,7 +267,12 @@ export function TwoTruthsGame({
                       {count} {count === 1 ? "vote" : "votes"}
                     </div>
                     <div className="truths-tally">
-                      Voted by: {voterNames.length > 0 ? voterNames.join(", ") : "No one"}
+                      Voted by:{" "}
+                      {voterNames.length > 0
+                        ? voterNames.map((voterId) => (
+                          <PlayerName key={voterId} participantId={voterId} participants={session.participants} size="xs" inline />
+                        ))
+                        : "No one"}
                     </div>
                   </li>
                 );

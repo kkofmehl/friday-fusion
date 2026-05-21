@@ -1,5 +1,5 @@
 import type { RealtimeStatus } from "../hooks/useRealtime";
-import type { SessionChatMessage } from "../../../shared/contracts";
+import type { Participant, SessionChatMessage } from "../../../shared/contracts";
 import { ConnectionPill } from "./ConnectionPill";
 import { SessionChatPanel } from "./SessionChatPanel";
 
@@ -8,6 +8,7 @@ export function TopBar({
   joinCode,
   status,
   chatMessages,
+  participants,
   currentParticipantId,
   onSendChatMessage,
   onSendEmojiReaction,
@@ -18,6 +19,7 @@ export function TopBar({
   joinCode: string;
   status: RealtimeStatus;
   chatMessages: SessionChatMessage[];
+  participants: Participant[];
   currentParticipantId: string;
   onSendChatMessage: (text: string) => void;
   onSendEmojiReaction: (emoji: string) => void;
@@ -50,6 +52,7 @@ export function TopBar({
         <div className="topbar-chat">
           <SessionChatPanel
             messages={chatMessages}
+            participants={participants}
             currentParticipantId={currentParticipantId}
             onSendMessage={onSendChatMessage}
             onSendReaction={onSendEmojiReaction}

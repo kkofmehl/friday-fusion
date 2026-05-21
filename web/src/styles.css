@@ -1861,6 +1861,142 @@ label {
   padding-left: 1rem;
 }
 
+.player-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.player-name-row--inline {
+  vertical-align: middle;
+}
+
+.player-name-row--emphasis .player-name-text {
+  font-weight: 700;
+}
+
+.player-name-text {
+  min-width: 0;
+}
+
+.player-avatar {
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--slate-200);
+  background: rgba(224, 231, 255, 0.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.player-avatar--xs {
+  width: 1rem;
+  height: 1rem;
+  font-size: 0.6rem;
+}
+
+.player-avatar--sm {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.75rem;
+}
+
+.player-avatar--md {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 1rem;
+}
+
+.player-avatar--lg {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.8rem;
+}
+
+.player-avatar--xl {
+  width: 4.5rem;
+  height: 4.5rem;
+  font-size: 2.5rem;
+}
+
+.player-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+}
+
+.avatar-shower {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  overflow: hidden;
+}
+
+.avatar-shower-particle {
+  position: absolute;
+  top: -5rem;
+  transform: rotate(var(--avatar-rotate, 0deg));
+}
+
+.avatar-shower--rain .avatar-shower-particle {
+  animation-name: avatar-shower-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.avatar-shower--burst .avatar-shower-particle {
+  top: auto;
+  bottom: -4rem;
+  animation-name: avatar-shower-burst;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes avatar-shower-fall {
+  0% {
+    transform: translateY(-8rem) rotate(var(--avatar-rotate, 0deg));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(calc(100vh + 8rem)) rotate(calc(var(--avatar-rotate, 0deg) * 2));
+    opacity: 0;
+  }
+}
+
+@keyframes avatar-shower-burst {
+  0% {
+    transform: translateY(0) scale(0.75) rotate(var(--avatar-rotate, 0deg));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(calc(-85vh)) scale(1.05) rotate(calc(var(--avatar-rotate, 0deg) * 2));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-shower {
+    display: none;
+  }
+}
+
+.wyr-result-names {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
 .scoreboard-score {
   font-weight: 700;
   font-variant-numeric: tabular-nums;

@@ -77,4 +77,19 @@ describe("ProfileService", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("returns avatar view by username", async () => {
+    const { service, tempDir } = await createService();
+    try {
+      await service.openProfile("sam", { avatar: { type: "stock", id: "avatar-lightbulb" } });
+      expect(service.getAvatarViewByUsername("Sam")).toEqual({
+        type: "stock",
+        id: "avatar-lightbulb",
+        avatarUrl: "/avatars/avatar-lightbulb.png"
+      });
+      expect(service.getAvatarViewByUsername("missing")).toBeNull();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

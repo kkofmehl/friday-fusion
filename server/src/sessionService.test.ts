@@ -74,11 +74,35 @@ describe("SessionService", () => {
     const setup = await createService();
     tempDir = setup.tempDir;
     const created = await setup.service.createSession("Host");
+    setup.service.setProfileService({
+      normalizeUsername: (username) => username.trim().toLowerCase(),
+      getAvatarViewByUsername: () => ({ type: "stock", id: "avatar-astronaut", avatarUrl: "/avatars/avatar-astronaut.png" })
+    });
     await setup.service.linkParticipantProfile(created.sessionId, created.participantId, "host_user");
     const state = setup.service.getState(created.sessionId);
     const host = state.participants.find((participant) => participant.id === created.participantId);
     expect(host?.hasProfile).toBe(true);
+    expect(host?.avatar).toEqual({ type: "stock", id: "avatar-astronaut", avatarUrl: "/avatars/avatar-astronaut.png" });
     expect(setup.service.getParticipantProfileUsername(created.sessionId, created.participantId)).toBe("host_user");
+  });
+
+  it("rebroadcasts only sessions that include the updated profile", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const first = await setup.service.createSession("Host");
+    const second = await setup.service.createSession("Other");
+    await setup.service.linkParticipantProfile(first.sessionId, first.participantId, "winner");
+    await setup.service.linkParticipantProfile(second.sessionId, second.participantId, "someone_else");
+    const seen: string[] = [];
+    setup.service.setProfileService({
+      normalizeUsername: (username) => username.trim().toLowerCase(),
+      getAvatarViewByUsername: () => null
+    });
+    setup.service.setStateUpdateListener((sessionId) => {
+      seen.push(sessionId);
+    });
+    setup.service.rebroadcastSessionsForProfile("Winner");
+    expect(seen).toEqual([first.sessionId]);
   });
 
   it("unlinks profile with participant removal", async () => {

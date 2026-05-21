@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientEvent, Participant, SessionState } from "../../../shared/contracts";
+import { PlayerName } from "./PlayerName";
 
 type TurnTag = { label: string; tone: "creator" | "guesser" | "presenter" | "voter" | "answerer" | "submitting" };
 
@@ -192,7 +193,7 @@ export function PlayerList({
           >
             <div className="player-identity">
               <span className="player-name">
-                {participant.displayName}
+                <PlayerName participant={participant} size="sm" inline />
                 {isYou && <span className="player-you-tag">you</span>}
                 {participant.hasProfile && (
                   <button
