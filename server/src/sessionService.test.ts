@@ -70,6 +70,39 @@ describe("SessionService", () => {
     expect(second.participantId).toBe(first.participantId);
   });
 
+  it("marks participants with linked profiles in public state", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const created = await setup.service.createSession("Host");
+    await setup.service.linkParticipantProfile(created.sessionId, created.participantId, "host_user");
+    const state = setup.service.getState(created.sessionId);
+    const host = state.participants.find((participant) => participant.id === created.participantId);
+    expect(host?.hasProfile).toBe(true);
+    expect(setup.service.getParticipantProfileUsername(created.sessionId, created.participantId)).toBe("host_user");
+  });
+
+  it("unlinks profile with participant removal", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const created = await setup.service.createSession("Host");
+    const joined = await setup.service.joinSession(created.joinCode, "Guest");
+    await setup.service.linkParticipantProfile(created.sessionId, joined.participantId, "guest_user");
+    await setup.service.removeParticipant(created.sessionId, joined.participantId);
+    const state = setup.service.getState(created.sessionId);
+    expect(state.participants.find((participant) => participant.id === joined.participantId)).toBeUndefined();
+  });
+
+  it("rejects linking a profile already linked to another player in-session", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const created = await setup.service.createSession("Host");
+    const joined = await setup.service.joinSession(created.joinCode, "Guest");
+    await setup.service.linkParticipantProfile(created.sessionId, created.participantId, "shared_user");
+    await expect(
+      setup.service.linkParticipantProfile(created.sessionId, joined.participantId, "shared_user")
+    ).rejects.toThrow("This profile is already linked to another player in this session.");
+  });
+
   it("progresses hangman wrong guesses", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

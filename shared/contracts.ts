@@ -29,7 +29,8 @@ export const participantSchema = z.object({
   score: z.number().int(),
   isHost: z.boolean(),
   /** When false, the player stays in the session but cannot take part in games. */
-  isActive: z.boolean().optional().default(true)
+  isActive: z.boolean().optional().default(true),
+  hasProfile: z.boolean().optional()
 });
 export type Participant = z.infer<typeof participantSchema>;
 
@@ -1213,6 +1214,90 @@ export type ActiveSessionSummary = z.infer<typeof activeSessionSummarySchema>;
 
 export const SESSION_CHAT_MESSAGE_MAX_CHARS = 400;
 export const SESSION_CHAT_EMOJI_MAX_CHARS = 16;
+export const PROFILE_USERNAME_MIN_CHARS = 3;
+export const PROFILE_USERNAME_MAX_CHARS = 32;
+export const PROFILE_NAME_MAX_CHARS = 64;
+export const PROFILE_ABOUT_ME_MAX_CHARS = 1000;
+export const PROFILE_FAVORITE_MAX_CHARS = 120;
+export const PROFILE_FAVORITES_MAX_COUNT = 20;
+export const PROFILE_DREAM_JOB_MAX_CHARS = 240;
+export const PROFILE_STOCK_AVATAR_IDS = ["avatar-astronaut", "avatar-lightbulb", "avatar-mountain"] as const;
+export type ProfileStockAvatarId = (typeof PROFILE_STOCK_AVATAR_IDS)[number];
+
+export const profileUsernameSchema = z
+  .string()
+  .trim()
+  .min(PROFILE_USERNAME_MIN_CHARS)
+  .max(PROFILE_USERNAME_MAX_CHARS)
+  .regex(/^[a-zA-Z0-9_]+$/, "Username may only contain letters, numbers, and underscore.");
+export const profileStockAvatarIdSchema = z.enum(PROFILE_STOCK_AVATAR_IDS);
+export const profileAvatarCropSchema = z.object({
+  x: z.number().min(0).max(1).default(0.5),
+  y: z.number().min(0).max(1).default(0.5),
+  zoom: z.number().min(0.5).max(3).default(0.85)
+});
+export type ProfileAvatarCrop = z.infer<typeof profileAvatarCropSchema>;
+export const profileAvatarSelectionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("none") }),
+  z.object({
+    type: z.literal("upload"),
+    fileId: z.string().min(1),
+    crop: profileAvatarCropSchema.optional().default({ x: 0.5, y: 0.5, zoom: 0.85 })
+  }),
+  z.object({ type: z.literal("stock"), id: profileStockAvatarIdSchema })
+]);
+export type ProfileAvatarSelection = z.infer<typeof profileAvatarSelectionSchema>;
+
+export const profileAvatarViewSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("none"), avatarUrl: z.null() }),
+  z.object({
+    type: z.literal("upload"),
+    avatarUrl: z.string(),
+    fileId: z.string().optional(),
+    crop: profileAvatarCropSchema.optional().default({ x: 0.5, y: 0.5, zoom: 0.85 })
+  }),
+  z.object({ type: z.literal("stock"), id: profileStockAvatarIdSchema, avatarUrl: z.string() })
+]);
+export type ProfileAvatarView = z.infer<typeof profileAvatarViewSchema>;
+
+export const publicProfileSchema = z.object({
+  name: z.string().max(PROFILE_NAME_MAX_CHARS),
+  aboutMe: z.string().max(PROFILE_ABOUT_ME_MAX_CHARS),
+  favorites: z.array(z.string().max(PROFILE_FAVORITE_MAX_CHARS)).max(PROFILE_FAVORITES_MAX_COUNT),
+  dreamJob: z.string().max(PROFILE_DREAM_JOB_MAX_CHARS),
+  avatar: profileAvatarViewSchema
+});
+export type PublicProfile = z.infer<typeof publicProfileSchema>;
+
+const profileEditableFieldsSchema = z.object({
+  name: z.string().max(PROFILE_NAME_MAX_CHARS).optional(),
+  aboutMe: z.string().max(PROFILE_ABOUT_ME_MAX_CHARS).optional(),
+  favorites: z.array(z.string().max(PROFILE_FAVORITE_MAX_CHARS)).max(PROFILE_FAVORITES_MAX_COUNT).optional(),
+  dreamJob: z.string().max(PROFILE_DREAM_JOB_MAX_CHARS).optional(),
+  avatar: profileAvatarSelectionSchema.optional()
+});
+
+export const profileCheckUsernameQuerySchema = z.object({
+  username: z.string().optional().default("")
+});
+export const profileCreateRequestSchema = z
+  .object({
+    username: profileUsernameSchema
+  })
+  .merge(profileEditableFieldsSchema);
+export const profileUpdateRequestSchema = z
+  .object({
+    username: profileUsernameSchema
+  })
+  .merge(profileEditableFieldsSchema);
+export const profileUsernameRequestSchema = z.object({ username: profileUsernameSchema });
+export const profileUsernameAvailabilitySchema = z.object({
+  available: z.boolean()
+});
+export const profileAvatarUploadResponseSchema = z.object({
+  fileId: z.string(),
+  avatarUrl: z.string()
+});
 
 export const sessionChatMessageSchema = z.object({
   id: z.string(),
@@ -1308,6 +1393,12 @@ export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:hello"), payload: z.object({ sessionId: z.string(), participantId: z.string() }) }),
   z.object({ type: z.literal("lobby:subscribe"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("session:linkProfile"),
+    payload: z.object({
+      username: profileUsernameSchema
+    })
+  }),
   z.object({
     type: z.literal("chat:sendMessage"),
     payload: z.object({

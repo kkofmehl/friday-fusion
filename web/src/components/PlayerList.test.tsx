@@ -103,4 +103,23 @@ describe("PlayerList score editing", () => {
     expect(send).not.toHaveBeenCalledWith({ type: "session:cancelScoreEdit", payload: {} });
     expect(screen.getByRole("status").textContent).toContain("The host is updating the score...");
   });
+
+  it("shows a profile star and opens profile callback", () => {
+    const onViewProfile = vi.fn();
+    render(
+      <PlayerList
+        session={buildSession({
+          participants: [
+            { id: "p1", displayName: "Alice", score: 5, isHost: true, isActive: true, hasProfile: true },
+            { id: "p2", displayName: "Bob", score: 3, isHost: false, isActive: true }
+          ]
+        })}
+        currentParticipantId="p1"
+        onViewProfile={onViewProfile}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View profile for Alice" }));
+    expect(onViewProfile).toHaveBeenCalledWith("p1");
+  });
 });

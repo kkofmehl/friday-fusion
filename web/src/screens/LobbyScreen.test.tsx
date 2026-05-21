@@ -243,4 +243,11 @@ describe("LobbyScreen", () => {
     expect(screen.getByRole("heading", { name: "Game in progress" })).toBeDefined();
     expect(screen.queryByRole("heading", { name: "Choose a game" })).toBeNull();
   });
+
+  it("opens the My Profile card only after clicking Create/Load Profile", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+    expect(screen.queryByRole("heading", { name: "My Profile" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create/Load Profile" }));
+    expect(screen.getByRole("heading", { name: "My Profile" })).toBeDefined();
+  });
 });

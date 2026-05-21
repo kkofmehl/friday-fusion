@@ -1,5 +1,8 @@
+import { useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
+import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
+import { ProfileViewModal } from "../components/ProfileViewModal";
 import { HangmanGame } from "../games/HangmanGame";
 import { activeParticipants } from "../utils/participants";
 import { IcebreakerGame } from "../games/IcebreakerGame";
@@ -49,7 +52,9 @@ export function GameScreen({
   isHost,
   canPlay,
   send,
-  apiBase
+  apiBase,
+  profileAuth = null,
+  onProfileAuthChange = () => {}
 }: {
   session: SessionState;
   currentParticipantId: string;
@@ -58,7 +63,11 @@ export function GameScreen({
   canPlay: boolean;
   send: (event: ClientEvent) => void;
   apiBase: string;
+  profileAuth?: ProfileAuth | null;
+  onProfileAuthChange?: (auth: ProfileAuth | null) => void;
 }): JSX.Element {
+  const [profileModalParticipantId, setProfileModalParticipantId] = useState<string | null>(null);
+  const [showMyProfile, setShowMyProfile] = useState(false);
   const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
   const hangmanRoster = hangmanState ? activeParticipants(session.participants) : [];
   const rotatedCreatorId = hangmanState
@@ -372,9 +381,18 @@ export function GameScreen({
             send={send}
             allowActivate={false}
             allowBench={false}
+            onViewProfile={setProfileModalParticipantId}
           />
-          {isHost && (
-            <div className="card-footer card-footer-actions">
+          <div className="card-footer card-footer-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowMyProfile((open) => !open)}
+            >
+              {showMyProfile ? "Hide Profile" : "Create/Load Profile"}
+            </button>
+            {isHost && (
+              <>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -391,9 +409,20 @@ export function GameScreen({
               >
                 End game
               </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </aside>
+        {showMyProfile && (
+          <MyProfilePanel
+            apiBase={apiBase}
+            sessionId={session.sessionId}
+            send={send}
+            hasLinkedProfile={Boolean(session.participants.find((participant) => participant.id === currentParticipantId)?.hasProfile)}
+            profileAuth={profileAuth}
+            onProfileAuthChange={onProfileAuthChange}
+          />
+        )}
         {currentGameIcon && (
           <div className="card game-side-icon-card" aria-label="Current game icon">
             <img src={currentGameIcon} alt="" className="game-side-icon-image" loading="lazy" />
@@ -402,6 +431,12 @@ export function GameScreen({
       </div>
 
       <div className={`game-stage${canPlay ? "" : " game-stage--readonly"}`}>{renderGame()}</div>
+      <ProfileViewModal
+        apiBase={apiBase}
+        sessionId={session.sessionId}
+        participantId={profileModalParticipantId}
+        onClose={() => setProfileModalParticipantId(null)}
+      />
     </div>
   );
 }

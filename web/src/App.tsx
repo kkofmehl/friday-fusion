@@ -11,6 +11,7 @@ import { AppFooter } from "./components/AppFooter";
 import { Toast } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
 import { EmojiReactionsOverlay, type EmojiReactionBurst } from "./components/EmojiReactionsOverlay";
+import type { ProfileAuth } from "./components/MyProfilePanel";
 import { LandingScreen, type LandingSuccess } from "./screens/LandingScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { GameScreen } from "./screens/GameScreen";
@@ -35,6 +36,7 @@ export function App(): JSX.Element {
   const [notice, setNotice] = useState("");
   const [chatMessages, setChatMessages] = useState<SessionChatMessage[]>([]);
   const [emojiBursts, setEmojiBursts] = useState<EmojiReactionBurst[]>([]);
+  const [profileAuth, setProfileAuth] = useState<ProfileAuth | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(() => readStoredSessionAuth() !== null);
 
   const handleSession = useCallback((state: SessionState) => {
@@ -49,6 +51,7 @@ export function App(): JSX.Element {
     setSession(null);
     setChatMessages([]);
     setEmojiBursts([]);
+    setProfileAuth(null);
     setNotice(
       reason === "host_closed"
         ? "The host closed this session."
@@ -112,6 +115,7 @@ export function App(): JSX.Element {
     setSession(result.state);
     setChatMessages([]);
     setEmojiBursts([]);
+    setProfileAuth(null);
     setError("");
     setNotice("");
   }, []);
@@ -174,6 +178,7 @@ export function App(): JSX.Element {
     setSession(null);
     setChatMessages([]);
     setEmojiBursts([]);
+    setProfileAuth(null);
     setError("");
   };
 
@@ -245,6 +250,8 @@ export function App(): JSX.Element {
               canPlay={canPlay}
               send={sendEvent}
               apiBase={apiBase}
+              profileAuth={profileAuth}
+              onProfileAuthChange={setProfileAuth}
             />
           ) : (
             <LobbyScreen
@@ -252,6 +259,9 @@ export function App(): JSX.Element {
               currentParticipantId={auth.participantId}
               isHost={isHost}
               send={sendEvent}
+              apiBase={apiBase}
+              profileAuth={profileAuth}
+              onProfileAuthChange={setProfileAuth}
             />
           )}
         </main>

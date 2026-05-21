@@ -114,6 +114,7 @@ type ParticipantInternal = {
   isHost: boolean;
   /** Omitted or true = participates in games; false = in session but benched. */
   isActive?: boolean;
+  profileUsername?: string;
 };
 
 type HangmanGameInternal = {
@@ -2783,6 +2784,36 @@ export class SessionService {
     target.isActive = isActive;
     session.updatedAt = Date.now();
     await this.persist();
+  }
+
+  public async linkParticipantProfile(sessionId: string, participantId: string, username: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant) {
+      throw new Error("Participant is not in this session.");
+    }
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!normalizedUsername) {
+      throw new Error("Username is required.");
+    }
+    const existing = session.participants.find(
+      (entry) => entry.id !== participantId && entry.profileUsername === normalizedUsername
+    );
+    if (existing) {
+      throw new Error("This profile is already linked to another player in this session.");
+    }
+    participant.profileUsername = normalizedUsername;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public getParticipantProfileUsername(sessionId: string, participantId: string): string | null {
+    const session = this.getSessionOrThrow(sessionId);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant) {
+      throw new Error("Participant is not in this session.");
+    }
+    return participant.profileUsername ?? null;
   }
 
   public async beginScoreEdit(sessionId: string, hostParticipantId: string, targetId: string): Promise<void> {
@@ -6815,7 +6846,8 @@ export class SessionService {
         displayName: p.displayName,
         score: p.score,
         isHost: p.isHost,
-        isActive: participantIsActive(p)
+        isActive: participantIsActive(p),
+        hasProfile: Boolean(p.profileUsername)
       })),
       ...(session.scoreEditingParticipantId
         ? { scoreEditingParticipantId: session.scoreEditingParticipantId }

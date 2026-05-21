@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
@@ -12,6 +12,12 @@ import {
   clientEventSchema,
   createSessionRequestSchema,
   joinSessionRequestSchema,
+  profileAvatarUploadResponseSchema,
+  profileCheckUsernameQuerySchema,
+  profileCreateRequestSchema,
+  profileUpdateRequestSchema,
+  profileUsernameAvailabilitySchema,
+  profileUsernameRequestSchema,
   SESSION_CHAT_EMOJI_MAX_CHARS,
   SESSION_CHAT_MESSAGE_MAX_CHARS,
   serverEventSchema,
@@ -27,6 +33,8 @@ import {
 import { captionThisSessionUploadDir, resolveCaptionThisStoredFile } from "./captionThisUploads";
 import { guessTheImageSessionUploadDir, resolveGuessTheImageStoredFile } from "./guessTheImageUploads";
 import { SessionService, createSessionService } from "./sessionService";
+import { ProfileService, createProfileService } from "./profileService";
+import { profileUploadDir, resolveProfileStoredFile } from "./profileUploads";
 import { createTriviaCategoryLoader } from "./triviaQuestionLoader";
 import {
   appendSessionChatMessage,
@@ -60,16 +68,19 @@ type LobbyConnectionMeta = {
 
 export type BuildAppOptions = {
   sessionService?: SessionService;
+  profileService?: ProfileService;
   serveStatic?: boolean;
 };
 
 export const buildApp = async (options: BuildAppOptions = {}): Promise<{
   app: FastifyInstance;
   sessionService: SessionService;
+  profileService: ProfileService;
   connections: Map<string, ConnectionContext[]>;
 }> => {
   const app = Fastify({ logger: true });
   const sessionService = options.sessionService ?? createSessionService();
+  const profileService = options.profileService ?? createProfileService(sessionService.getDataDirectory());
   await app.register(cors, { origin: true });
   await app.register(multipart, {
     limits: { fileSize: ICEBREAKER_MAX_UPLOAD_BYTES }
@@ -277,6 +288,177 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
       }
       throw error;
     }
+  });
+
+  app.get("/api/profiles/check-username", async (request) => {
+    const query = profileCheckUsernameQuerySchema.parse(request.query ?? {});
+    const available = profileService.isUsernameAvailable(query.username);
+    return profileUsernameAvailabilitySchema.parse({ available });
+  });
+
+  app.post("/api/profiles", async (request, reply) => {
+    const body = profileCreateRequestSchema.parse(request.body);
+    const opened = await profileService.openProfile(
+      body.username,
+      {
+        name: body.name,
+        aboutMe: body.aboutMe,
+        favorites: body.favorites,
+        dreamJob: body.dreamJob,
+        avatar: body.avatar
+      }
+    );
+    return reply.send(opened.profile);
+  });
+
+  app.patch("/api/profiles/me", async (request, reply) => {
+    const body = profileUpdateRequestSchema.parse(request.body);
+    const updated = await profileService.updateProfile(
+      body.username,
+      {
+        name: body.name,
+        aboutMe: body.aboutMe,
+        favorites: body.favorites,
+        dreamJob: body.dreamJob,
+        avatar: body.avatar
+      }
+    );
+    return reply.send(updated.profile);
+  });
+
+  app.post("/api/profiles/avatar", async (request, reply) => {
+    let username = "";
+    let fileBuffer: Buffer | null = null;
+    let mimeType = "";
+    try {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "file") {
+          if (part.fieldname !== "file") {
+            part.file.resume();
+            continue;
+          }
+          mimeType = part.mimetype;
+          fileBuffer = await part.toBuffer();
+        } else if (part.type === "field" && part.fieldname === "username") {
+          username = String(part.value ?? "").trim();
+        }
+      }
+    } catch (error) {
+      app.log.warn({ err: error }, "profile avatar upload parse failed");
+      return reply.code(400).send({ message: "Invalid multipart body." });
+    }
+    const creds = profileUsernameRequestSchema.safeParse({ username });
+    if (!creds.success || !fileBuffer?.length) {
+      return reply.code(400).send({ message: "username and file are required." });
+    }
+    if (fileBuffer.length > ICEBREAKER_MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ message: "File too large." });
+    }
+    const ext = ICEBREAKER_IMAGE_MIME[mimeType];
+    if (!ext) {
+      return reply.code(400).send({ message: "Only JPEG, PNG, GIF, or WebP images are allowed." });
+    }
+    let fileId = "";
+    let canonicalUsername = "";
+    try {
+      canonicalUsername = profileService.ensureProfileExists(creds.data.username);
+      const dir = profileUploadDir(sessionService.getDataDirectory(), canonicalUsername);
+      await mkdir(dir, { recursive: true });
+      fileId = `${nanoid(18)}${ext}`;
+      await writeFile(path.join(dir, fileId), fileBuffer);
+      await profileService.setUploadedAvatar(canonicalUsername, fileId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload rejected.";
+      return reply.code(400).send({ message });
+    }
+    return reply.send(
+      profileAvatarUploadResponseSchema.parse({
+        fileId,
+        avatarUrl: `/api/profiles/avatar/${encodeURIComponent(canonicalUsername)}/${encodeURIComponent(fileId)}`
+      })
+    );
+  });
+
+  const sendProfileAvatarByUsername = async (usernameRaw: string, reply: FastifyReply) => {
+    const username = decodeURIComponent(usernameRaw).trim().toLowerCase();
+    const profile = profileService.getPublicProfileByUsername(username);
+    if (!profile || profile.avatar.type !== "upload") {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const fileId = profile.avatar.fileId ?? "";
+    if (!fileId) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const abs = resolveProfileStoredFile(sessionService.getDataDirectory(), username, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
+  };
+
+  app.get("/api/profiles/avatar/:username", async (request, reply) => {
+    return sendProfileAvatarByUsername((request.params as { username: string }).username, reply);
+  });
+
+  app.get("/api/profiles/avatar/:username/", async (request, reply) => {
+    return sendProfileAvatarByUsername((request.params as { username: string }).username, reply);
+  });
+
+  app.get("/api/profiles/avatar/:username/:fileId", async (request, reply) => {
+    const username = decodeURIComponent((request.params as { username: string }).username).trim().toLowerCase();
+    const fileId = decodeURIComponent((request.params as { fileId: string }).fileId);
+    const abs = resolveProfileStoredFile(sessionService.getDataDirectory(), username, fileId);
+    if (!abs) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+    const ext = path.extname(abs).toLowerCase();
+    const contentType =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+          ? "image/png"
+          : ext === ".gif"
+            ? "image/gif"
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+    reply.header("Content-Type", contentType);
+    return reply.send(createReadStream(abs));
+  });
+
+  app.get("/api/sessions/:sessionId/participants/:participantId/profile", async (request, reply) => {
+    const { sessionId, participantId } = request.params as { sessionId: string; participantId: string };
+    let username: string | null = null;
+    try {
+      username = sessionService.getParticipantProfileUsername(sessionId, participantId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Not found.";
+      if (message === "Session not found.") {
+        return reply.code(404).send({ message });
+      }
+      return reply.code(400).send({ message });
+    }
+    if (!username) {
+      return reply.code(404).send({ message: "Profile not found." });
+    }
+    const profile = profileService.getPublicProfileByUsername(username);
+    if (!profile) {
+      return reply.code(404).send({ message: "Profile not found." });
+    }
+    return reply.send(profile);
   });
 
   app.post("/api/sessions/:sessionId/icebreaker/upload", async (request, reply) => {
@@ -661,6 +843,13 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
         }
 
         context.lastSeenAt = Date.now();
+
+        if (event.type === "session:linkProfile") {
+          const username = profileService.ensureProfileExists(event.payload.username);
+          await sessionService.linkParticipantProfile(context.sessionId, context.participantId, username);
+          broadcastState(context.sessionId);
+          return;
+        }
 
         if (event.type === "chat:sendMessage") {
           const text = event.payload.text.trim();
@@ -1360,12 +1549,13 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     clearInterval(heartbeatTimer);
   });
 
-  return { app, sessionService, connections };
+  return { app, sessionService, profileService, connections };
 };
 
 const boot = async (): Promise<void> => {
-  const { app, sessionService } = await buildApp();
+  const { app, sessionService, profileService } = await buildApp();
   await sessionService.load();
+  await profileService.load();
   const cleanupTimer = setInterval(() => {
     sessionService.cleanupStaleSessions(1000 * 60 * 60 * 24).catch((error) => app.log.error(error));
   }, 1000 * 60 * 10);

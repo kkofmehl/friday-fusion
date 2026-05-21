@@ -12,6 +12,8 @@ import {
 } from "../../../shared/contracts";
 import { GameAttributeBadge, GameAttributeLegend } from "../components/GameAttributeBadge";
 import { PlayerList } from "../components/PlayerList";
+import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
+import { ProfileViewModal } from "../components/ProfileViewModal";
 import { getGameAttributes } from "../../../shared/gameAttributes";
 
 const GUESS_IMAGE_LOBBY_EVERYONE = "everyone";
@@ -149,12 +151,18 @@ export function LobbyScreen({
   session,
   currentParticipantId,
   isHost,
-  send
+  send,
+  apiBase = "",
+  profileAuth = null,
+  onProfileAuthChange = () => {}
 }: {
   session: SessionState;
   currentParticipantId: string;
   isHost: boolean;
   send: (event: ClientEvent) => void;
+  apiBase?: string;
+  profileAuth?: ProfileAuth | null;
+  onProfileAuthChange?: (auth: ProfileAuth | null) => void;
 }): JSX.Element {
   const activeRoster = session.participants.filter((p) => p.isActive !== false);
   const me = session.participants.find((p) => p.id === currentParticipantId);
@@ -186,6 +194,8 @@ export function LobbyScreen({
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
   const [memoryBoardSize, setMemoryBoardSize] = useState<"30" | "36">("30");
+  const [profileModalParticipantId, setProfileModalParticipantId] = useState<string | null>(null);
+  const [showMyProfile, setShowMyProfile] = useState(false);
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -344,32 +354,54 @@ export function LobbyScreen({
 
   return (
     <div className="lobby-grid">
-      <section className="card card-players">
-        <header className="card-head">
-          <h2>Players</h2>
-          <span className="count-pill">{session.participants.length}</span>
-        </header>
-        <PlayerList
-          session={session}
-          currentParticipantId={currentParticipantId}
-          isHost={isHost}
-          send={send}
-          allowActivate
-        />
-        {isHost && preferenceRows.length > 0 && (
-          <ul className="lobby-next-game-votes" aria-label="What guests want to play next">
-            {preferenceRows.map((p) => {
-              const gid = lobbyPrefs[p.id]!;
-              const title = GAMES.find((g) => g.id === gid)?.title ?? gid;
-              return (
-                <li key={p.id}>
-                  <strong>{p.displayName}</strong> wants to play {title}
-                </li>
-              );
-            })}
-          </ul>
+      <div className="lobby-side-rail">
+        <section className="card card-players">
+          <header className="card-head">
+            <h2>Players</h2>
+            <span className="count-pill">{session.participants.length}</span>
+          </header>
+          <PlayerList
+            session={session}
+            currentParticipantId={currentParticipantId}
+            isHost={isHost}
+            send={send}
+            allowActivate
+            onViewProfile={setProfileModalParticipantId}
+          />
+          {isHost && preferenceRows.length > 0 && (
+            <ul className="lobby-next-game-votes" aria-label="What guests want to play next">
+              {preferenceRows.map((p) => {
+                const gid = lobbyPrefs[p.id]!;
+                const title = GAMES.find((g) => g.id === gid)?.title ?? gid;
+                return (
+                  <li key={p.id}>
+                    <strong>{p.displayName}</strong> wants to play {title}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="card-footer card-footer-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowMyProfile((open) => !open)}
+            >
+              {showMyProfile ? "Hide Profile" : "Create/Load Profile"}
+            </button>
+          </div>
+        </section>
+        {showMyProfile && (
+          <MyProfilePanel
+            apiBase={apiBase}
+            sessionId={session.sessionId}
+            send={send}
+            hasLinkedProfile={Boolean(session.participants.find((participant) => participant.id === currentParticipantId)?.hasProfile)}
+            profileAuth={profileAuth}
+            onProfileAuthChange={onProfileAuthChange}
+          />
         )}
-      </section>
+      </div>
 
       {waitingOnBenchDuringGame ? (
         <section className="card card-games" aria-label="Game in progress">
@@ -718,6 +750,12 @@ export function LobbyScreen({
           </div>
         </section>
       )}
+      <ProfileViewModal
+        apiBase={apiBase}
+        sessionId={session.sessionId}
+        participantId={profileModalParticipantId}
+        onClose={() => setProfileModalParticipantId(null)}
+      />
     </div>
   );
 }

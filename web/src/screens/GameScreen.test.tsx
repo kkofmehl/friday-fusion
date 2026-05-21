@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../../shared/contracts";
 import { GameScreen } from "./GameScreen";
@@ -65,5 +65,22 @@ describe("GameScreen", () => {
     const iconPanel = screen.getByLabelText(/current game icon/i);
     const icon = iconPanel.querySelector("img.game-side-icon-image");
     expect(icon?.getAttribute("src")).toBe("/game_icons/memory.png");
+  });
+
+  it("opens profile panel when Create/Load Profile is clicked", () => {
+    render(
+      <GameScreen
+        session={buildSession()}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    expect(screen.queryByRole("heading", { name: "My Profile" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create/Load Profile" }));
+    expect(screen.getByRole("heading", { name: "My Profile" })).toBeDefined();
   });
 });

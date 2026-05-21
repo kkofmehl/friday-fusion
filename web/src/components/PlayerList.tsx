@@ -115,7 +115,8 @@ export function PlayerList({
   isHost = false,
   send,
   allowActivate = true,
-  allowBench = true
+  allowBench = true,
+  onViewProfile
 }: {
   session: SessionState;
   currentParticipantId: string;
@@ -125,6 +126,7 @@ export function PlayerList({
   allowActivate?: boolean;
   /** When false (in-game), host cannot bench players; use the lobby to bench before a game starts. */
   allowBench?: boolean;
+  onViewProfile?: (participantId: string) => void;
 }): JSX.Element {
   const hideScores = session.activeGame === "icebreaker";
   const ranked = hideScores
@@ -192,6 +194,17 @@ export function PlayerList({
               <span className="player-name">
                 {participant.displayName}
                 {isYou && <span className="player-you-tag">you</span>}
+                {participant.hasProfile && (
+                  <button
+                    type="button"
+                    className="player-profile-star"
+                    aria-label={`View profile for ${participant.displayName}`}
+                    title={`View profile for ${participant.displayName}`}
+                    onClick={() => onViewProfile?.(participant.id)}
+                  >
+                    ★
+                  </button>
+                )}
               </span>
               {isBeingUpdatedByHost && (
                 <p className="player-score-editing-notice" role="status">
