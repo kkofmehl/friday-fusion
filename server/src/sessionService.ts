@@ -39,9 +39,11 @@ import {
   type YahtzeeCategory,
   type YahtzeeMode,
   type YahtzeeSheetRow,
+  type MemoryCardPublic,
   SCATTERGORIES_ANSWER_MAX_CHARS,
   SCATTERGORIES_COUNTDOWN_MS
 } from "../../shared/contracts";
+import { getMemorySymbolById } from "../../shared/memorySymbols";
 import {
   computeYahtzeePlacement,
   grandTotalFromSheetRows,
@@ -72,6 +74,7 @@ import {
   shuffledResponseCardIds
 } from "./applesToApplesCardLoader";
 import { shuffledBsDeck } from "./bsDeck";
+import { buildMemoryDeck } from "./memoryDeck";
 import {
   fillMadlibTemplate,
   madlibBlankCount,
@@ -527,6 +530,28 @@ type StoryBuilderGameInternal = {
   usedStarterIds: string[];
 };
 
+type MemoryCardInternal = {
+  id: string;
+  symbolId: string;
+  matched: boolean;
+};
+
+type MemoryGameInternal = {
+  id: string;
+  type: "memory";
+  phase: "playing" | "resolving" | "finished";
+  boardSize: "30" | "36";
+  cols: number;
+  rows: number;
+  cards: MemoryCardInternal[];
+  playerOrder: string[];
+  currentPlayerIndex: number;
+  flippedCardIds: string[];
+  scores: Record<string, number>;
+  resolveEndsAtMs: number | null;
+  finalScores: Record<string, number> | null;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -545,7 +570,8 @@ type GameInternal =
   | CatchPhraseGameInternal
   | YahtzeeGameInternal
   | ScattergoriesGameInternal
-  | StoryBuilderGameInternal;
+  | StoryBuilderGameInternal
+  | MemoryGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1149,6 +1175,71 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       usedStarterIds: Array.isArray(g.usedStarterIds) ? g.usedStarterIds : []
     };
   }
+  if (game.type === "memory") {
+    const g = game as MemoryGameInternal;
+    const rawBoardSize = g.boardSize as string;
+    const boardSize = rawBoardSize === "36" || rawBoardSize === "40" ? "36" : "30";
+    const cols = 6;
+    const rows = boardSize === "36" ? 6 : Math.max(1, Math.floor(Number(g.rows) || 5));
+    const cards = Array.isArray(g.cards)
+      ? g.cards
+          .filter((c) => c && typeof c.id === "string" && typeof c.symbolId === "string")
+          .map((c) => ({
+            id: c.id,
+            symbolId: c.symbolId,
+            matched: c.matched === true
+          }))
+      : [];
+    const playerOrder = Array.isArray(g.playerOrder)
+      ? g.playerOrder.filter((id) => typeof id === "string" && id.length > 0)
+      : [];
+    let currentPlayerIndex = Math.max(0, Math.floor(Number(g.currentPlayerIndex) || 0));
+    if (playerOrder.length > 0) {
+      currentPlayerIndex %= playerOrder.length;
+    } else {
+      currentPlayerIndex = 0;
+    }
+    const persistedPhase =
+      g.phase === "finished" || g.phase === "resolving" || g.phase === "playing" ? g.phase : "playing";
+    const phase: MemoryGameInternal["phase"] =
+      persistedPhase === "resolving" ? "playing" : persistedPhase === "finished" ? "finished" : "playing";
+    let flippedCardIds = Array.isArray(g.flippedCardIds)
+      ? g.flippedCardIds.filter((id) => typeof id === "string" && id.length > 0)
+      : [];
+    if (persistedPhase === "resolving" || phase === "finished") {
+      flippedCardIds = [];
+    }
+    const scores: Record<string, number> = {};
+    if (g.scores && typeof g.scores === "object") {
+      for (const [k, v] of Object.entries(g.scores)) {
+        scores[k] = Math.max(0, Math.floor(Number(v) || 0));
+      }
+    }
+    const finalScores =
+      phase === "finished" && g.finalScores && typeof g.finalScores === "object"
+        ? Object.fromEntries(
+            Object.entries(g.finalScores).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v) || 0))])
+          )
+        : phase === "finished"
+          ? { ...scores }
+          : null;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      type: "memory",
+      boardSize,
+      cols,
+      rows,
+      cards,
+      playerOrder,
+      currentPlayerIndex,
+      flippedCardIds,
+      scores,
+      phase,
+      resolveEndsAtMs: null,
+      finalScores
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -1195,6 +1286,23 @@ const yahtzeeEveryoneFinished = (game: YahtzeeGameInternal): boolean => {
 
 /** Delay before others may call missed UNO after someone plays down to one card without declaring. */
 const UNO_MISS_CATCH_DELAY_MS = 2000;
+/** Memory: face-up time for a non-matching pair before flipping back. */
+const MEMORY_MISMATCH_DELAY_MS = 2000;
+
+const memoryCardToPublic = (card: MemoryCardInternal, game: MemoryGameInternal): MemoryCardPublic => {
+  const sym = getMemorySymbolById(card.symbolId);
+  const faceUp = card.matched || game.flippedCardIds.includes(card.id);
+  if (!sym || !faceUp) {
+    return { id: card.id, status: "hidden" };
+  }
+  const status = card.matched ? ("matched" as const) : ("shown" as const);
+  return {
+    id: card.id,
+    status,
+    symbolId: card.symbolId,
+    iconSrc: sym.iconSrc
+  };
+};
 const BS_RANKS: BsRank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
 const bsCurrentRank = (game: BsGameInternal): BsRank => BS_RANKS[game.currentRankIndex % BS_RANKS.length]!;
@@ -1503,6 +1611,7 @@ export class SessionService {
   private readonly pictionaryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly catchPhraseResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly scattergoriesResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly memoryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -1825,6 +1934,9 @@ export class SessionService {
     }
     if (previousGame?.type === "scattergories") {
       this.clearScattergoriesTimer(sessionId);
+    }
+    if (previousGame?.type === "memory") {
+      this.clearMemoryTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -2298,6 +2410,38 @@ export class SessionService {
         sentences,
         usedStarterIds
       };
+    } else if (game === "memory") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Memory needs at least two active players.");
+      }
+      this.clearMemoryTimer(sessionId);
+      const requested = options?.memoryBoardSize as string | undefined;
+      const boardSize = requested === "36" || requested === "40" ? "36" : "30";
+      const pairCount = boardSize === "36" ? 18 : 15;
+      const cols = 6;
+      const rows = boardSize === "36" ? 6 : 5;
+      const deck = buildMemoryDeck(pairCount);
+      const playerOrder = actives.map((p) => p.id);
+      const scores: Record<string, number> = {};
+      for (const pid of playerOrder) {
+        scores[pid] = 0;
+      }
+      next = {
+        id: nanoid(6),
+        type: "memory",
+        phase: "playing",
+        boardSize,
+        cols,
+        rows,
+        cards: deck.map((c) => ({ id: c.id, symbolId: c.symbolId, matched: false })),
+        playerOrder,
+        currentPlayerIndex: 0,
+        flippedCardIds: [],
+        scores,
+        resolveEndsAtMs: null,
+        finalScores: null
+      };
     } else if (game === "scattergories") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -2359,6 +2503,9 @@ export class SessionService {
     if (active?.type === "scattergories") {
       this.clearScattergoriesTimer(sessionId);
     }
+    if (active?.type === "memory") {
+      this.clearMemoryTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -2375,6 +2522,7 @@ export class SessionService {
     this.clearPictionaryTimer(sessionId);
     this.clearCatchPhraseTimer(sessionId);
     this.clearScattergoriesTimer(sessionId);
+    this.clearMemoryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2392,6 +2540,7 @@ export class SessionService {
     this.clearPictionaryTimer(sessionId);
     this.clearCatchPhraseTimer(sessionId);
     this.clearScattergoriesTimer(sessionId);
+    this.clearMemoryTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2511,6 +2660,12 @@ export class SessionService {
       session.games = [];
     }
 
+    const activeMemory = session.games[0];
+    if (activeMemory?.type === "memory") {
+      this.clearMemoryTimer(sessionId);
+      session.games = [];
+    }
+
     const activeStoryBuilder = session.games[0];
     if (activeStoryBuilder?.type === "storyBuilder") {
       const sb = activeStoryBuilder;
@@ -2563,6 +2718,7 @@ export class SessionService {
       this.clearPictionaryTimer(sessionId);
       this.clearCatchPhraseTimer(sessionId);
       this.clearScattergoriesTimer(sessionId);
+      this.clearMemoryTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -5897,6 +6053,116 @@ export class SessionService {
     }
   }
 
+  private clearMemoryTimer(sessionId: string): void {
+    const existing = this.memoryResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.memoryResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleMemoryMismatchResolve(sessionId: string): void {
+    this.clearMemoryTimer(sessionId);
+    const timer = setTimeout(() => {
+      void this.memoryResolveMismatchAfterDelay(sessionId).catch(() => {});
+    }, MEMORY_MISMATCH_DELAY_MS);
+    this.memoryResolveTimers.set(sessionId, timer);
+  }
+
+  private async memoryResolveMismatchAfterDelay(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      this.memoryResolveTimers.delete(sessionId);
+      return;
+    }
+    const game = session.games[0];
+    if (!game || game.type !== "memory" || game.phase !== "resolving") {
+      this.clearMemoryTimer(sessionId);
+      return;
+    }
+    this.clearMemoryTimer(sessionId);
+    game.phase = "playing";
+    game.flippedCardIds = [];
+    game.resolveEndsAtMs = null;
+    const n = game.playerOrder.length;
+    if (n > 0) {
+      game.currentPlayerIndex = (game.currentPlayerIndex + 1) % n;
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  public async memoryFlipCard(sessionId: string, participantId: string, cardId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (!game || game.type !== "memory") {
+      throw new Error("Memory is not active.");
+    }
+    if (game.phase !== "playing") {
+      throw new Error("Memory cannot flip a card right now.");
+    }
+    const currentPlayerId = game.playerOrder[game.currentPlayerIndex % game.playerOrder.length];
+    if (!currentPlayerId || currentPlayerId !== participantId) {
+      throw new Error("Not your turn.");
+    }
+    const card = game.cards.find((c) => c.id === cardId);
+    if (!card || card.matched) {
+      throw new Error("Invalid card.");
+    }
+    if (game.flippedCardIds.includes(cardId)) {
+      throw new Error("That card is already face up.");
+    }
+    if (game.flippedCardIds.length >= 2) {
+      throw new Error("Wait for the next turn.");
+    }
+    game.flippedCardIds.push(cardId);
+    session.updatedAt = Date.now();
+    await this.persist();
+
+    if (game.flippedCardIds.length < 2) {
+      return;
+    }
+
+    const [id1, id2] = game.flippedCardIds;
+    const c1 = game.cards.find((c) => c.id === id1);
+    const c2 = game.cards.find((c) => c.id === id2);
+    if (!c1 || !c2) {
+      game.flippedCardIds = [];
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+
+    if (c1.symbolId === c2.symbolId) {
+      c1.matched = true;
+      c2.matched = true;
+      game.flippedCardIds = [];
+      game.scores[participantId] = (game.scores[participantId] ?? 0) + 1;
+      const participant = session.participants.find((p) => p.id === participantId);
+      if (participant) {
+        participant.score += 1;
+      }
+      const allMatched = game.cards.every((c) => c.matched);
+      if (allMatched) {
+        game.phase = "finished";
+        game.finalScores = { ...game.scores };
+        game.resolveEndsAtMs = null;
+        this.clearMemoryTimer(sessionId);
+      }
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+
+    game.phase = "resolving";
+    game.resolveEndsAtMs = Date.now() + MEMORY_MISMATCH_DELAY_MS;
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleMemoryMismatchResolve(sessionId);
+  }
+
   private scheduleScattergoriesTimer(sessionId: string, deadlineMs: number, onFire: () => Promise<void>): void {
     this.clearScattergoriesTimer(sessionId);
     const delay = Math.max(0, deadlineMs - Date.now());
@@ -7850,6 +8116,74 @@ export class SessionService {
               sentenceCount: g.sentences.length,
               isFirstSentence
             }
+        }
+      };
+    }
+
+    if (game.type === "memory") {
+      const g = game as MemoryGameInternal;
+      const cards = g.cards.map((c) => memoryCardToPublic(c, g));
+      const scores: Record<string, number> = { ...g.scores };
+      for (const p of session.participants) {
+        if (scores[p.id] === undefined) {
+          scores[p.id] = 0;
+        }
+      }
+      const currentPlayerId = g.playerOrder[g.currentPlayerIndex % g.playerOrder.length] ?? "";
+      if (g.phase === "finished") {
+        const finalScores = g.finalScores ? { ...g.finalScores } : { ...scores };
+        return {
+          ...base,
+          activeGame: "memory",
+          gameState: {
+            type: "memory",
+            state: {
+              phase: "finished",
+              boardSize: g.boardSize,
+              cols: g.cols,
+              rows: g.rows,
+              cards,
+              scores,
+              finalScores
+            }
+          }
+        };
+      }
+      if (g.phase === "resolving") {
+        return {
+          ...base,
+          activeGame: "memory",
+          gameState: {
+            type: "memory",
+            state: {
+              phase: "resolving",
+              boardSize: g.boardSize,
+              cols: g.cols,
+              rows: g.rows,
+              cards,
+              currentPlayerId,
+              flippedCardIds: [...g.flippedCardIds],
+              scores,
+              resolveEndsAtMs: g.resolveEndsAtMs ?? Date.now() + MEMORY_MISMATCH_DELAY_MS
+            }
+          }
+        };
+      }
+      return {
+        ...base,
+        activeGame: "memory",
+        gameState: {
+          type: "memory",
+          state: {
+            phase: "playing",
+            boardSize: g.boardSize,
+            cols: g.cols,
+            rows: g.rows,
+            cards,
+            currentPlayerId,
+            flippedCardIds: [...g.flippedCardIds],
+            scores
+          }
         }
       };
     }

@@ -135,6 +135,13 @@ const GAMES: GameOption[] = [
     description:
       "Build a story one sentence at a time—each player only sees the line before theirs, then everyone reads the full tale together.",
     iconSrc: "/game_icons/story_builder.png"
+  },
+  {
+    id: "memory",
+    title: "Memory",
+    description:
+      "Classic matching pairs using Friday Fusion game icons. Match to score and go again; miss and the turn passes after a short reveal.",
+    iconSrc: "/game_icons/memory.png"
   }
 ];
 
@@ -178,6 +185,7 @@ export function LobbyScreen({
     const host = session.participants.find((p) => p.isHost);
     return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
   });
+  const [memoryBoardSize, setMemoryBoardSize] = useState<"30" | "36">("30");
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -316,6 +324,13 @@ export function LobbyScreen({
             storyBuilderFirstTurnParticipantId: storyBuilderFirstTurnId
           }
         }
+      });
+      return;
+    }
+    if (game === "memory") {
+      send({
+        type: "game:start",
+        payload: { game, options: { memoryBoardSize } }
       });
       return;
     }
@@ -608,6 +623,34 @@ export function LobbyScreen({
                       Everyone plays their own board at once; live progress tracks totals and rounds left.
                     </span>
                   </label>
+                </fieldset>
+              )}
+              {game.id === "memory" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Board size</legend>
+                  <label className={`mode-option${memoryBoardSize === "30" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="memory-board"
+                      value="30"
+                      checked={memoryBoardSize === "30"}
+                      onChange={() => setMemoryBoardSize("30")}
+                    />
+                    <span className="mode-option-title">30 cards</span>
+                    <span className="mode-option-hint">15 pairs in a 6×5 grid.</span>
+                  </label>
+                  <label className={`mode-option${memoryBoardSize === "36" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="memory-board"
+                      value="36"
+                      checked={memoryBoardSize === "36"}
+                      onChange={() => setMemoryBoardSize("36")}
+                    />
+                    <span className="mode-option-title">36 cards</span>
+                    <span className="mode-option-hint">18 pairs in a 6×6 grid (more game icons).</span>
+                  </label>
+                  <p className="mode-option-hint">Needs at least two active players.</p>
                 </fieldset>
               )}
               {game.id === "storyBuilder" && (

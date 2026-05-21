@@ -1135,6 +1135,12 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.storyBuilderComplete(context.sessionId, context.participantId);
         } else if (event.type === "storyBuilder:newStory") {
           await sessionService.storyBuilderNewStory(context.sessionId, context.participantId);
+        } else if (event.type === "memory:flipCard") {
+          await sessionService.memoryFlipCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

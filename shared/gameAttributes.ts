@@ -69,7 +69,8 @@ export const GAME_ATTRIBUTES_BY_TYPE: Record<GameType, readonly GameAttribute[]>
   catchPhrase: ["scorable", "game", "team", "long"],
   yahtzee: ["scorable", "game", "short"],
   scattergories: ["scorable", "game", "long"],
-  storyBuilder: ["activity", "long"]
+  storyBuilder: ["activity", "long"],
+  memory: ["scorable", "game", "short"]
 };
 
 export function getGameAttributes(game: GameType): readonly GameAttribute[] {

@@ -18,7 +18,8 @@ export const gameTypeSchema = z.enum([
   "catchPhrase",
   "yahtzee",
   "scattergories",
-  "storyBuilder"
+  "storyBuilder",
+  "memory"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -867,6 +868,50 @@ export const storyBuilderStateSchema = z.discriminatedUnion("status", [
 ]);
 export type StoryBuilderState = z.infer<typeof storyBuilderStateSchema>;
 
+export const memoryBoardSizeSchema = z.enum(["30", "36"]);
+export type MemoryBoardSize = z.infer<typeof memoryBoardSizeSchema>;
+
+export const memoryCardStatusSchema = z.enum(["hidden", "shown", "matched"]);
+export type MemoryCardStatus = z.infer<typeof memoryCardStatusSchema>;
+
+export const memoryCardPublicSchema = z.object({
+  id: z.string().min(1),
+  status: memoryCardStatusSchema,
+  symbolId: z.string().optional(),
+  iconSrc: z.string().optional()
+});
+export type MemoryCardPublic = z.infer<typeof memoryCardPublicSchema>;
+
+const memoryStatePlayingFieldsSchema = z.object({
+  boardSize: memoryBoardSizeSchema,
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+  cards: z.array(memoryCardPublicSchema),
+  currentPlayerId: z.string(),
+  flippedCardIds: z.array(z.string()),
+  scores: z.record(z.string(), z.number().int().nonnegative())
+});
+
+export const memoryStateSchema = z.discriminatedUnion("phase", [
+  memoryStatePlayingFieldsSchema.extend({
+    phase: z.literal("playing")
+  }),
+  memoryStatePlayingFieldsSchema.extend({
+    phase: z.literal("resolving"),
+    resolveEndsAtMs: z.number().int()
+  }),
+  z.object({
+    phase: z.literal("finished"),
+    boardSize: memoryBoardSizeSchema,
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    cards: z.array(memoryCardPublicSchema),
+    scores: z.record(z.string(), z.number().int().nonnegative()),
+    finalScores: z.record(z.string(), z.number().int().nonnegative())
+  })
+]);
+export type MemoryState = z.infer<typeof memoryStateSchema>;
+
 export const unoColorSchema = z.enum(["red", "yellow", "green", "blue", "wild"]);
 export type UnoColor = z.infer<typeof unoColorSchema>;
 
@@ -1135,6 +1180,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("storyBuilder"),
     state: storyBuilderStateSchema
+  }),
+  z.object({
+    type: z.literal("memory"),
+    state: memoryStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1248,7 +1297,9 @@ export const gameStartOptionsSchema = z.object({
   /** Story Builder: stock starters vs blank opening. */
   storyBuilderMode: storyBuilderModeSchema.optional(),
   /** Story Builder: who writes the first player sentence (stock: after starter; scratch: opening line). */
-  storyBuilderFirstTurnParticipantId: z.string().optional()
+  storyBuilderFirstTurnParticipantId: z.string().optional(),
+  /** Memory: 30 cards (15 pairs, 6×5) or 36 cards (18 pairs, 6×6). */
+  memoryBoardSize: memoryBoardSizeSchema.optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -1551,7 +1602,11 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({ sentence: z.string().trim().min(1).max(STORY_BUILDER_SENTENCE_MAX_CHARS) })
   }),
   z.object({ type: z.literal("storyBuilder:complete"), payload: z.object({}) }),
-  z.object({ type: z.literal("storyBuilder:newStory"), payload: z.object({}) })
+  z.object({ type: z.literal("storyBuilder:newStory"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("memory:flipCard"),
+    payload: z.object({ cardId: z.string().min(1) })
+  })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

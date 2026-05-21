@@ -515,7 +515,10 @@ describe("SessionService", () => {
 
     await setup.service.guessHangmanLetter(host.sessionId, guestTwo.participantId, "B");
     state = setup.service.getState(host.sessionId);
-    expect(state.gameState?.state.status).toBe("won");
+    if (!state.gameState || state.gameState.type !== "hangman") {
+      throw new Error("expected hangman");
+    }
+    expect(state.gameState.state.status).toBe("won");
     const guestTwoFinal = state.participants.find((p) => p.id === guestTwo.participantId);
     expect(guestTwoFinal?.score).toBe(1 + 3);
   });
@@ -632,7 +635,10 @@ describe("SessionService", () => {
     }
 
     const state = setup.service.getState(host.sessionId);
-    expect(state.gameState?.state.status).toBe("lost");
+    if (!state.gameState || state.gameState.type !== "hangman") {
+      throw new Error("expected hangman");
+    }
+    expect(state.gameState.state.status).toBe("lost");
     const lastWrong = state.participants.find((p) => p.id === guestTwo.participantId);
     expect(lastWrong?.score).toBe(-5);
     const otherGuesser = state.participants.find((p) => p.id === guestOne.participantId);
@@ -2482,8 +2488,8 @@ describe("SessionService", () => {
     expect(hostView.gameState.state.lastSentence).toBeNull();
 
     const g1View = setup.service.getState(host.sessionId, g1.participantId);
-    if (g1View.gameState?.type !== "storyBuilder") {
-      throw new Error("expected story builder");
+    if (g1View.gameState?.type !== "storyBuilder" || g1View.gameState.state.status !== "building") {
+      throw new Error("expected story builder building");
     }
     expect(g1View.gameState.state.lastSentence).toBeTruthy();
 
@@ -2566,7 +2572,9 @@ describe("SessionService", () => {
         throw new Error("expected yahtzee playing");
       }
       expect(s.gameState.state.rollsUsed).toBe(1);
-      expect(s.gameState.state.currentPlayerId).toBe(host.participantId);
+      if (s.gameState.state.mode === "turns") {
+        expect(s.gameState.state.currentPlayerId).toBe(host.participantId);
+      }
       await expect(setup.service.yahtzeeRoll(host.sessionId, g1.participantId)).rejects.toThrow("Not your turn.");
     });
 
@@ -2735,6 +2743,9 @@ describe("SessionService", () => {
         }
         if (st.gameState.state.status === "finished") {
           break;
+        }
+        if (st.gameState.state.status !== "playing" || st.gameState.state.mode !== "turns") {
+          throw new Error("expected yahtzee turns playing");
         }
         const cur = st.gameState.state.currentPlayerId;
         const n = st.gameState.state.sheetsByParticipant[cur]?.length ?? 0;

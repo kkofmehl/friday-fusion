@@ -4883,6 +4883,212 @@ label {
   }
 }
 
+/* Memory card game */
+.memory-game {
+  width: 100%;
+  max-width: min(56rem, 100%);
+  margin: 0 auto;
+}
+
+.memory-head h2 {
+  margin-bottom: 0.25rem;
+}
+
+.memory-sub {
+  margin: 0 0 1rem;
+  color: var(--muted, #6b7280);
+}
+
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.memory-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.memory-score {
+  display: flex;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.memory-score.is-me {
+  font-weight: 600;
+}
+
+.memory-score-val {
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-board {
+  --memory-cols: 6;
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  grid-template-columns: repeat(var(--memory-cols), minmax(2.75rem, 1fr));
+  align-items: stretch;
+}
+
+.memory-board--static .memory-card {
+  pointer-events: none;
+}
+
+/* Square in-flow box (::before) so grid rows have stable height; face is layered on top. */
+.memory-card--btn,
+.memory-board--static .memory-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: none;
+  font: inherit;
+}
+
+.memory-card--btn::before,
+.memory-board--static .memory-card::before {
+  content: "";
+  display: block;
+  padding-top: 100%;
+}
+
+.memory-card--btn {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  cursor: default;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.memory-card--btn.is-clickable {
+  cursor: pointer;
+}
+
+.memory-card--btn.is-clickable:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.memory-card--btn:disabled {
+  opacity: 1;
+}
+
+.memory-card-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.memory-card-inner:has(.memory-card-back) {
+  container-type: size;
+}
+
+.memory-card-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 78%;
+  height: 78%;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #5b7cfa 0%, #8b5cf6 100%);
+  opacity: 0.95;
+  position: relative;
+  overflow: hidden;
+}
+
+.memory-card-back::after {
+  content: "FF";
+  font-size: min(1.75rem, 42cqmin);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.38);
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  user-select: none;
+  pointer-events: none;
+}
+
+.memory-card.is-face-up .memory-card-inner {
+  border-radius: 8px;
+}
+
+/* Game icons on a dark face so lobby PNGs read clearly on the light card chrome. */
+.memory-card.is-face-up .memory-card-inner:has(.memory-card-icon) {
+  container-type: size;
+  background: linear-gradient(165deg, #475569 0%, #0f172a 100%);
+  padding: 6px;
+}
+
+.memory-card--matched .memory-card-inner:has(.memory-card-icon) {
+  background: linear-gradient(165deg, #15803d 0%, #0f172a 100%);
+  box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.5);
+}
+
+.memory-card-icon {
+  width: 88%;
+  height: 88%;
+  max-width: 88%;
+  max-height: 88%;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
+.memory-card-fallback {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.memory-leaderboard {
+  margin-top: 1.5rem;
+}
+
+.memory-lb-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  max-width: 360px;
+}
+
+.memory-lb-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.memory-lb-rank {
+  width: 1.5rem;
+  color: var(--muted, #6b7280);
+}
+
+.memory-lb-name {
+  flex: 1;
+}
+
+.memory-lb-pts {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn,
   .player-row,
@@ -4893,7 +5099,8 @@ label {
   .toast,
   .connection-pill-pending .connection-dot,
   .emoji-reaction-float,
-  .story-builder-reveal {
+  .story-builder-reveal,
+  .memory-card--btn {
     animation: none !important;
     transition: none !important;
   }

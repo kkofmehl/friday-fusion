@@ -34,4 +34,36 @@ describe("GameScreen", () => {
     expect(icon).not.toBeNull();
     expect(icon?.getAttribute("src")).toBe("/game_icons/yahtzee.png");
   });
+
+  it("renders memory game icon when memory is active", () => {
+    render(
+      <GameScreen
+        session={buildSession({
+          activeGame: "memory",
+          gameState: {
+            type: "memory",
+            state: {
+              phase: "playing",
+              boardSize: "30",
+              cols: 6,
+              rows: 5,
+              currentPlayerId: "p1",
+              flippedCardIds: [],
+              scores: { p1: 0, p2: 0 },
+              cards: []
+            }
+          }
+        })}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    const iconPanel = screen.getByLabelText(/current game icon/i);
+    const icon = iconPanel.querySelector("img.game-side-icon-image");
+    expect(icon?.getAttribute("src")).toBe("/game_icons/memory.png");
+  });
 });

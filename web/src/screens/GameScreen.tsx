@@ -19,6 +19,7 @@ import { CatchPhraseGame } from "../games/CatchPhraseGame";
 import { YahtzeeGame } from "../games/YahtzeeGame";
 import { ScattergoriesGame } from "../games/ScattergoriesGame";
 import { StoryBuilderGame } from "../games/StoryBuilderGame";
+import { MemoryGame } from "../games/MemoryGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -38,7 +39,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   catchPhrase: "/game_icons/catchphrase.png",
   yahtzee: "/game_icons/yahtzee.png",
   scattergories: "/game_icons/scattegories.png",
-  storyBuilder: "/game_icons/story_builder.png"
+  storyBuilder: "/game_icons/story_builder.png",
+  memory: "/game_icons/memory.png"
 };
 
 export function GameScreen({
@@ -149,6 +151,14 @@ export function GameScreen({
             storyBuilderMode: session.gameState.state.mode,
             storyBuilderFirstTurnParticipantId: session.gameState.state.firstTurnParticipantId
           }
+        }
+      }
+    : session.gameState?.type === "memory"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "memory",
+          options: { memoryBoardSize: session.gameState.state.boardSize }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -329,6 +339,16 @@ export function GameScreen({
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}
+          canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "memory") {
+      return (
+        <MemoryGame
+          session={session}
+          currentParticipantId={currentParticipantId}
           canPlay={canPlay}
           send={send}
         />

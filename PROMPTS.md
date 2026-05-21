@@ -64,3 +64,7 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-16:** Build Scattergories into Friday Fusion: host picks or randomizes category card and letter, configurable answer timer (60/90/120/180s), 3-second countdown, timed answer entry with client letter validation, host review with per-answer accept/reject and multi-word scoring, another round in-session without leaving the game.
 
 **2026-05-20:** Story Builder game for Friday Fusion: collaborative sentence-by-sentence story with per-viewer masking (only active writer sees previous line), host lobby options (stock starters vs scratch, who goes first), ~30 starter lines + loader tests, complete/reveal with fade-in and reduced-motion support, host "new story" after reveal, contracts + SessionService + WebSocket + UI tests.
+
+**2026-05-21:** Add a Memory card game to Friday Fusion: 30 or 40 cards, turn-based two flips per turn, match scores and extra turn, 2s reveal on mismatch then next player; mixed Friday Fusion game icons and emoji symbols; host board size in lobby; contracts, server timers + SessionService, MemoryGame UI, tests, and lobby icon.
+
+**2026-05-21:** Memory audible — drop emoji/extra sprites; use only Friday Fusion `/game_icons/` PNGs; larger board option becomes 36 cards (18 pairs, 6×6) since catalog has 19 game icons max.
