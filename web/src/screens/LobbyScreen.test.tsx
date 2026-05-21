@@ -179,6 +179,14 @@ describe("LobbyScreen", () => {
     const twentyCard = screen.getByRole("heading", { name: "20 Questions" }).closest("article");
     if (!twentyCard) throw new Error("expected 20 Questions card");
     expect(within(twentyCard).getByLabelText(/^Team game\. Works best when/i)).toBeDefined();
+
+    const applesCard = screen.getByRole("heading", { name: "Apples to Apples" }).closest("article");
+    if (!applesCard) throw new Error("expected Apples to Apples card");
+    expect(
+      within(applesCard).getByLabelText(/Scorable points\. Session scoreboard tracks points/i)
+    ).toBeDefined();
+    expect(within(applesCard).getByLabelText(/^Game\. Structured rounds/i)).toBeDefined();
+    expect(within(applesCard).getByLabelText(/^Longer time\. Often needs more time/i)).toBeDefined();
   });
 
   it("renders game icons from the game_icons directory", () => {

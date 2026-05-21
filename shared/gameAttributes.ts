@@ -62,7 +62,7 @@ export const GAME_ATTRIBUTES_BY_TYPE: Record<GameType, readonly GameAttribute[]>
   twentyQuestions: ["scorable", "game", "team", "long"],
   captionThis: ["activity", "long"],
   pictionary: ["scorable", "game", "team", "long"],
-  applesToApples: ["game", "long"],
+  applesToApples: ["scorable", "game", "long"],
   uno: ["scorable", "game", "long"],
   bs: ["scorable", "game", "long"],
   madlibs: ["activity", "short"],

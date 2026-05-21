@@ -68,3 +68,5 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-21:** Add a Memory card game to Friday Fusion: 30 or 40 cards, turn-based two flips per turn, match scores and extra turn, 2s reveal on mismatch then next player; mixed Friday Fusion game icons and emoji symbols; host board size in lobby; contracts, server timers + SessionService, MemoryGame UI, tests, and lobby icon.
 
 **2026-05-21:** Memory audible — drop emoji/extra sprites; use only Friday Fusion `/game_icons/` PNGs; larger board option becomes 36 cards (18 pairs, 6×6) since catalog has 19 game icons max.
+
+**2026-05-21:** Apples to Apples scoring — award one point when the judge picks a player's card; mark the game as scorable on the lobby dashboard.

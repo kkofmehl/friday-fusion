@@ -1699,6 +1699,55 @@ describe("SessionService", () => {
     );
   });
 
+  it("Apples to Apples: awards one point to the player whose card the judge picks", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const p2 = await setup.service.joinSession(host.joinCode, "Two");
+    const p3 = await setup.service.joinSession(host.joinCode, "Three");
+    await setup.service.startGame(host.sessionId, "applesToApples", { applesToApplesMode: "standard" });
+
+    const p2View = setup.service.getState(host.sessionId, p2.participantId);
+    if (p2View.gameState?.type !== "applesToApples" || p2View.gameState.state.status !== "collecting") {
+      throw new Error("expected collecting");
+    }
+    const p3View = setup.service.getState(host.sessionId, p3.participantId);
+    if (p3View.gameState?.type !== "applesToApples" || p3View.gameState.state.status !== "collecting") {
+      throw new Error("expected collecting for p3");
+    }
+
+    await setup.service.applesToApplesSubmitCard(host.sessionId, p2.participantId, p2View.gameState.state.myHand![0]!.id);
+    await setup.service.applesToApplesSubmitCard(host.sessionId, p3.participantId, p3View.gameState.state.myHand![0]!.id);
+
+    const judgeView = setup.service.getState(host.sessionId, host.participantId);
+    if (judgeView.gameState?.type !== "applesToApples" || judgeView.gameState.state.status !== "judging") {
+      throw new Error("expected judging");
+    }
+    const opts = judgeView.gameState.state.anonymousOptions;
+    if (!opts[0]) {
+      throw new Error("expected options");
+    }
+
+    const before = new Map(
+      setup.service.getState(host.sessionId).participants.map((p) => [p.id, p.score])
+    );
+    await setup.service.applesToApplesJudgePick(host.sessionId, host.participantId, opts[0].entryId);
+
+    const after = setup.service.getState(host.sessionId);
+    const winnerId = after.gameState?.type === "applesToApples" && after.gameState.state.status === "roundResult"
+      ? after.gameState.state.winnerParticipantId
+      : null;
+    if (!winnerId) {
+      throw new Error("expected roundResult with winner");
+    }
+    expect(after.participants.find((p) => p.id === winnerId)?.score).toBe((before.get(winnerId) ?? 0) + 1);
+    for (const p of after.participants) {
+      if (p.id !== winnerId) {
+        expect(p.score).toBe(before.get(p.id) ?? 0);
+      }
+    }
+  });
+
   it("Apples to Apples: standard mode refills hands to six after a round", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;
