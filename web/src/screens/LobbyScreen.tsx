@@ -10,7 +10,9 @@ import {
   type YahtzeeMode,
   type SessionState
 } from "../../../shared/contracts";
+import { GameAttributeBadge, GameAttributeLegend } from "../components/GameAttributeBadge";
 import { PlayerList } from "../components/PlayerList";
+import { getGameAttributes } from "../../../shared/gameAttributes";
 
 const GUESS_IMAGE_LOBBY_EVERYONE = "everyone";
 
@@ -368,6 +370,7 @@ export function LobbyScreen({
             <h2>Choose a game</h2>
             {!isHost && <span className="pill pill-muted">Host picks</span>}
           </header>
+          <GameAttributeLegend />
           <div className="game-grid">
             {GAMES.map((game) => (
             <article key={game.id} className="game-card">
@@ -375,6 +378,13 @@ export function LobbyScreen({
                 <img className="game-card-icon" src={game.iconSrc} alt="" loading="lazy" />
               </div>
               <h3>{game.title}</h3>
+              <ul className="game-card-attributes" aria-label={`${game.title} attributes`}>
+                {getGameAttributes(game.id).map((attr) => (
+                  <li key={attr}>
+                    <GameAttributeBadge attribute={attr} />
+                  </li>
+                ))}
+              </ul>
               <p>{game.description}</p>
               {game.id === "hangman" && (
                 <fieldset className="mode-picker" disabled={!isHost}>

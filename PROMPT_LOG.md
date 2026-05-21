@@ -191,3 +191,7 @@
 
 95. User requested Scattergories duplicate-answer validation (red inputs while answering), host duplicate awareness during judging with accept disabled, and automatic no-point scoring for blank answers without host clicks.
 96. User requested **Story Builder** in Friday Fusion: collaborative story built one sentence at a time with each writer only seeing the previous line until the host completes; host lobby options for ~30 stock starters vs scratch and who goes first; full-story reveal with fade-in for everyone; after reveal the host can start a new story without returning to the lobby. Assistant implemented contracts, starter library + loader, `SessionService` and WebSocket handlers, lobby and game UI (including reduced-motion), tests, and prompt log updates.
+
+## 2026-05-21
+
+97. User requested **game attribute badges** on lobby game cards: six attributes (Scorable points, Game, Activity, Team game, Shorter time, Longer time) with inline SVG + short labels, a legend above the game grid, per-game mappings for all listed modes (Hangman through Story Builder), and tests plus prompt log updates.

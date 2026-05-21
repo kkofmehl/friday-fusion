@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../../shared/contracts";
 import { LobbyScreen } from "./LobbyScreen";
@@ -143,6 +143,44 @@ describe("LobbyScreen", () => {
     });
   });
 
+  it("renders the game attribute legend with all six attribute labels", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+
+    const legend = screen.getByLabelText("Game attribute legend");
+    const labels = [
+      "Scorable points",
+      "Game",
+      "Activity",
+      "Team game",
+      "Shorter time",
+      "Longer time"
+    ];
+    for (const label of labels) {
+      expect(within(legend).getByText(label)).toBeDefined();
+    }
+  });
+
+  it("renders attribute badges with accessible names on sample game cards", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+
+    const hangmanCard = screen.getByRole("heading", { name: "Hangman" }).closest("article");
+    if (!hangmanCard) throw new Error("expected Hangman card");
+    expect(
+      within(hangmanCard).getByLabelText(/Scorable points\. Session scoreboard tracks points/i)
+    ).toBeDefined();
+    expect(within(hangmanCard).getByLabelText(/^Game\. Structured rounds/i)).toBeDefined();
+    expect(within(hangmanCard).getByLabelText(/^Shorter time\. Typically quicker/i)).toBeDefined();
+
+    const madlibsCard = screen.getByRole("heading", { name: "Madlibs" }).closest("article");
+    if (!madlibsCard) throw new Error("expected Madlibs card");
+    expect(within(madlibsCard).getByLabelText(/^Activity\. Conversation-first/i)).toBeDefined();
+    expect(within(madlibsCard).getByLabelText(/^Shorter time\. Typically quicker/i)).toBeDefined();
+
+    const twentyCard = screen.getByRole("heading", { name: "20 Questions" }).closest("article");
+    if (!twentyCard) throw new Error("expected 20 Questions card");
+    expect(within(twentyCard).getByLabelText(/^Team game\. Works best when/i)).toBeDefined();
+  });
+
   it("renders game icons from the game_icons directory", () => {
     render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
 
@@ -150,6 +188,7 @@ describe("LobbyScreen", () => {
       ["Hangman", "/game_icons/hangman.png"],
       ["Two Truths and a Lie", "/game_icons/two_truths_and_one_lie.png"],
       ["Trivia", "/game_icons/trivia.png"],
+      ["Would You Rather", "/game_icons/would_you_rather.png"],
       ["Icebreaker Questions", "/game_icons/ice_breaker_questions.png"],
       ["Guess Who Said It?", "/game_icons/guess_who_said_it.png"],
       ["Guess the image", "/game_icons/guess_the_image.png"],
