@@ -1125,6 +1125,16 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.madlibsPassRead(context.sessionId, context.participantId);
         } else if (event.type === "madlibs:nextRound") {
           await sessionService.madlibsNextRound(context.sessionId, context.participantId);
+        } else if (event.type === "storyBuilder:submitSentence") {
+          await sessionService.storyBuilderSubmitSentence(
+            context.sessionId,
+            context.participantId,
+            event.payload.sentence
+          );
+        } else if (event.type === "storyBuilder:complete") {
+          await sessionService.storyBuilderComplete(context.sessionId, context.participantId);
+        } else if (event.type === "storyBuilder:newStory") {
+          await sessionService.storyBuilderNewStory(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

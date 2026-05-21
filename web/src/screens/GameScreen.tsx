@@ -18,6 +18,7 @@ import { MadlibsGame } from "../games/MadlibsGame";
 import { CatchPhraseGame } from "../games/CatchPhraseGame";
 import { YahtzeeGame } from "../games/YahtzeeGame";
 import { ScattergoriesGame } from "../games/ScattergoriesGame";
+import { StoryBuilderGame } from "../games/StoryBuilderGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -36,7 +37,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   madlibs: "/game_icons/madlibs.png",
   catchPhrase: "/game_icons/catchphrase.png",
   yahtzee: "/game_icons/yahtzee.png",
-  scattergories: "/game_icons/scattegories.png"
+  scattergories: "/game_icons/scattegories.png",
+  storyBuilder: "/game_icons/story_builder.png"
 };
 
 export function GameScreen({
@@ -138,6 +140,17 @@ export function GameScreen({
       }
     : session.gameState?.type === "scattergories"
     ? { type: "game:start", payload: { game: "scattergories" } }
+    : session.gameState?.type === "storyBuilder"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "storyBuilder",
+          options: {
+            storyBuilderMode: session.gameState.state.mode,
+            storyBuilderFirstTurnParticipantId: session.gameState.state.firstTurnParticipantId
+          }
+        }
+      }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
   const currentGameId = session.gameState?.type ?? session.activeGame;
   const currentGameIcon = currentGameId ? GAME_ICON_BY_ID[currentGameId] : null;
@@ -307,6 +320,17 @@ export function GameScreen({
           canPlay={canPlay}
           send={send}
           apiBase={apiBase}
+        />
+      );
+    }
+    if (session.gameState?.type === "storyBuilder") {
+      return (
+        <StoryBuilderGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
+          send={send}
         />
       );
     }

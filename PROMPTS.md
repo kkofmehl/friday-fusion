@@ -62,3 +62,5 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-19:** Polish Yahtzee end-of-game UI: leaderboard table with rank, final score, Yahtzee and 63+ upper bonus checkmarks, and Friday Fusion placement points.
 
 **2026-05-16:** Build Scattergories into Friday Fusion: host picks or randomizes category card and letter, configurable answer timer (60/90/120/180s), 3-second countdown, timed answer entry with client letter validation, host review with per-answer accept/reject and multi-word scoring, another round in-session without leaving the game.
+
+**2026-05-20:** Story Builder game for Friday Fusion: collaborative sentence-by-sentence story with per-viewer masking (only active writer sees previous line), host lobby options (stock starters vs scratch, who goes first), ~30 starter lines + loader tests, complete/reveal with fade-in and reduced-motion support, host "new story" after reveal, contracts + SessionService + WebSocket + UI tests.

@@ -17,7 +17,8 @@ export const gameTypeSchema = z.enum([
   "madlibs",
   "catchPhrase",
   "yahtzee",
-  "scattergories"
+  "scattergories",
+  "storyBuilder"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -833,6 +834,39 @@ export const madlibsStateSchema = z.discriminatedUnion("status", [
 ]);
 export type MadlibsState = z.infer<typeof madlibsStateSchema>;
 
+export const STORY_BUILDER_SENTENCE_MAX_CHARS = 240;
+
+export const storyBuilderModeSchema = z.enum(["stock", "scratch"]);
+export type StoryBuilderMode = z.infer<typeof storyBuilderModeSchema>;
+
+export const storyBuilderSentenceEntrySchema = z.object({
+  participantId: z.string().nullable(),
+  text: z.string().min(1)
+});
+export type StoryBuilderSentenceEntry = z.infer<typeof storyBuilderSentenceEntrySchema>;
+
+export const storyBuilderStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("building"),
+    mode: storyBuilderModeSchema,
+    firstTurnParticipantId: z.string(),
+    currentTurnParticipantId: z.string(),
+    /** Only the active writer receives the previous line; others see null. */
+    lastSentence: z.string().nullable(),
+    sentenceCount: z.number().int().nonnegative(),
+    /** True when scratch mode has no sentences yet and it is the opener's turn. */
+    isFirstSentence: z.boolean()
+  }),
+  z.object({
+    status: z.literal("complete"),
+    mode: storyBuilderModeSchema,
+    firstTurnParticipantId: z.string(),
+    fullStory: z.string().min(1),
+    sentences: z.array(storyBuilderSentenceEntrySchema)
+  })
+]);
+export type StoryBuilderState = z.infer<typeof storyBuilderStateSchema>;
+
 export const unoColorSchema = z.enum(["red", "yellow", "green", "blue", "wild"]);
 export type UnoColor = z.infer<typeof unoColorSchema>;
 
@@ -1097,6 +1131,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("scattergories"),
     state: scattergoriesStateSchema
+  }),
+  z.object({
+    type: z.literal("storyBuilder"),
+    state: storyBuilderStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1206,7 +1244,11 @@ export const gameStartOptionsSchema = z.object({
   /** Would You Rather: number of stock prompts to run before submitted prompts. */
   wouldYouRatherTotalQuestions: z.number().int().positive().optional(),
   /** Would You Rather: players can submit prompts during round if enabled. */
-  wouldYouRatherAllowParticipantSubmissions: z.boolean().optional()
+  wouldYouRatherAllowParticipantSubmissions: z.boolean().optional(),
+  /** Story Builder: stock starters vs blank opening. */
+  storyBuilderMode: storyBuilderModeSchema.optional(),
+  /** Story Builder: who writes the first player sentence (stock: after starter; scratch: opening line). */
+  storyBuilderFirstTurnParticipantId: z.string().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -1503,7 +1545,13 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     })
   }),
   z.object({ type: z.literal("scattergories:nextPrompt"), payload: z.object({}) }),
-  z.object({ type: z.literal("scattergories:newRound"), payload: z.object({}) })
+  z.object({ type: z.literal("scattergories:newRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("storyBuilder:submitSentence"),
+    payload: z.object({ sentence: z.string().trim().min(1).max(STORY_BUILDER_SENTENCE_MAX_CHARS) })
+  }),
+  z.object({ type: z.literal("storyBuilder:complete"), payload: z.object({}) }),
+  z.object({ type: z.literal("storyBuilder:newStory"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

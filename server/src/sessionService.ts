@@ -21,6 +21,7 @@ import {
   PICTORY_STROKE_MAX_POINTS,
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
+  STORY_BUILDER_SENTENCE_MAX_CHARS,
   gameTypeSchema,
   type GameStartOptions,
   type GameType,
@@ -77,6 +78,7 @@ import {
   pickMadlibTemplate,
   type MadlibTemplate
 } from "./madlibsTemplates";
+import { pickStoryBuilderStarter } from "./storyBuilderStarters";
 import { shuffledUnoDeck } from "./unoDeck";
 import {
   getScattergoriesListById,
@@ -513,6 +515,18 @@ type ScattergoriesGameInternal = {
   roundScoreDelta: Record<string, number>;
 };
 
+type StoryBuilderGameInternal = {
+  id: string;
+  type: "storyBuilder";
+  status: "building" | "complete";
+  mode: "stock" | "scratch";
+  firstTurnParticipantId: string;
+  turnOrder: string[];
+  currentTurnIndex: number;
+  sentences: { participantId: string | null; text: string }[];
+  usedStarterIds: string[];
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -530,7 +544,8 @@ type GameInternal =
   | MadlibsGameInternal
   | CatchPhraseGameInternal
   | YahtzeeGameInternal
-  | ScattergoriesGameInternal;
+  | ScattergoriesGameInternal
+  | StoryBuilderGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1104,6 +1119,36 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       winnerParticipantId: typeof g.winnerParticipantId === "string" ? g.winnerParticipantId : null
     };
   }
+  if (game.type === "storyBuilder") {
+    const g = game as StoryBuilderGameInternal;
+    const sentences = Array.isArray(g.sentences)
+      ? g.sentences
+          .filter((row) => row && typeof row.text === "string")
+          .map((row) => ({
+            participantId: typeof row.participantId === "string" ? row.participantId : null,
+            text: row.text.trim()
+          }))
+          .filter((row) => row.text.length > 0)
+      : [];
+    const turnOrder = Array.isArray(g.turnOrder) ? g.turnOrder.filter((id) => typeof id === "string" && id.length > 0) : [];
+    let currentTurnIndex = Math.max(0, Math.floor(Number(g.currentTurnIndex) || 0));
+    if (turnOrder.length > 0) {
+      currentTurnIndex %= turnOrder.length;
+    } else {
+      currentTurnIndex = 0;
+    }
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      status: g.status === "complete" ? "complete" : "building",
+      mode: g.mode === "scratch" ? "scratch" : "stock",
+      firstTurnParticipantId: typeof g.firstTurnParticipantId === "string" ? g.firstTurnParticipantId : "",
+      turnOrder,
+      currentTurnIndex,
+      sentences,
+      usedStarterIds: Array.isArray(g.usedStarterIds) ? g.usedStarterIds : []
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -1177,6 +1222,18 @@ const madlibsPickReader = (participantIds: string[], avoidParticipantId: string 
   const pool = preferred.length > 0 ? preferred : participantIds;
   return pool[Math.floor(Math.random() * pool.length)] ?? null;
 };
+
+const storyBuilderRotateTurnOrder = (participantIds: string[], firstTurnParticipantId: string): string[] => {
+  if (participantIds.length === 0) {
+    return [];
+  }
+  const idx = participantIds.indexOf(firstTurnParticipantId);
+  const start = idx === -1 ? 0 : idx;
+  return [...participantIds.slice(start), ...participantIds.slice(0, start)];
+};
+
+const storyBuilderJoinFullStory = (sentences: { text: string }[]): string =>
+  sentences.map((entry) => entry.text.trim()).filter(Boolean).join(" ");
 
 const shuffleEntryIds = (ids: string[]): string[] => {
   const a = [...ids];
@@ -2211,6 +2268,36 @@ export class SessionService {
         sheetsByParticipant,
         scoresApplied: false
       };
+    } else if (game === "storyBuilder") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Story Builder needs at least two active players.");
+      }
+      const activeIds = actives.map((participant) => participant.id);
+      const hostId = actives.find((participant) => participant.isHost)?.id ?? actives[0]!.id;
+      const requestedFirst = options.storyBuilderFirstTurnParticipantId;
+      const firstTurnId =
+        requestedFirst && activeIds.includes(requestedFirst) ? requestedFirst : hostId;
+      const mode = options.storyBuilderMode === "scratch" ? "scratch" : "stock";
+      const turnOrder = storyBuilderRotateTurnOrder(activeIds, firstTurnId);
+      let sentences: { participantId: string | null; text: string }[] = [];
+      let usedStarterIds: string[] = [];
+      if (mode === "stock") {
+        const starter = pickStoryBuilderStarter([]);
+        sentences = [{ participantId: null, text: starter.text }];
+        usedStarterIds = [starter.id];
+      }
+      next = {
+        id: nanoid(6),
+        type: "storyBuilder",
+        status: "building",
+        mode,
+        firstTurnParticipantId: firstTurnId,
+        turnOrder,
+        currentTurnIndex: 0,
+        sentences,
+        usedStarterIds
+      };
     } else if (game === "scattergories") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -2422,6 +2509,23 @@ export class SessionService {
     const activeBs = session.games[0];
     if (activeBs?.type === "bs") {
       session.games = [];
+    }
+
+    const activeStoryBuilder = session.games[0];
+    if (activeStoryBuilder?.type === "storyBuilder") {
+      const sb = activeStoryBuilder;
+      const removedIdx = sb.turnOrder.indexOf(participantId);
+      if (removedIdx !== -1) {
+        sb.turnOrder = sb.turnOrder.filter((id) => id !== participantId);
+        if (removedIdx < sb.currentTurnIndex) {
+          sb.currentTurnIndex -= 1;
+        }
+        if (sb.turnOrder.length < 2) {
+          session.games = [];
+        } else if (sb.currentTurnIndex >= sb.turnOrder.length) {
+          sb.currentTurnIndex = 0;
+        }
+      }
     }
 
     const activeMadlibs = session.games[0];
@@ -5210,6 +5314,89 @@ export class SessionService {
     await this.persist();
   }
 
+  public async storyBuilderSubmitSentence(sessionId: string, participantId: string, sentence: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "storyBuilder" || game.status !== "building") {
+      throw new Error("Story Builder is not accepting sentences right now.");
+    }
+    if (game.turnOrder.length === 0) {
+      throw new Error("Story Builder has no turn order.");
+    }
+    const currentTurnParticipantId =
+      game.turnOrder[game.currentTurnIndex % game.turnOrder.length] ?? null;
+    if (currentTurnParticipantId !== participantId) {
+      throw new Error("It is not your turn to add a sentence.");
+    }
+    const trimmed = sentence.trim();
+    if (!trimmed) {
+      throw new Error("Please enter a sentence.");
+    }
+    if (trimmed.length > STORY_BUILDER_SENTENCE_MAX_CHARS) {
+      throw new Error(`Sentences must be at most ${STORY_BUILDER_SENTENCE_MAX_CHARS} characters.`);
+    }
+    game.sentences.push({ participantId, text: trimmed });
+    game.currentTurnIndex = (game.currentTurnIndex + 1) % game.turnOrder.length;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async storyBuilderComplete(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can complete the story.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "storyBuilder" || game.status !== "building") {
+      throw new Error("Story Builder is not in progress.");
+    }
+    if (
+      game.mode === "scratch"
+      && !game.sentences.some((row) => row.participantId !== null)
+    ) {
+      throw new Error("Add at least one sentence before completing the story.");
+    }
+    game.status = "complete";
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async storyBuilderNewStory(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can start a new story.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "storyBuilder" || game.status !== "complete") {
+      throw new Error("Story Builder is not ready for a new story.");
+    }
+    const actives = activeParticipants(session);
+    if (actives.length < 2) {
+      throw new Error("Story Builder needs at least two active players.");
+    }
+    const activeIds = actives.map((p) => p.id);
+    let firstId = game.firstTurnParticipantId;
+    if (!activeIds.includes(firstId)) {
+      firstId = actives.find((p) => p.isHost)?.id ?? actives[0]!.id;
+    }
+    game.firstTurnParticipantId = firstId;
+    game.turnOrder = storyBuilderRotateTurnOrder(activeIds, firstId);
+    game.currentTurnIndex = 0;
+    game.status = "building";
+    if (game.mode === "stock") {
+      const starter = pickStoryBuilderStarter(game.usedStarterIds);
+      game.sentences = [{ participantId: null, text: starter.text }];
+      game.usedStarterIds = [...game.usedStarterIds, starter.id];
+    } else {
+      game.sentences = [];
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private clearCatchPhraseTimer(sessionId: string): void {
     const existing = this.catchPhraseResolveTimers.get(sessionId);
     if (existing) {
@@ -7612,6 +7799,59 @@ export class SessionService {
         };
       }
       throw new Error(`Invalid scattergories phase: ${game.status}`);
+    }
+
+    if (game.type === "storyBuilder") {
+      const g = game as StoryBuilderGameInternal;
+      if (g.status === "complete") {
+        const sentences = g.sentences.map((row) => ({
+          participantId: row.participantId,
+          text: row.text
+        }));
+        return {
+          ...base,
+          activeGame: "storyBuilder",
+          gameState: {
+            type: "storyBuilder",
+            state: {
+              status: "complete",
+              mode: g.mode,
+              firstTurnParticipantId: g.firstTurnParticipantId,
+              fullStory: storyBuilderJoinFullStory(g.sentences),
+              sentences
+            }
+          }
+        };
+      }
+      const currentTurnParticipantId =
+        g.turnOrder.length > 0 ? g.turnOrder[g.currentTurnIndex % g.turnOrder.length]! : "";
+      const isCurrentWriter = Boolean(viewerParticipantId && viewerParticipantId === currentTurnParticipantId);
+      let lastSentence: string | null = null;
+      let isFirstSentence = false;
+      if (isCurrentWriter) {
+        if (g.sentences.length === 0) {
+          lastSentence = null;
+          isFirstSentence = g.mode === "scratch";
+        } else {
+          lastSentence = g.sentences[g.sentences.length - 1]!.text;
+        }
+      }
+      return {
+        ...base,
+        activeGame: "storyBuilder",
+        gameState: {
+          type: "storyBuilder",
+            state: {
+              status: "building",
+              mode: g.mode,
+              firstTurnParticipantId: g.firstTurnParticipantId,
+              currentTurnParticipantId,
+              lastSentence,
+              sentenceCount: g.sentences.length,
+              isFirstSentence
+            }
+        }
+      };
     }
 
     if (game.type === "uno") {

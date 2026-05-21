@@ -2453,6 +2453,105 @@ describe("SessionService", () => {
     );
   });
 
+  it("Story Builder: requires at least two players to start", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await expect(setup.service.startGame(host.sessionId, "storyBuilder")).rejects.toThrow(
+      "Story Builder needs at least two active players."
+    );
+  });
+
+  it("Story Builder: stock starter, first-turn option, masking, complete, and new story", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    await setup.service.joinSession(host.joinCode, "Guest 2");
+    await setup.service.startGame(host.sessionId, "storyBuilder", {
+      storyBuilderMode: "stock",
+      storyBuilderFirstTurnParticipantId: g1.participantId
+    });
+
+    let hostView = setup.service.getState(host.sessionId, host.participantId);
+    if (hostView.gameState?.type !== "storyBuilder" || hostView.gameState.state.status !== "building") {
+      throw new Error("expected story builder building");
+    }
+    expect(hostView.gameState.state.sentenceCount).toBe(1);
+    expect(hostView.gameState.state.currentTurnParticipantId).toBe(g1.participantId);
+    expect(hostView.gameState.state.lastSentence).toBeNull();
+
+    const g1View = setup.service.getState(host.sessionId, g1.participantId);
+    if (g1View.gameState?.type !== "storyBuilder") {
+      throw new Error("expected story builder");
+    }
+    expect(g1View.gameState.state.lastSentence).toBeTruthy();
+
+    await expect(setup.service.storyBuilderSubmitSentence(host.sessionId, host.participantId, "Nope.")).rejects.toThrow(
+      "It is not your turn to add a sentence."
+    );
+
+    await setup.service.storyBuilderSubmitSentence(host.sessionId, g1.participantId, "Guest one adds a twist.");
+    const afterSubmit = setup.service.getState(host.sessionId, host.participantId);
+    if (afterSubmit.gameState?.type !== "storyBuilder" || afterSubmit.gameState.state.status !== "building") {
+      throw new Error("expected building after submit");
+    }
+    expect(afterSubmit.gameState.state.currentTurnParticipantId).not.toBe(g1.participantId);
+
+    await setup.service.storyBuilderComplete(host.sessionId, host.participantId);
+    const revealed = setup.service.getState(host.sessionId, g1.participantId);
+    if (revealed.gameState?.type !== "storyBuilder" || revealed.gameState.state.status !== "complete") {
+      throw new Error("expected complete");
+    }
+    expect(revealed.gameState.state.fullStory.length).toBeGreaterThan(10);
+    expect(revealed.gameState.state.sentences.length).toBeGreaterThanOrEqual(2);
+
+    await setup.service.storyBuilderNewStory(host.sessionId, host.participantId);
+    const afterNew = setup.service.getState(host.sessionId, host.participantId);
+    if (afterNew.gameState?.type !== "storyBuilder" || afterNew.gameState.state.status !== "building") {
+      throw new Error("expected building after new story");
+    }
+    expect(afterNew.gameState.state.sentenceCount).toBe(1);
+  });
+
+  it("Story Builder: scratch opening and host-only complete or new story", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    await setup.service.startGame(host.sessionId, "storyBuilder", {
+      storyBuilderMode: "scratch",
+      storyBuilderFirstTurnParticipantId: host.participantId
+    });
+
+    await expect(setup.service.storyBuilderComplete(host.sessionId, host.participantId)).rejects.toThrow(
+      "Add at least one sentence before completing the story."
+    );
+
+    const opener = setup.service.getState(host.sessionId, host.participantId);
+    if (opener.gameState?.type !== "storyBuilder" || opener.gameState.state.status !== "building") {
+      throw new Error("expected building");
+    }
+    expect(opener.gameState.state.isFirstSentence).toBe(true);
+    expect(opener.gameState.state.lastSentence).toBeNull();
+
+    await setup.service.storyBuilderSubmitSentence(host.sessionId, host.participantId, "Once upon a reset.");
+    const guestAfter = setup.service.getState(host.sessionId, g1.participantId);
+    if (guestAfter.gameState?.type !== "storyBuilder" || guestAfter.gameState.state.status !== "building") {
+      throw new Error("expected building");
+    }
+    expect(guestAfter.gameState.state.lastSentence).toBe("Once upon a reset.");
+
+    await expect(setup.service.storyBuilderComplete(host.sessionId, g1.participantId)).rejects.toThrow(
+      "Only the host can complete the story."
+    );
+
+    await setup.service.storyBuilderComplete(host.sessionId, host.participantId);
+    await expect(setup.service.storyBuilderNewStory(host.sessionId, g1.participantId)).rejects.toThrow(
+      "Only the host can start a new story."
+    );
+  });
+
   describe("yahtzee", () => {
     it("starts with first roll and rejects non-current roller", async () => {
       const setup = await createService();

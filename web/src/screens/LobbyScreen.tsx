@@ -126,6 +126,13 @@ const GAMES: GameOption[] = [
     description:
       "Race the clock to fill categories for a random letter—then the host scores each answer together.",
     iconSrc: "/game_icons/scattegories.png"
+  },
+  {
+    id: "storyBuilder",
+    title: "Story Builder",
+    description:
+      "Build a story one sentence at a time—each player only sees the line before theirs, then everyone reads the full tale together.",
+    iconSrc: "/game_icons/story_builder.png"
   }
 ];
 
@@ -164,6 +171,11 @@ export function LobbyScreen({
   const [yahtzeeMode, setYahtzeeMode] = useState<YahtzeeMode>("turns");
   const [wouldYouRatherQuestions, setWouldYouRatherQuestions] = useState(10);
   const [wouldYouRatherAllowSubmissions, setWouldYouRatherAllowSubmissions] = useState(true);
+  const [storyBuilderMode, setStoryBuilderMode] = useState<"stock" | "scratch">("stock");
+  const [storyBuilderFirstTurnId, setStoryBuilderFirstTurnId] = useState(() => {
+    const host = session.participants.find((p) => p.isHost);
+    return host?.id ?? session.participants[0]?.id ?? currentParticipantId;
+  });
 
   useEffect(() => {
     if (activeRoster.some((participant) => participant.id === hangmanCreatorId)) {
@@ -201,6 +213,15 @@ export function LobbyScreen({
       activeRoster.find((p) => p.isHost)?.id ?? activeRoster[0]?.id ?? currentParticipantId
     );
   }, [captionThisProviderId, currentParticipantId, activeRoster]);
+
+  useEffect(() => {
+    if (activeRoster.some((p) => p.id === storyBuilderFirstTurnId)) {
+      return;
+    }
+    setStoryBuilderFirstTurnId(
+      activeRoster.find((p) => p.isHost)?.id ?? activeRoster[0]?.id ?? currentParticipantId
+    );
+  }, [currentParticipantId, activeRoster, storyBuilderFirstTurnId]);
 
   const startGame = (game: GameType) => {
     if (game === "hangman") {
@@ -278,6 +299,19 @@ export function LobbyScreen({
           options: {
             wouldYouRatherTotalQuestions: totalQuestions,
             wouldYouRatherAllowParticipantSubmissions: wouldYouRatherAllowSubmissions
+          }
+        }
+      });
+      return;
+    }
+    if (game === "storyBuilder") {
+      send({
+        type: "game:start",
+        payload: {
+          game,
+          options: {
+            storyBuilderMode,
+            storyBuilderFirstTurnParticipantId: storyBuilderFirstTurnId
           }
         }
       });
@@ -564,6 +598,49 @@ export function LobbyScreen({
                       Everyone plays their own board at once; live progress tracks totals and rounds left.
                     </span>
                   </label>
+                </fieldset>
+              )}
+              {game.id === "storyBuilder" && (
+                <fieldset className="mode-picker" disabled={!isHost}>
+                  <legend className="mode-picker-label">Story setup</legend>
+                  <label className={`mode-option${storyBuilderMode === "stock" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="story-builder-mode"
+                      value="stock"
+                      checked={storyBuilderMode === "stock"}
+                      onChange={() => setStoryBuilderMode("stock")}
+                    />
+                    <span className="mode-option-title">Use a story starter</span>
+                    <span className="mode-option-hint">Everyone builds on a random opening line from the library.</span>
+                  </label>
+                  <label className={`mode-option${storyBuilderMode === "scratch" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="story-builder-mode"
+                      value="scratch"
+                      checked={storyBuilderMode === "scratch"}
+                      onChange={() => setStoryBuilderMode("scratch")}
+                    />
+                    <span className="mode-option-title">Start from scratch</span>
+                    <span className="mode-option-hint">The first writer opens the story with no prior context.</span>
+                  </label>
+                  <label className="mode-picker-label" htmlFor="story-builder-first-turn">
+                    Who goes first
+                  </label>
+                  <select
+                    id="story-builder-first-turn"
+                    value={storyBuilderFirstTurnId}
+                    onChange={(event) => setStoryBuilderFirstTurnId(event.target.value)}
+                  >
+                    {activeRoster.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.displayName}
+                        {participant.isHost ? " (host)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mode-option-hint">Needs at least two active players.</p>
                 </fieldset>
               )}
               {isHost ? (
