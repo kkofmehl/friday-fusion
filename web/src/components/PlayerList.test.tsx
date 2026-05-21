@@ -104,6 +104,37 @@ describe("PlayerList score editing", () => {
     expect(screen.getByRole("status").textContent).toContain("The host is updating the score...");
   });
 
+  it("host bench and remove actions live in a hamburger menu", () => {
+    const send = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PlayerList session={buildSession()} currentParticipantId="p1" isHost send={send} />);
+
+    expect(screen.queryByRole("menuitem", { name: "Bench" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Remove" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Bob" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Bench" }));
+
+    expect(send).toHaveBeenCalledWith({
+      type: "session:setParticipantActive",
+      payload: { participantId: "p2", isActive: false }
+    });
+    expect(screen.queryByRole("menuitem", { name: "Bench" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Bob" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Remove Bob from the session? They will be disconnected."
+    );
+    expect(send).toHaveBeenCalledWith({
+      type: "session:boot",
+      payload: { participantId: "p2" }
+    });
+
+    confirmSpy.mockRestore();
+  });
+
   it("shows a profile star and opens profile callback", () => {
     const onViewProfile = vi.fn();
     render(

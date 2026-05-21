@@ -32,6 +32,19 @@ const baseSession = (overrides: Partial<SessionState> = {}): SessionState => ({
 });
 
 describe("MemoryGame", () => {
+  it("shows a prominent turn bar when it is your turn", () => {
+    render(<MemoryGame session={baseSession()} currentParticipantId="a" canPlay send={vi.fn()} />);
+    expect(screen.getByRole("status").textContent).toContain("It's your turn");
+    expect(screen.getByRole("status").textContent).toContain("Pick two cards.");
+  });
+
+  it("shows the current player in the turn bar when waiting", () => {
+    render(<MemoryGame session={baseSession()} currentParticipantId="b" canPlay send={vi.fn()} />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("Ann");
+    expect(status.textContent).toContain("'s turn");
+  });
+
   it("renders grid of face-down cards", () => {
     const send = vi.fn();
     render(

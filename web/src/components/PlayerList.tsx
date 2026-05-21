@@ -137,8 +137,10 @@ export function PlayerList({
   const canEditScores = Boolean(isHost && send && !hideScores);
   const [localEditingId, setLocalEditingId] = useState<string | null>(null);
   const [draftScore, setDraftScore] = useState("");
+  const [openHostMenuId, setOpenHostMenuId] = useState<string | null>(null);
   const localEditingIdRef = useRef<string | null>(null);
   const sendRef = useRef(send);
+  const hostMenuRef = useRef<HTMLDivElement>(null);
 
   localEditingIdRef.current = localEditingId;
   sendRef.current = send;
@@ -174,6 +176,31 @@ export function PlayerList({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!openHostMenuId) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent): void => {
+      if (hostMenuRef.current && !hostMenuRef.current.contains(event.target as Node)) {
+        setOpenHostMenuId(null);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setOpenHostMenuId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openHostMenuId]);
 
   return (
     <ul className="players-list">
@@ -277,50 +304,87 @@ export function PlayerList({
                   <span className="player-score">{participant.score}</span>
                 ))}
               {showHostActions && (
-                <div className="player-host-actions">
-                  {allowBench && participantIsActive(participant) && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        send!({
-                          type: "session:setParticipantActive",
-                          payload: { participantId: participant.id, isActive: false }
-                        })
-                      }
-                    >
-                      Bench
-                    </button>
-                  )}
-                  {allowActivate && !participantIsActive(participant) && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        send!({
-                          type: "session:setParticipantActive",
-                          payload: { participantId: participant.id, isActive: true }
-                        })
-                      }
-                    >
-                      Activate
-                    </button>
-                  )}
+                <div
+                  className="player-host-menu"
+                  ref={openHostMenuId === participant.id ? hostMenuRef : undefined}
+                >
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Remove ${participant.displayName} from the session? They will be disconnected.`
-                        )
-                      ) {
-                        send!({ type: "session:boot", payload: { participantId: participant.id } });
-                      }
-                    }}
+                    className="player-host-menu-trigger"
+                    aria-label={`Options for ${participant.displayName}`}
+                    aria-expanded={openHostMenuId === participant.id}
+                    aria-haspopup="menu"
+                    onClick={() =>
+                      setOpenHostMenuId((current) =>
+                        current === participant.id ? null : participant.id
+                      )
+                    }
                   >
-                    Remove
+                    <span className="player-host-menu-icon" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
                   </button>
+                  {openHostMenuId === participant.id && (
+                    <ul className="player-host-menu-dropdown" role="menu">
+                      {allowBench && participantIsActive(participant) && (
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="player-host-menu-item"
+                            onClick={() => {
+                              send!({
+                                type: "session:setParticipantActive",
+                                payload: { participantId: participant.id, isActive: false }
+                              });
+                              setOpenHostMenuId(null);
+                            }}
+                          >
+                            Bench
+                          </button>
+                        </li>
+                      )}
+                      {allowActivate && !participantIsActive(participant) && (
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="player-host-menu-item"
+                            onClick={() => {
+                              send!({
+                                type: "session:setParticipantActive",
+                                payload: { participantId: participant.id, isActive: true }
+                              });
+                              setOpenHostMenuId(null);
+                            }}
+                          >
+                            Activate
+                          </button>
+                        </li>
+                      )}
+                      <li role="none">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="player-host-menu-item player-host-menu-item-danger"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Remove ${participant.displayName} from the session? They will be disconnected.`
+                              )
+                            ) {
+                              send!({ type: "session:boot", payload: { participantId: participant.id } });
+                              setOpenHostMenuId(null);
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    </ul>
+                  )}
                 </div>
               )}
             </div>

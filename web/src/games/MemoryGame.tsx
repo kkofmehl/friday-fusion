@@ -93,20 +93,39 @@ export function MemoryGame({
 
   return (
     <div className="memory-game">
+      <div
+        className={`memory-turn-bar${
+          state.phase === "resolving"
+            ? " memory-turn-bar--resolving"
+            : isMyTurn
+              ? " memory-turn-bar--yours"
+              : " memory-turn-bar--waiting"
+        }`}
+        role="status"
+      >
+        {state.phase === "resolving" ? (
+          <>
+            <span className="memory-turn-bar-title">No match</span>
+            <span className="memory-turn-bar-sub">Cards flip back in a moment.</span>
+          </>
+        ) : isMyTurn ? (
+          <>
+            <span className="memory-turn-bar-title">It&apos;s your turn</span>
+            <span className="memory-turn-bar-sub">Pick two cards.</span>
+          </>
+        ) : (
+          <>
+            <span className="memory-turn-bar-title">
+              <PlayerName participantId={state.currentPlayerId} participants={session.participants} size="md" inline />
+              &apos;s turn
+            </span>
+            <span className="memory-turn-bar-sub">Waiting for their pick.</span>
+          </>
+        )}
+      </div>
+
       <header className="memory-head">
         <h2>Memory</h2>
-        <p className="memory-sub">
-          {state.phase === "resolving"
-            ? "No match — cards flip back in a moment."
-            : isMyTurn
-              ? "Your turn — pick two cards."
-              : "Waiting on another player."}
-        </p>
-        {!isMyTurn && (
-          <p className="memory-sub">
-            <PlayerName participantId={state.currentPlayerId} participants={session.participants} size="md" inline />
-          </p>
-        )}
       </header>
 
       <div className="memory-meta">

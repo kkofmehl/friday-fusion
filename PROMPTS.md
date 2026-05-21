@@ -70,3 +70,7 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-21:** Memory audible — drop emoji/extra sprites; use only Friday Fusion `/game_icons/` PNGs; larger board option becomes 36 cards (18 pairs, 6×6) since catalog has 19 game icons max.
 
 **2026-05-21:** Apples to Apples scoring — award one point when the judge picks a player's card; mark the game as scorable on the lobby dashboard.
+
+**2026-05-21:** Change the bench/remove host controls for each player into a hamburger menu.
+
+**2026-05-21:** Memory game — add a solid top turn bar with larger "It's your turn" when it's the active player's turn.

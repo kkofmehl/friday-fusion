@@ -1505,12 +1505,87 @@ label {
   flex-shrink: 0;
 }
 
-.player-host-actions {
+.player-host-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.player-host-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.player-host-menu-trigger:hover,
+.player-host-menu-trigger[aria-expanded="true"] {
+  background: rgba(226, 232, 240, 0.85);
+  border-color: var(--slate-200);
+  color: var(--slate-800);
+}
+
+.player-host-menu-icon {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  justify-content: flex-end;
-  max-width: 11rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.18rem;
+  width: 0.95rem;
+}
+
+.player-host-menu-icon span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.player-host-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 20;
+  min-width: 7.5rem;
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.player-host-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--slate-800);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-host-menu-item:hover {
+  background: var(--slate-100);
+}
+
+.player-host-menu-item-danger {
+  color: var(--rose-600);
+}
+
+.player-host-menu-item-danger:hover {
+  background: var(--rose-100);
 }
 
 .player-identity {
@@ -5349,6 +5424,55 @@ label {
 
 .memory-head h2 {
   margin-bottom: 0.25rem;
+}
+
+.memory-turn-bar {
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1.25rem;
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.memory-turn-bar-title {
+  display: block;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.memory-turn-bar-sub {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.memory-turn-bar--yours {
+  background: var(--emerald-600);
+  color: #fff;
+}
+
+.memory-turn-bar--yours .memory-turn-bar-sub {
+  opacity: 0.92;
+}
+
+.memory-turn-bar--waiting {
+  background: var(--slate-200);
+  color: var(--slate-800);
+}
+
+.memory-turn-bar--waiting .memory-turn-bar-sub {
+  color: var(--slate-600);
+}
+
+.memory-turn-bar--resolving {
+  background: var(--amber-500);
+  color: var(--slate-900);
+}
+
+.memory-turn-bar--resolving .memory-turn-bar-sub {
+  color: var(--slate-800);
 }
 
 .memory-sub {
