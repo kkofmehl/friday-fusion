@@ -1,26 +1,44 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import { PlayerAvatar } from "../components/PlayerAvatar";
 import { TurnOrderPanel } from "./TurnOrderPanel";
 import { activeParticipants } from "../utils/participants";
 import { PlayerName } from "../components/PlayerName";
+import { hasRenderableAvatar } from "../utils/avatarHelpers";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-const Gallows = ({ wrongs, max }: { wrongs: number; max: number }): JSX.Element => {
+const Gallows = ({
+  wrongs,
+  max,
+  headAvatar
+}: {
+  wrongs: number;
+  max: number;
+  headAvatar?: SessionState["participants"][number]["avatar"];
+}): JSX.Element => {
   const stage = Math.min(wrongs, max);
+  const showAvatarHead = stage >= 1 && hasRenderableAvatar(headAvatar);
   return (
-    <svg className="gallows" viewBox="0 0 140 160" aria-label={`Hangman, ${stage} of ${max} wrong`}>
-      <line x1="10" y1="150" x2="120" y2="150" className="gallows-ground" />
-      <line x1="30" y1="150" x2="30" y2="15" className="gallows-post" />
-      <line x1="30" y1="15" x2="90" y2="15" className="gallows-beam" />
-      <line x1="90" y1="15" x2="90" y2="30" className="gallows-rope" />
-      {stage >= 1 && <circle cx="90" cy="40" r="10" className="gallows-part" />}
-      {stage >= 2 && <line x1="90" y1="50" x2="90" y2="95" className="gallows-part" />}
-      {stage >= 3 && <line x1="90" y1="60" x2="75" y2="80" className="gallows-part" />}
-      {stage >= 4 && <line x1="90" y1="60" x2="105" y2="80" className="gallows-part" />}
-      {stage >= 5 && <line x1="90" y1="95" x2="75" y2="120" className="gallows-part" />}
-      {stage >= 6 && <line x1="90" y1="95" x2="105" y2="120" className="gallows-part" />}
-    </svg>
+    <div className="gallows-wrap">
+      <svg className="gallows" viewBox="0 0 140 160" aria-label={`Hangman, ${stage} of ${max} wrong`}>
+        <line x1="10" y1="150" x2="120" y2="150" className="gallows-ground" />
+        <line x1="30" y1="150" x2="30" y2="15" className="gallows-post" />
+        <line x1="30" y1="15" x2="90" y2="15" className="gallows-beam" />
+        <line x1="90" y1="15" x2="90" y2="30" className="gallows-rope" />
+        {stage >= 1 && !showAvatarHead && <circle cx="90" cy="40" r="10" className="gallows-part" />}
+        {stage >= 2 && <line x1="90" y1="50" x2="90" y2="95" className="gallows-part" />}
+        {stage >= 3 && <line x1="90" y1="60" x2="75" y2="80" className="gallows-part" />}
+        {stage >= 4 && <line x1="90" y1="60" x2="105" y2="80" className="gallows-part" />}
+        {stage >= 5 && <line x1="90" y1="95" x2="75" y2="120" className="gallows-part" />}
+        {stage >= 6 && <line x1="90" y1="95" x2="105" y2="120" className="gallows-part" />}
+      </svg>
+      {showAvatarHead && (
+        <span className="gallows-head-avatar">
+          <PlayerAvatar avatar={headAvatar} size="md" />
+        </span>
+      )}
+    </div>
   );
 };
 
@@ -258,7 +276,7 @@ export function HangmanGame({
 
       <div className="hangman-layout">
         <div className="hangman-art">
-          <Gallows wrongs={state.wrongGuessCount} max={state.maxWrongGuesses} />
+          <Gallows wrongs={state.wrongGuessCount} max={state.maxWrongGuesses} headAvatar={creator?.avatar} />
           <p className="hangman-wrong">
             Wrong guesses: <strong>{state.wrongGuessCount}</strong> / {state.maxWrongGuesses}
           </p>

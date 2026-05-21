@@ -65,6 +65,20 @@ describe("HangmanGame", () => {
     expect(screen.getByText("CAT")).toBeDefined();
   });
 
+  it("uses the creator avatar for the hangman head when available", () => {
+    const session = buildSession({
+      wrongGuessCount: 1
+    } as any);
+    session.participants[0] = {
+      ...session.participants[0]!,
+      avatar: { type: "stock", id: "avatar-astronaut", avatarUrl: "/avatars/avatar-astronaut.png" }
+    };
+    render(
+      <HangmanGame session={session} currentParticipantId="p2" isHost={false} send={vi.fn()} />
+    );
+    expect(screen.getByText("🧑‍🚀")).toBeDefined();
+  });
+
   it("in turns mode only lets the active guesser press letters", () => {
     const send = vi.fn();
     const session = buildSession({ mode: "turns", currentTurnId: "p3" } as any);

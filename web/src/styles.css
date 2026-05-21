@@ -2283,11 +2283,32 @@ label {
   gap: 0.4rem;
 }
 
-.gallows {
+.gallows-wrap {
   width: 100%;
   max-width: 200px;
+  position: relative;
+}
+
+.gallows {
+  width: 100%;
   height: auto;
   color: var(--slate-700);
+}
+
+.gallows-head-avatar {
+  position: absolute;
+  left: 64.3%;
+  top: 25%;
+  width: 14.3%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.gallows-head-avatar .player-avatar {
+  width: 100%;
+  height: 100%;
+  font-size: clamp(0.85rem, 1.5vw, 1.4rem);
 }
 
 .gallows line {
