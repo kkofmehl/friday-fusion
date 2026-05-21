@@ -736,6 +736,42 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           return;
         }
 
+        if (event.type === "session:beginScoreEdit") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can edit scores.");
+          }
+          await sessionService.beginScoreEdit(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId
+          );
+          broadcastState(context.sessionId);
+          return;
+        }
+
+        if (event.type === "session:cancelScoreEdit") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can edit scores.");
+          }
+          await sessionService.cancelScoreEdit(context.sessionId, context.participantId);
+          broadcastState(context.sessionId);
+          return;
+        }
+
+        if (event.type === "session:setScore") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only the host can edit scores.");
+          }
+          await sessionService.setParticipantScore(
+            context.sessionId,
+            context.participantId,
+            event.payload.participantId,
+            event.payload.score
+          );
+          broadcastState(context.sessionId);
+          return;
+        }
+
         if (event.type === "session:boot") {
           if (!sessionService.isHost(context.sessionId, context.participantId)) {
             throw new Error("Only the host can remove a player from the session.");

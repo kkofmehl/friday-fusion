@@ -1196,7 +1196,9 @@ export const sessionStateSchema = z.object({
   activeGame: gameTypeSchema.nullable(),
   gameState: gameStateSchema.nullable(),
   /** Non-host lobby votes for which game to play next (participantId -> game); absent or empty when unavailable. */
-  lobbyGamePreferences: z.record(z.string(), gameTypeSchema).optional()
+  lobbyGamePreferences: z.record(z.string(), gameTypeSchema).optional(),
+  /** When set, the host is editing this participant's score (broadcast to all clients). */
+  scoreEditingParticipantId: z.string().nullable().optional()
 });
 export type SessionState = z.infer<typeof sessionStateSchema>;
 
@@ -1326,6 +1328,15 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("session:setParticipantActive"),
     payload: z.object({ participantId: z.string().min(1), isActive: z.boolean() })
+  }),
+  z.object({
+    type: z.literal("session:beginScoreEdit"),
+    payload: z.object({ participantId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("session:cancelScoreEdit"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("session:setScore"),
+    payload: z.object({ participantId: z.string().min(1), score: z.number().int().min(0) })
   }),
   z.object({
     type: z.literal("session:boot"),

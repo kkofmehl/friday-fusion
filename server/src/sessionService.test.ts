@@ -2249,6 +2249,57 @@ describe("SessionService", () => {
     ).rejects.toThrow("Inactive players cannot set a game preference.");
   });
 
+  it("host can manually set a participant score and broadcasts editing state", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+
+    await setup.service.beginScoreEdit(host.sessionId, host.participantId, guest.participantId);
+    expect(setup.service.getState(host.sessionId).scoreEditingParticipantId).toBe(guest.participantId);
+
+    await setup.service.setParticipantScore(host.sessionId, host.participantId, guest.participantId, 42);
+    const state = setup.service.getState(host.sessionId);
+    expect(state.participants.find((p) => p.id === guest.participantId)?.score).toBe(42);
+    expect(state.scoreEditingParticipantId).toBeUndefined();
+  });
+
+  it("cancelScoreEdit clears the broadcast editing state", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+
+    await setup.service.beginScoreEdit(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.cancelScoreEdit(host.sessionId, host.participantId);
+    expect(setup.service.getState(host.sessionId).scoreEditingParticipantId).toBeUndefined();
+  });
+
+  it("rejects score edits from non-host participants", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+
+    await expect(
+      setup.service.beginScoreEdit(host.sessionId, guest.participantId, host.participantId)
+    ).rejects.toThrow("Only the host can edit scores.");
+    await expect(
+      setup.service.setParticipantScore(host.sessionId, guest.participantId, host.participantId, 10)
+    ).rejects.toThrow("Only the host can edit scores.");
+  });
+
+  it("clears score editing when the edited participant leaves", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+
+    await setup.service.beginScoreEdit(host.sessionId, host.participantId, guest.participantId);
+    await setup.service.removeParticipant(host.sessionId, guest.participantId);
+    expect(setup.service.getState(host.sessionId).scoreEditingParticipantId).toBeUndefined();
+  });
+
   it("UNO: requires two players to start", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { ClientEvent, Participant, SessionState } from "../../../shared/contracts";
 
 type TurnTag = { label: string; tone: "creator" | "guesser" | "presenter" | "voter" | "answerer" | "submitting" };
@@ -130,6 +131,46 @@ export function PlayerList({
     ? [...session.participants]
     : [...session.participants].sort((a, b) => b.score - a.score);
   const topScore = ranked[0]?.score ?? 0;
+  const canEditScores = Boolean(isHost && send && !hideScores);
+  const [localEditingId, setLocalEditingId] = useState<string | null>(null);
+  const [draftScore, setDraftScore] = useState("");
+  const localEditingIdRef = useRef<string | null>(null);
+  const sendRef = useRef(send);
+
+  localEditingIdRef.current = localEditingId;
+  sendRef.current = send;
+
+  const beginEdit = (participant: Participant): void => {
+    setLocalEditingId(participant.id);
+    setDraftScore(String(participant.score));
+    send!({ type: "session:beginScoreEdit", payload: { participantId: participant.id } });
+  };
+
+  const cancelEdit = (): void => {
+    if (localEditingId) {
+      send?.({ type: "session:cancelScoreEdit", payload: {} });
+    }
+    setLocalEditingId(null);
+    setDraftScore("");
+  };
+
+  const saveEdit = (participantId: string): void => {
+    const score = Number.parseInt(draftScore, 10);
+    if (!Number.isFinite(score) || score < 0) {
+      return;
+    }
+    send!({ type: "session:setScore", payload: { participantId, score } });
+    setLocalEditingId(null);
+    setDraftScore("");
+  };
+
+  useEffect(() => {
+    return () => {
+      if (localEditingIdRef.current) {
+        sendRef.current?.({ type: "session:cancelScoreEdit", payload: {} });
+      }
+    };
+  }, []);
 
   return (
     <ul className="players-list">
@@ -140,16 +181,23 @@ export function PlayerList({
         const isInactive = !participantIsActive(participant);
         const showHostActions =
           Boolean(isHost && send && !participant.isHost && participant.id !== currentParticipantId);
+        const isEditing = canEditScores && localEditingId === participant.id;
+        const isBeingUpdatedByHost = session.scoreEditingParticipantId === participant.id;
         return (
           <li
             key={participant.id}
-            className={`player-row${isYou ? " player-row-you" : ""}${isInactive ? " player-row-inactive" : ""}`}
+            className={`player-row${isYou ? " player-row-you" : ""}${isInactive ? " player-row-inactive" : ""}${isBeingUpdatedByHost ? " player-row-score-editing" : ""}`}
           >
             <div className="player-identity">
               <span className="player-name">
                 {participant.displayName}
                 {isYou && <span className="player-you-tag">you</span>}
               </span>
+              {isBeingUpdatedByHost && (
+                <p className="player-score-editing-notice" role="status">
+                  The host is updating the score...
+                </p>
+              )}
               <div className="player-tags">
                 {participant.isHost && <span className="tag tag-host">Host</span>}
                 {isInactive && <span className="tag tag-inactive">Inactive</span>}
@@ -173,7 +221,47 @@ export function PlayerList({
               )}
             </div>
             <div className="player-row-right">
-              {!hideScores && <span className="player-score">{participant.score}</span>}
+              {!hideScores &&
+                (isEditing ? (
+                  <div className="player-score-edit">
+                    <input
+                      type="number"
+                      className="player-score-input"
+                      min={0}
+                      step={1}
+                      value={draftScore}
+                      aria-label={`Score for ${participant.displayName}`}
+                      onChange={(event) => setDraftScore(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          saveEdit(participant.id);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
+                    />
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => saveEdit(participant.id)}>
+                      Save
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={cancelEdit}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : canEditScores ? (
+                  <button
+                    type="button"
+                    className="player-score player-score-editable"
+                    aria-label={`Edit score for ${participant.displayName}`}
+                    onClick={() => beginEdit(participant)}
+                  >
+                    {participant.score}
+                  </button>
+                ) : (
+                  <span className="player-score">{participant.score}</span>
+                ))}
               {showHostActions && (
                 <div className="player-host-actions">
                   {allowBench && participantIsActive(participant) && (

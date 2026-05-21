@@ -195,3 +195,5 @@
 ## 2026-05-21
 
 97. User requested **game attribute badges** on lobby game cards: six attributes (Scorable points, Game, Activity, Team game, Shorter time, Longer time) with inline SVG + short labels, a legend above the game grid, per-game mappings for all listed modes (Hangman through Story Builder), and tests plus prompt log updates.
+98. User requested host manual score adjustment for any player: opening a score edit broadcasts to all clients and shows prominent red "The host is updating the score..." below that player's name; assistant added `session:beginScoreEdit` / `session:cancelScoreEdit` / `session:setScore`, server session state field `scoreEditingParticipantId`, PlayerList host edit UI, styles, and tests.
+99. User reported the score-editing notice only blinked briefly; assistant fixed a PlayerList cleanup effect that was sending `session:cancelScoreEdit` whenever the `send` prop changed (on every session state update), so the notice now persists until the host saves or cancels.

@@ -1535,6 +1535,54 @@ label {
   font-variant-numeric: tabular-nums;
 }
 
+.player-score-editable {
+  appearance: none;
+  border: 1px dashed var(--slate-300);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.player-score-editable:hover {
+  border-color: var(--indigo-300);
+  background: var(--indigo-50);
+  color: var(--indigo-700);
+}
+
+.player-score-editing-notice {
+  margin: 0.1rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #dc2626;
+  letter-spacing: 0.01em;
+}
+
+.player-row-score-editing {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(254, 242, 242, 0.72);
+}
+
+.player-score-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.player-score-input {
+  width: 4.5rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .scoreboard {
   display: flex;
   flex-direction: column;

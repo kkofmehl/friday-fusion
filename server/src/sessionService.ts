@@ -584,6 +584,8 @@ type SessionInternal = {
   games: GameInternal[];
   updatedAt: number;
   lobbyGamePreferences: Record<string, GameType>;
+  /** Ephemeral: host score edit in progress; not persisted to disk. */
+  scoreEditingParticipantId?: string;
 };
 
 const pruneLobbyGamePreferences = (
@@ -1765,7 +1767,9 @@ export class SessionService {
   }
 
   private async persist(): Promise<void> {
-    await this.store.write({ sessions: [...this.sessions.values()] });
+    await this.store.write({
+      sessions: [...this.sessions.values()].map(({ scoreEditingParticipantId: _editing, ...session }) => session)
+    });
   }
 
   private getSessionOrThrow(sessionId: string): SessionInternal {
@@ -2703,8 +2707,12 @@ export class SessionService {
     if (!session) {
       return { sessionDeleted: true };
     }
+    const leaving = session.participants.find((p) => p.id === participantId);
     const before = session.participants.length;
     session.participants = session.participants.filter((p) => p.id !== participantId);
+    if (leaving?.isHost || session.scoreEditingParticipantId === participantId) {
+      session.scoreEditingParticipantId = undefined;
+    }
     if (session.participants.length === before) {
       return { sessionDeleted: false };
     }
@@ -2773,6 +2781,48 @@ export class SessionService {
       return;
     }
     target.isActive = isActive;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async beginScoreEdit(sessionId: string, hostParticipantId: string, targetId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can edit scores.");
+    }
+    const target = session.participants.find((p) => p.id === targetId);
+    if (!target) {
+      throw new Error("Participant is not in this session.");
+    }
+    session.scoreEditingParticipantId = targetId;
+    session.updatedAt = Date.now();
+  }
+
+  public async cancelScoreEdit(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can edit scores.");
+    }
+    session.scoreEditingParticipantId = undefined;
+    session.updatedAt = Date.now();
+  }
+
+  public async setParticipantScore(
+    sessionId: string,
+    hostParticipantId: string,
+    targetId: string,
+    score: number
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    if (!session.participants.some((p) => p.id === hostParticipantId && p.isHost)) {
+      throw new Error("Only the host can edit scores.");
+    }
+    const target = session.participants.find((p) => p.id === targetId);
+    if (!target) {
+      throw new Error("Participant is not in this session.");
+    }
+    target.score = score;
+    session.scoreEditingParticipantId = undefined;
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -6766,7 +6816,10 @@ export class SessionService {
         score: p.score,
         isHost: p.isHost,
         isActive: participantIsActive(p)
-      }))
+      })),
+      ...(session.scoreEditingParticipantId
+        ? { scoreEditingParticipantId: session.scoreEditingParticipantId }
+        : {})
     };
 
     if (!game) {
