@@ -3,6 +3,7 @@ import {
   type ClientEvent,
   type SessionChatMessage,
   type SessionEmojiReaction,
+  type SessionEmojiStorm,
   type ServerEvent,
   type SessionState,
   serverEventSchema
@@ -27,6 +28,7 @@ export type UseRealtimeOptions = {
   onChatHistory?: (messages: SessionChatMessage[]) => void;
   onChatMessage?: (message: SessionChatMessage) => void;
   onEmojiReaction?: (reaction: SessionEmojiReaction) => void;
+  onEmojiStorm?: (storm: SessionEmojiStorm) => void;
 };
 
 export type UseRealtimeResult = {
@@ -49,7 +51,8 @@ export const useRealtime = ({
   onSessionClosed,
   onChatHistory,
   onChatMessage,
-  onEmojiReaction
+  onEmojiReaction,
+  onEmojiStorm
 }: UseRealtimeOptions): UseRealtimeResult => {
   const [status, setStatus] = useState<RealtimeStatus>("idle");
   const socketRef = useRef<WebSocket | null>(null);
@@ -65,6 +68,7 @@ export const useRealtime = ({
   const onChatHistoryRef = useRef(onChatHistory);
   const onChatMessageRef = useRef(onChatMessage);
   const onEmojiReactionRef = useRef(onEmojiReaction);
+  const onEmojiStormRef = useRef(onEmojiStorm);
 
   useEffect(() => {
     onSessionRef.current = onSession;
@@ -73,7 +77,8 @@ export const useRealtime = ({
     onChatHistoryRef.current = onChatHistory;
     onChatMessageRef.current = onChatMessage;
     onEmojiReactionRef.current = onEmojiReaction;
-  }, [onSession, onError, onSessionClosed, onChatHistory, onChatMessage, onEmojiReaction]);
+    onEmojiStormRef.current = onEmojiStorm;
+  }, [onSession, onError, onSessionClosed, onChatHistory, onChatMessage, onEmojiReaction, onEmojiStorm]);
 
   const wsUrl = useMemo(() => resolveWsUrl(apiBase), [apiBase]);
 
@@ -212,6 +217,8 @@ export const useRealtime = ({
           onChatMessageRef.current?.(event.payload.message);
         } else if (event.type === "chat:emojiReaction") {
           onEmojiReactionRef.current?.(event.payload.reaction);
+        } else if (event.type === "chat:emojiStorm") {
+          onEmojiStormRef.current?.(event.payload.storm);
         } else if (event.type === "session:closed") {
           cancelledRef.current = true;
           onSessionClosedRef.current?.(event.payload.reason);

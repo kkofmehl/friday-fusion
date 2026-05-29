@@ -3,6 +3,7 @@ type EmojiReactionBurst = {
   emoji: string;
   displayName: string;
   lanePercent: number;
+  storm?: boolean;
 };
 
 export function EmojiReactionsOverlay({
@@ -15,7 +16,7 @@ export function EmojiReactionsOverlay({
       {reactions.map((reaction) => (
         <span
           key={reaction.id}
-          className="emoji-reaction-float"
+          className={`emoji-reaction-float${reaction.storm ? " emoji-reaction-float-storm" : ""}`}
           style={{ left: `${reaction.lanePercent}%` }}
           title={reaction.displayName}
         >

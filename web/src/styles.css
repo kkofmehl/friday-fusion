@@ -1525,6 +1525,11 @@ label {
   animation: emojiFloatUp 2.1s ease-out forwards;
 }
 
+.emoji-reaction-float-storm {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  animation: emojiStormFloat 1.4s ease-out forwards;
+}
+
 @media (max-width: 860px) {
   .lobby-grid {
     grid-template-columns: 1fr;
@@ -5497,6 +5502,21 @@ label {
   100% {
     opacity: 0;
     transform: translate(-50%, -48vh) scale(1.14);
+  }
+}
+
+@keyframes emojiStormFloat {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.6) rotate(-18deg);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -24px) scale(1.15) rotate(12deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -58vh) scale(1.25) rotate(24deg);
   }
 }
 

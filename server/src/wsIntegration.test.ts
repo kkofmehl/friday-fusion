@@ -193,6 +193,13 @@ describe("WebSocket integration", () => {
     );
     expect(reactionEvent.payload.reaction.displayName).toBe("Guest");
 
+    const hostStormPromise = nextServerEvent(hostSocket, (event) => event.type === "chat:emojiStorm");
+    const guestStormPromise = nextServerEvent(guestSocket, (event) => event.type === "chat:emojiStorm");
+    guestSocket.send(JSON.stringify({ type: "chat:sendMessage", payload: { text: "  EMOJISTORM  " } }));
+    const [hostStorm, guestStorm] = await Promise.all([hostStormPromise, guestStormPromise]);
+    expect(hostStorm.payload.storm.displayName).toBe("Guest");
+    expect(guestStorm.payload.storm.displayName).toBe("Guest");
+
     hostSocket.close();
     guestSocket.close();
   });

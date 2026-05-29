@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { isEmojiStormTrigger } from "../../../shared/contracts";
 import type { Participant, SessionChatMessage } from "../../../shared/contracts";
 import { SessionChatPanel } from "./SessionChatPanel";
 
@@ -37,6 +38,27 @@ describe("SessionChatPanel", () => {
 
     expect(onSendMessage).toHaveBeenCalledWith("hello there");
     expect(input.value).toBe("");
+  });
+
+  it("submits the emojistorm trigger like any other chat message", () => {
+    const onSendMessage = vi.fn();
+    render(
+      <SessionChatPanel
+        messages={[]}
+        participants={participants}
+        currentParticipantId="p1"
+        onSendMessage={onSendMessage}
+        onSendReaction={vi.fn()}
+      />
+    );
+
+    const input = screen.getByLabelText("Chat message") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  EMOJISTORM  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onSendMessage).toHaveBeenCalledWith("EMOJISTORM");
+    expect(input.value).toBe("");
+    expect(isEmojiStormTrigger("EMOJISTORM")).toBe(true);
   });
 
   it("sends emoji reaction when an emoji button is clicked", () => {

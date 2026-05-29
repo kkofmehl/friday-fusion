@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Participant, SessionChatMessage } from "../../../shared/contracts";
 import { PlayerName } from "./PlayerName";
-
-const EMOJI_PACK = ["😀", "😂", "😎", "🔥", "👏", "💀", "🎉", "😈"] as const;
+import { SESSION_CHAT_EMOJI_PACK } from "../utils/emojiStorm";
 
 type SessionChatPanelProps = {
   messages: SessionChatMessage[];
@@ -97,7 +96,7 @@ export function SessionChatPanel({
         />
       </div>
       <div className="session-chat-emoji-pack" aria-label="Emoji reactions">
-        {EMOJI_PACK.map((emoji) => (
+        {SESSION_CHAT_EMOJI_PACK.map((emoji) => (
           <button
             key={emoji}
             type="button"

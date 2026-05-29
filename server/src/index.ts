@@ -20,9 +20,11 @@ import {
   profileUsernameRequestSchema,
   SESSION_CHAT_EMOJI_MAX_CHARS,
   SESSION_CHAT_MESSAGE_MAX_CHARS,
+  isEmojiStormTrigger,
   serverEventSchema,
   type SessionChatMessage,
   type SessionEmojiReaction,
+  type SessionEmojiStorm,
   type ServerEvent
 } from "../../shared/contracts";
 import { icebreakerQuestionUploadDir, resolveIcebreakerStoredFile } from "./icebreakerUploads";
@@ -203,6 +205,17 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
     const payload: ServerEvent = {
       type: "chat:emojiReaction",
       payload: { sessionId, reaction }
+    };
+    for (const target of targets) {
+      sendEvent(target.socket, payload);
+    }
+  };
+
+  const broadcastEmojiStorm = (sessionId: string, storm: SessionEmojiStorm): void => {
+    const targets = connections.get(sessionId) ?? [];
+    const payload: ServerEvent = {
+      type: "chat:emojiStorm",
+      payload: { sessionId, storm }
     };
     for (const target of targets) {
       sendEvent(target.socket, payload);
@@ -861,6 +874,14 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           }
           if (text.length > SESSION_CHAT_MESSAGE_MAX_CHARS) {
             throw new Error(`Message must be ${SESSION_CHAT_MESSAGE_MAX_CHARS} characters or less.`);
+          }
+          if (isEmojiStormTrigger(text)) {
+            broadcastEmojiStorm(context.sessionId, {
+              sessionId: context.sessionId,
+              participantId: context.participantId,
+              displayName: getParticipantDisplayName(context.sessionId, context.participantId)
+            });
+            return;
           }
           const message: SessionChatMessage = {
             id: nanoid(12),

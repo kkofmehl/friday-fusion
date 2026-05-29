@@ -1255,6 +1255,10 @@ export type ActiveSessionSummary = z.infer<typeof activeSessionSummarySchema>;
 
 export const SESSION_CHAT_MESSAGE_MAX_CHARS = 400;
 export const SESSION_CHAT_EMOJI_MAX_CHARS = 16;
+export const EMOJI_STORM_TRIGGER = "emojistorm";
+
+export const isEmojiStormTrigger = (text: string): boolean =>
+  text.trim().toLowerCase() === EMOJI_STORM_TRIGGER;
 export const PROFILE_USERNAME_MIN_CHARS = 3;
 export const PROFILE_USERNAME_MAX_CHARS = 32;
 export const PROFILE_NAME_MAX_CHARS = 64;
@@ -1360,6 +1364,13 @@ export const sessionEmojiReactionSchema = z.object({
 });
 export type SessionEmojiReaction = z.infer<typeof sessionEmojiReactionSchema>;
 
+export const sessionEmojiStormSchema = z.object({
+  sessionId: z.string(),
+  participantId: z.string(),
+  displayName: z.string().min(1)
+});
+export type SessionEmojiStorm = z.infer<typeof sessionEmojiStormSchema>;
+
 export const serverEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:state"), payload: sessionStateSchema }),
   z.object({
@@ -1392,6 +1403,13 @@ export const serverEventSchema = z.discriminatedUnion("type", [
     payload: z.object({
       sessionId: z.string(),
       reaction: sessionEmojiReactionSchema
+    })
+  }),
+  z.object({
+    type: z.literal("chat:emojiStorm"),
+    payload: z.object({
+      sessionId: z.string(),
+      storm: sessionEmojiStormSchema
     })
   }),
   z.object({ type: z.literal("error"), payload: z.object({ message: z.string() }) }),

@@ -3,6 +3,7 @@ import type {
   ClientEvent,
   SessionChatMessage,
   SessionEmojiReaction,
+  SessionEmojiStorm,
   SessionState
 } from "../../shared/contracts";
 import { resolveApiBase } from "./config";
@@ -12,6 +13,7 @@ import { Toast } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
 import { EmojiReactionsOverlay, type EmojiReactionBurst } from "./components/EmojiReactionsOverlay";
 import type { ProfileAuth } from "./components/MyProfilePanel";
+import { startEmojiStorm } from "./utils/emojiStorm";
 import { LandingScreen, type LandingSuccess } from "./screens/LandingScreen";
 import { LobbyScreen } from "./screens/LobbyScreen";
 import { GameScreen } from "./screens/GameScreen";
@@ -83,6 +85,13 @@ export function App(): JSX.Element {
       setEmojiBursts((prev) => prev.filter((entry) => entry.id !== burst.id));
     }, 2200);
   }, []);
+  const handleEmojiStorm = useCallback((storm: SessionEmojiStorm) => {
+    startEmojiStorm(
+      storm.displayName,
+      (burst) => setEmojiBursts((prev) => [...prev, burst]),
+      (id) => setEmojiBursts((prev) => prev.filter((entry) => entry.id !== id))
+    );
+  }, []);
 
   const realtimeAuth = useMemo(
     () => (auth ? { sessionId: auth.sessionId, participantId: auth.participantId } : null),
@@ -97,7 +106,8 @@ export function App(): JSX.Element {
     onSessionClosed: handleSessionClosed,
     onChatHistory: handleChatHistory,
     onChatMessage: handleChatMessage,
-    onEmojiReaction: handleEmojiReaction
+    onEmojiReaction: handleEmojiReaction,
+    onEmojiStorm: handleEmojiStorm
   });
 
   const enterSession = useCallback((result: LandingSuccess) => {
