@@ -1034,6 +1034,91 @@ label {
   gap: 0.5rem;
 }
 
+.session-queue {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--slate-100);
+}
+
+.session-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.session-queue-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.session-queue-empty {
+  margin: 0 0 0.75rem;
+  color: var(--slate-500);
+  font-size: 0.875rem;
+}
+
+.session-queue-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.session-queue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.session-queue-item-index {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--slate-500);
+  font-size: 0.85rem;
+}
+
+.session-queue-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.session-queue-item-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.session-queue-item-hint {
+  font-size: 0.78rem;
+  color: var(--slate-500);
+}
+
+.session-queue-remove {
+  flex: 0 0 auto;
+  min-width: 1.75rem;
+  padding-inline: 0.35rem;
+  line-height: 1;
+}
+
+.session-queue-start {
+  width: 100%;
+}
+
+.game-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .card-head-tags {
   display: inline-flex;
   gap: 0.4rem;

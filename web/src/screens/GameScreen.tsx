@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { ClientEvent, SessionState } from "../../../shared/contracts";
+import type { ClientEvent, GameType, SessionState } from "../../../shared/contracts";
 import { PlayerList } from "../components/PlayerList";
+import { SessionQueuePanel } from "../components/SessionQueuePanel";
 import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
 import { ProfileViewModal } from "../components/ProfileViewModal";
 import { HangmanGame } from "../games/HangmanGame";
@@ -46,6 +47,28 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   memory: "/game_icons/memory.png"
 };
 
+const GAME_TITLES_BY_ID: Record<GameType, string> = {
+  hangman: "Hangman",
+  twoTruthsLie: "Two Truths and a Lie",
+  trivia: "Trivia",
+  wouldYouRather: "Would You Rather",
+  icebreaker: "Icebreaker Questions",
+  guessWhoSaidIt: "Guess Who Said It?",
+  guessTheImage: "Guess the image",
+  twentyQuestions: "20 Questions",
+  captionThis: "Caption This",
+  pictionary: "Pictionary",
+  applesToApples: "Apples to Apples",
+  uno: "UNO",
+  bs: "BS",
+  madlibs: "Madlibs",
+  catchPhrase: "Catch Phrase",
+  yahtzee: "Yahtzee",
+  scattergories: "Scattergories",
+  storyBuilder: "Story Builder",
+  memory: "Memory"
+};
+
 export function GameScreen({
   session,
   currentParticipantId,
@@ -68,6 +91,7 @@ export function GameScreen({
 }): JSX.Element {
   const [profileModalParticipantId, setProfileModalParticipantId] = useState<string | null>(null);
   const [showMyProfile, setShowMyProfile] = useState(false);
+  const queueLength = session.sessionGameQueue?.length ?? 0;
   const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
   const hangmanRoster = hangmanState ? activeParticipants(session.participants) : [];
   const rotatedCreatorId = hangmanState
@@ -383,6 +407,13 @@ export function GameScreen({
             allowBench={false}
             onViewProfile={setProfileModalParticipantId}
           />
+          <SessionQueuePanel
+            session={session}
+            isHost={isHost}
+            send={send}
+            mode="inGame"
+            gameTitlesById={GAME_TITLES_BY_ID}
+          />
           <div className="card-footer card-footer-actions">
             <button
               type="button"
@@ -393,6 +424,16 @@ export function GameScreen({
             </button>
             {isHost && (
               <>
+              {queueLength > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => send({ type: "queue:next", payload: {} })}
+                  title="End the current game and start the next queued game"
+                >
+                  Next in queue
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"

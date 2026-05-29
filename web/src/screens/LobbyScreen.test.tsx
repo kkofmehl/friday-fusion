@@ -250,4 +250,54 @@ describe("LobbyScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create/Load Profile" }));
     expect(screen.getByRole("heading", { name: "My Profile" })).toBeDefined();
   });
+
+  it("sends queue:add with selected options when host clicks Queue", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={send} />
+    );
+
+    const memoryCard = screen.getByRole("heading", { name: "Memory" }).closest("article");
+    if (!memoryCard) throw new Error("expected Memory card");
+    fireEvent.click(within(memoryCard).getByRole("button", { name: "Queue" }));
+
+    expect(send).toHaveBeenCalledWith({
+      type: "queue:add",
+      payload: { game: "memory", options: { memoryBoardSize: "30" } }
+    });
+  });
+
+  it("sends queue:start when host clicks Start Queue", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen
+        session={buildSession({
+          sessionGameQueue: [{ id: "q1", game: "trivia" }]
+        })}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Queue" }));
+    expect(send).toHaveBeenCalledWith({ type: "queue:start", payload: {} });
+  });
+
+  it("sends queue:remove when host removes a queued game", () => {
+    const send = vi.fn();
+    render(
+      <LobbyScreen
+        session={buildSession({
+          sessionGameQueue: [{ id: "q1", game: "trivia" }]
+        })}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Trivia from queue" }));
+    expect(send).toHaveBeenCalledWith({ type: "queue:remove", payload: { queueItemId: "q1" } });
+  });
 });

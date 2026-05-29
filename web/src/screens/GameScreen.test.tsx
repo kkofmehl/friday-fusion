@@ -83,4 +83,38 @@ describe("GameScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create/Load Profile" }));
     expect(screen.getByRole("heading", { name: "My Profile" })).toBeDefined();
   });
+
+  it("shows Next in queue for the host when the session queue is non-empty", () => {
+    const send = vi.fn();
+    render(
+      <GameScreen
+        session={buildSession({
+          sessionGameQueue: [{ id: "q1", game: "trivia" }]
+        })}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Next in queue" }));
+    expect(send).toHaveBeenCalledWith({ type: "queue:next", payload: {} });
+  });
+
+  it("hides Next in queue when the session queue is empty", () => {
+    render(
+      <GameScreen
+        session={buildSession()}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Next in queue" })).toBeNull();
+  });
 });

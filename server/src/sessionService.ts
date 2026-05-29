@@ -28,6 +28,7 @@ import {
   type HangmanActivity,
   type HangmanMode,
   type PictionaryStrokePayload,
+  type QueuedGame,
   type SessionState,
   type TriviaLoadingState,
   type TriviaQuestion,
@@ -586,6 +587,7 @@ type SessionInternal = {
   games: GameInternal[];
   updatedAt: number;
   lobbyGamePreferences: Record<string, GameType>;
+  sessionGameQueue: QueuedGame[];
   /** Ephemeral: host score edit in progress; not persisted to disk. */
   scoreEditingParticipantId?: string;
 };
@@ -616,6 +618,15 @@ const assertParticipantActiveForGameplay = (session: SessionInternal, participan
     throw new Error("Inactive players cannot take this action.");
   }
 };
+
+const assertHost = (session: SessionInternal, participantId: string): void => {
+  if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+    throw new Error("Only the host can perform this action.");
+  }
+};
+
+const sessionGameQueueForPublicState = (session: SessionInternal): QueuedGame[] | undefined =>
+  session.sessionGameQueue.length > 0 ? [...session.sessionGameQueue] : undefined;
 
 type PersistedState = {
   sessions: SessionInternal[];
@@ -1752,7 +1763,10 @@ export class SessionService {
           lobbyGamePreferences:
             legacyPrefs.lobbyGamePreferences && typeof legacyPrefs.lobbyGamePreferences === "object"
               ? { ...legacyPrefs.lobbyGamePreferences }
-              : {}
+              : {},
+          sessionGameQueue: Array.isArray((legacy as SessionInternal).sessionGameQueue)
+            ? [...(legacy as SessionInternal).sessionGameQueue]
+            : []
         };
         for (const p of migrated.participants) {
           if (p.isActive === undefined) {
@@ -1830,7 +1844,8 @@ export class SessionService {
       participants: [{ id: participantId, displayName, isHost: true, score: 0, isActive: true }],
       games: [],
       updatedAt: Date.now(),
-      lobbyGamePreferences: {}
+      lobbyGamePreferences: {},
+      sessionGameQueue: []
     };
     this.sessions.set(sessionId, session);
     await this.persist();
@@ -2533,6 +2548,87 @@ export class SessionService {
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
+  }
+
+  public async addToGameQueue(
+    sessionId: string,
+    participantId: string,
+    game: GameType,
+    options: GameStartOptions = {}
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (session.games.length > 0) {
+      throw new Error("The queue can only be edited in the lobby.");
+    }
+    session.sessionGameQueue.push({ id: nanoid(8), game, options: Object.keys(options).length > 0 ? options : undefined });
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async removeFromGameQueue(
+    sessionId: string,
+    participantId: string,
+    queueItemId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (session.games.length > 0) {
+      throw new Error("The queue can only be edited in the lobby.");
+    }
+    const index = session.sessionGameQueue.findIndex((item) => item.id === queueItemId);
+    if (index < 0) {
+      throw new Error("Queue item not found.");
+    }
+    session.sessionGameQueue.splice(index, 1);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async startGameQueue(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (session.games.length > 0) {
+      throw new Error("Start the queue from the lobby when no game is active.");
+    }
+    const next = session.sessionGameQueue.shift();
+    if (!next) {
+      throw new Error("The session queue is empty.");
+    }
+    session.updatedAt = Date.now();
+    try {
+      await this.startGame(sessionId, next.game, next.options ?? {});
+    } catch (error) {
+      session.sessionGameQueue.unshift(next);
+      session.updatedAt = Date.now();
+      await this.persist();
+      throw error;
+    }
+  }
+
+  public async advanceGameQueue(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (session.games.length === 0) {
+      throw new Error("No active game to advance from.");
+    }
+    const next = session.sessionGameQueue.shift();
+    if (!next) {
+      throw new Error("The session queue is empty.");
+    }
+    session.updatedAt = Date.now();
+    try {
+      await this.startGame(sessionId, next.game, next.options ?? {});
+    } catch (error) {
+      session.sessionGameQueue.unshift(next);
+      session.updatedAt = Date.now();
+      await this.persist();
+      throw error;
+    }
   }
 
   public async closeSession(sessionId: string, participantId: string): Promise<void> {
@@ -6874,7 +6970,11 @@ export class SessionService {
       }),
       ...(session.scoreEditingParticipantId
         ? { scoreEditingParticipantId: session.scoreEditingParticipantId }
-        : {})
+        : {}),
+      ...(() => {
+        const sessionGameQueue = sessionGameQueueForPublicState(session);
+        return sessionGameQueue ? { sessionGameQueue } : {};
+      })()
     };
 
     if (!game) {

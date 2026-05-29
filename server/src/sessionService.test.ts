@@ -464,6 +464,74 @@ describe("SessionService", () => {
     expect(state.lobbyGamePreferences ?? {}).toEqual({});
   });
 
+  it("lets the host add, remove, start, and advance the session game queue", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "trivia");
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "hangman", { hangmanMode: "team" });
+    let state = setup.service.getState(host.sessionId);
+    expect(state.sessionGameQueue).toHaveLength(2);
+    expect(state.sessionGameQueue?.[0]?.game).toBe("trivia");
+    expect(state.sessionGameQueue?.[1]?.options).toEqual({ hangmanMode: "team" });
+
+    const hangmanItemId = state.sessionGameQueue?.[1]?.id;
+    expect(hangmanItemId).toBeTruthy();
+    await setup.service.removeFromGameQueue(host.sessionId, host.participantId, hangmanItemId!);
+    state = setup.service.getState(host.sessionId);
+    expect(state.sessionGameQueue).toHaveLength(1);
+
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "icebreaker");
+    await setup.service.startGameQueue(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId);
+    expect(state.activeGame).toBe("trivia");
+    expect(state.sessionGameQueue).toHaveLength(1);
+    expect(state.sessionGameQueue?.[0]?.game).toBe("icebreaker");
+
+    await setup.service.advanceGameQueue(host.sessionId, host.participantId);
+    state = setup.service.getState(host.sessionId);
+    expect(state.activeGame).toBe("icebreaker");
+    expect(state.sessionGameQueue ?? []).toHaveLength(0);
+  });
+
+  it("preserves the session game queue when the host ends the active game", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "Guest");
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "trivia");
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "hangman");
+    await setup.service.startGameQueue(host.sessionId, host.participantId);
+    await setup.service.endActiveGame(host.sessionId, host.participantId);
+    const state = setup.service.getState(host.sessionId);
+    expect(state.activeGame).toBeNull();
+    expect(state.sessionGameQueue).toHaveLength(1);
+    expect(state.sessionGameQueue?.[0]?.game).toBe("hangman");
+  });
+
+  it("rejects session queue edits from non-hosts and while a game is active", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guest = await setup.service.joinSession(host.joinCode, "Guest");
+    await expect(
+      setup.service.addToGameQueue(host.sessionId, guest.participantId, "trivia")
+    ).rejects.toThrow("Only the host can perform this action.");
+
+    await setup.service.addToGameQueue(host.sessionId, host.participantId, "trivia");
+    await setup.service.startGame(host.sessionId, "hangman");
+    await expect(
+      setup.service.addToGameQueue(host.sessionId, host.participantId, "trivia")
+    ).rejects.toThrow("The queue can only be edited in the lobby.");
+    const queueItemId = setup.service.getState(host.sessionId).sessionGameQueue?.[0]?.id;
+    expect(queueItemId).toBeTruthy();
+    await expect(
+      setup.service.removeFromGameQueue(host.sessionId, host.participantId, queueItemId!)
+    ).rejects.toThrow("The queue can only be edited in the lobby.");
+  });
+
   it("lets the host close the session for everyone", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

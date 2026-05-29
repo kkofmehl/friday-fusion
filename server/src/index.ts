@@ -1036,6 +1036,35 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             event.payload.game,
             event.payload.options ?? {}
           );
+        } else if (event.type === "queue:add") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can edit the session queue.");
+          }
+          await sessionService.addToGameQueue(
+            context.sessionId,
+            context.participantId,
+            event.payload.game,
+            event.payload.options ?? {}
+          );
+        } else if (event.type === "queue:remove") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can edit the session queue.");
+          }
+          await sessionService.removeFromGameQueue(
+            context.sessionId,
+            context.participantId,
+            event.payload.queueItemId
+          );
+        } else if (event.type === "queue:start") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can start the session queue.");
+          }
+          await sessionService.startGameQueue(context.sessionId, context.participantId);
+        } else if (event.type === "queue:next") {
+          if (!sessionService.isHost(context.sessionId, context.participantId)) {
+            throw new Error("Only host can advance the session queue.");
+          }
+          await sessionService.advanceGameQueue(context.sessionId, context.participantId);
         } else if (event.type === "lobby:setGamePreference") {
           await sessionService.setLobbyGamePreference(
             context.sessionId,

@@ -1190,6 +1190,44 @@ export const gameStateSchema = z.discriminatedUnion("type", [
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
 
+export const gameStartOptionsSchema = z.object({
+  hangmanMode: hangmanModeSchema.optional(),
+  hangmanCreatorId: z.string().optional(),
+  yahtzeeMode: yahtzeeModeSchema.optional(),
+  /** Guess the image: who uploads the image and enters descriptions for the first round (defaults to host). */
+  guessImageSetupParticipantId: z.string().optional(),
+  /** Guess the image: when `everyone`, each player prepares their own image; host then picks which one to play. */
+  guessImageSetupMode: z.enum(["single", "everyone"]).optional(),
+  /** 20 Questions: who picks the secret item and answers yes/no (defaults to host if omitted). */
+  twentyQuestionsItemSelectorId: z.string().optional(),
+  /** 20 Questions: question budget for the round (default 20, clamped server-side to 1–50). */
+  twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional(),
+  /** Caption This: who uploads the image for the first round (defaults to host). */
+  captionThisImageProviderId: z.string().optional(),
+  /** Pictionary: ms per drawing turn (server clamps to PICTORY_ROUND_DURATION_*). */
+  pictionaryRoundDurationMs: z.number().int().positive().optional(),
+  /** Apples to Apples: standard (redraw to hand size) or finite (6 rounds, no redraw). */
+  applesToApplesMode: applesToApplesModeSchema.optional(),
+  /** Would You Rather: number of stock prompts to run before submitted prompts. */
+  wouldYouRatherTotalQuestions: z.number().int().positive().optional(),
+  /** Would You Rather: players can submit prompts during round if enabled. */
+  wouldYouRatherAllowParticipantSubmissions: z.boolean().optional(),
+  /** Story Builder: stock starters vs blank opening. */
+  storyBuilderMode: storyBuilderModeSchema.optional(),
+  /** Story Builder: who writes the first player sentence (stock: after starter; scratch: opening line). */
+  storyBuilderFirstTurnParticipantId: z.string().optional(),
+  /** Memory: 30 cards (15 pairs, 6×5) or 36 cards (18 pairs, 6×6). */
+  memoryBoardSize: memoryBoardSizeSchema.optional()
+});
+export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
+
+export const queuedGameSchema = z.object({
+  id: z.string(),
+  game: gameTypeSchema,
+  options: gameStartOptionsSchema.optional()
+});
+export type QueuedGame = z.infer<typeof queuedGameSchema>;
+
 export const sessionStateSchema = z.object({
   sessionId: z.string(),
   sessionName: z.string(),
@@ -1199,6 +1237,8 @@ export const sessionStateSchema = z.object({
   gameState: gameStateSchema.nullable(),
   /** Non-host lobby votes for which game to play next (participantId -> game); absent or empty when unavailable. */
   lobbyGamePreferences: z.record(z.string(), gameTypeSchema).optional(),
+  /** Host-planned upcoming games for the session; absent when empty. */
+  sessionGameQueue: z.array(queuedGameSchema).optional(),
   /** When set, the host is editing this participant's score (broadcast to all clients). */
   scoreEditingParticipantId: z.string().nullable().optional()
 });
@@ -1360,37 +1400,6 @@ export const serverEventSchema = z.discriminatedUnion("type", [
 ]);
 export type ServerEvent = z.infer<typeof serverEventSchema>;
 
-export const gameStartOptionsSchema = z.object({
-  hangmanMode: hangmanModeSchema.optional(),
-  hangmanCreatorId: z.string().optional(),
-  yahtzeeMode: yahtzeeModeSchema.optional(),
-  /** Guess the image: who uploads the image and enters descriptions for the first round (defaults to host). */
-  guessImageSetupParticipantId: z.string().optional(),
-  /** Guess the image: when `everyone`, each player prepares their own image; host then picks which one to play. */
-  guessImageSetupMode: z.enum(["single", "everyone"]).optional(),
-  /** 20 Questions: who picks the secret item and answers yes/no (defaults to host if omitted). */
-  twentyQuestionsItemSelectorId: z.string().optional(),
-  /** 20 Questions: question budget for the round (default 20, clamped server-side to 1–50). */
-  twentyQuestionsMaxQuestions: z.number().int().min(1).max(50).optional(),
-  /** Caption This: who uploads the image for the first round (defaults to host). */
-  captionThisImageProviderId: z.string().optional(),
-  /** Pictionary: ms per drawing turn (server clamps to PICTORY_ROUND_DURATION_*). */
-  pictionaryRoundDurationMs: z.number().int().positive().optional(),
-  /** Apples to Apples: standard (redraw to hand size) or finite (6 rounds, no redraw). */
-  applesToApplesMode: applesToApplesModeSchema.optional(),
-  /** Would You Rather: number of stock prompts to run before submitted prompts. */
-  wouldYouRatherTotalQuestions: z.number().int().positive().optional(),
-  /** Would You Rather: players can submit prompts during round if enabled. */
-  wouldYouRatherAllowParticipantSubmissions: z.boolean().optional(),
-  /** Story Builder: stock starters vs blank opening. */
-  storyBuilderMode: storyBuilderModeSchema.optional(),
-  /** Story Builder: who writes the first player sentence (stock: after starter; scratch: opening line). */
-  storyBuilderFirstTurnParticipantId: z.string().optional(),
-  /** Memory: 30 cards (15 pairs, 6×5) or 36 cards (18 pairs, 6×6). */
-  memoryBoardSize: memoryBoardSizeSchema.optional()
-});
-export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
-
 export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session:hello"), payload: z.object({ sessionId: z.string(), participantId: z.string() }) }),
   z.object({ type: z.literal("lobby:subscribe"), payload: z.object({}) }),
@@ -1441,6 +1450,16 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("game:start"),
     payload: z.object({ game: gameTypeSchema, options: gameStartOptionsSchema.optional() })
   }),
+  z.object({
+    type: z.literal("queue:add"),
+    payload: z.object({ game: gameTypeSchema, options: gameStartOptionsSchema.optional() })
+  }),
+  z.object({
+    type: z.literal("queue:remove"),
+    payload: z.object({ queueItemId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("queue:start"), payload: z.object({}) }),
+  z.object({ type: z.literal("queue:next"), payload: z.object({}) }),
   z.object({ type: z.literal("hangman:setWord"), payload: z.object({ word: z.string().min(1) }) }),
   z.object({ type: z.literal("hangman:guessLetter"), payload: z.object({ letter: z.string().length(1) }) }),
   z.object({ type: z.literal("hangman:solveOpen"), payload: z.object({}) }),

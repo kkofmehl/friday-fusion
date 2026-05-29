@@ -74,3 +74,5 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-21:** Change the bench/remove host controls for each player into a hamburger menu.
 
 **2026-05-21:** Memory game — add a solid top turn bar with larger "It's your turn" when it's the active player's turn.
+
+**2026-05-28:** Session Queue — build ability to queue games into a Session Queue for session planning in the Players sidebar: each lobby game gets Start + Queue buttons; Start Queue below the queue jumps into the first game; during queued play host gets Next in queue (plus End game) and can return to lobby and resume the queue; include remove-from-queue on each item.

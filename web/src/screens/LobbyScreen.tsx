@@ -12,11 +12,11 @@ import {
 } from "../../../shared/contracts";
 import { GameAttributeBadge, GameAttributeLegend } from "../components/GameAttributeBadge";
 import { PlayerList } from "../components/PlayerList";
+import { SessionQueuePanel } from "../components/SessionQueuePanel";
 import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
 import { ProfileViewModal } from "../components/ProfileViewModal";
 import { getGameAttributes } from "../../../shared/gameAttributes";
-
-const GUESS_IMAGE_LOBBY_EVERYONE = "everyone";
+import { buildGameStartPayload, GUESS_IMAGE_LOBBY_EVERYONE } from "../utils/buildGameStartPayload";
 
 type GameOption = {
   id: GameType;
@@ -147,6 +147,8 @@ const GAMES: GameOption[] = [
   }
 ];
 
+const GAME_TITLES_BY_ID = Object.fromEntries(GAMES.map((game) => [game.id, game.title])) as Record<GameType, string>;
+
 export function LobbyScreen({
   session,
   currentParticipantId,
@@ -243,108 +245,29 @@ export function LobbyScreen({
     );
   }, [currentParticipantId, activeRoster, storyBuilderFirstTurnId]);
 
+  const lobbyGameOptions = {
+    hangmanMode,
+    hangmanCreatorId,
+    guessImagePreparer,
+    twentyQSelectorId,
+    twentyQMaxQuestions,
+    captionThisProviderId,
+    pictionaryDrawSecs,
+    applesMode,
+    yahtzeeMode,
+    wouldYouRatherQuestions,
+    wouldYouRatherAllowSubmissions,
+    storyBuilderMode,
+    storyBuilderFirstTurnId,
+    memoryBoardSize
+  };
+
   const startGame = (game: GameType) => {
-    if (game === "hangman") {
-      send({ type: "game:start", payload: { game, options: { hangmanMode, hangmanCreatorId } } });
-      return;
-    }
-    if (game === "guessTheImage") {
-      if (guessImagePreparer === GUESS_IMAGE_LOBBY_EVERYONE) {
-        send({
-          type: "game:start",
-          payload: { game, options: { guessImageSetupMode: "everyone" } }
-        });
-      } else {
-        send({
-          type: "game:start",
-          payload: { game, options: { guessImageSetupParticipantId: guessImagePreparer } }
-        });
-      }
-      return;
-    }
-    if (game === "twentyQuestions") {
-      const maxQ = Math.min(50, Math.max(1, Math.floor(twentyQMaxQuestions) || 20));
-      send({
-        type: "game:start",
-        payload: {
-          game,
-          options: {
-            twentyQuestionsItemSelectorId: twentyQSelectorId,
-            twentyQuestionsMaxQuestions: maxQ
-          }
-        }
-      });
-      return;
-    }
-    if (game === "captionThis") {
-      send({
-        type: "game:start",
-        payload: {
-          game,
-          options: { captionThisImageProviderId: captionThisProviderId }
-        }
-      });
-      return;
-    }
-    if (game === "pictionary") {
-      const minSec = PICTORY_ROUND_DURATION_MIN_MS / 1000;
-      const maxSec = PICTORY_ROUND_DURATION_MAX_MS / 1000;
-      const sec = Math.min(maxSec, Math.max(minSec, Math.floor(pictionaryDrawSecs) || minSec));
-      send({
-        type: "game:start",
-        payload: { game, options: { pictionaryRoundDurationMs: sec * 1000 } }
-      });
-      return;
-    }
-    if (game === "applesToApples") {
-      send({
-        type: "game:start",
-        payload: { game, options: { applesToApplesMode: applesMode } }
-      });
-      return;
-    }
-    if (game === "yahtzee") {
-      send({
-        type: "game:start",
-        payload: { game, options: { yahtzeeMode } }
-      });
-      return;
-    }
-    if (game === "wouldYouRather") {
-      const totalQuestions = Math.max(1, Math.min(200, Math.floor(wouldYouRatherQuestions) || 10));
-      send({
-        type: "game:start",
-        payload: {
-          game,
-          options: {
-            wouldYouRatherTotalQuestions: totalQuestions,
-            wouldYouRatherAllowParticipantSubmissions: wouldYouRatherAllowSubmissions
-          }
-        }
-      });
-      return;
-    }
-    if (game === "storyBuilder") {
-      send({
-        type: "game:start",
-        payload: {
-          game,
-          options: {
-            storyBuilderMode,
-            storyBuilderFirstTurnParticipantId: storyBuilderFirstTurnId
-          }
-        }
-      });
-      return;
-    }
-    if (game === "memory") {
-      send({
-        type: "game:start",
-        payload: { game, options: { memoryBoardSize } }
-      });
-      return;
-    }
-    send({ type: "game:start", payload: { game } });
+    send({ type: "game:start", payload: buildGameStartPayload(game, lobbyGameOptions) });
+  };
+
+  const queueGame = (game: GameType) => {
+    send({ type: "queue:add", payload: buildGameStartPayload(game, lobbyGameOptions) });
   };
 
   const lobbyPrefs = session.lobbyGamePreferences ?? {};
@@ -381,6 +304,13 @@ export function LobbyScreen({
               })}
             </ul>
           )}
+          <SessionQueuePanel
+            session={session}
+            isHost={isHost}
+            send={send}
+            mode="lobby"
+            gameTitlesById={GAME_TITLES_BY_ID}
+          />
           <div className="card-footer card-footer-actions">
             <button
               type="button"
@@ -729,9 +659,14 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {isHost ? (
-                <button type="button" className="btn btn-primary" onClick={() => startGame(game.id)}>
-                  Start
-                </button>
+                <div className="game-card-actions">
+                  <button type="button" className="btn btn-primary" onClick={() => startGame(game.id)}>
+                    Start
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => queueGame(game.id)}>
+                    Queue
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
