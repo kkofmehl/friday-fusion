@@ -144,6 +144,13 @@ const GAMES: GameOption[] = [
     description:
       "Classic matching pairs using Friday Fusion game icons. Match to score and go again; miss and the turn passes after a short reveal.",
     iconSrc: "/game_icons/memory.png"
+  },
+  {
+    id: "wordle",
+    title: "Wordle Race",
+    description:
+      "Everyone races the same 5-letter word after a 3-2-1 countdown. Watch live mini boards, then earn inverse placement Friday Fusion points.",
+    iconSrc: "/game_icons/wordle.png"
   }
 ];
 

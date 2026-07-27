@@ -1419,6 +1419,14 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.cardId
           );
+        } else if (event.type === "wordle:startRound") {
+          await sessionService.wordleStartRound(context.sessionId, context.participantId);
+        } else if (event.type === "wordle:submitGuess") {
+          await sessionService.wordleSubmitGuess(
+            context.sessionId,
+            context.participantId,
+            event.payload.guess
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

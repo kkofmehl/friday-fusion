@@ -22,6 +22,9 @@ import {
   TWENTY_QUESTIONS_ITEM_MAX_CHARS,
   TWENTY_QUESTIONS_QUESTION_MAX_CHARS,
   STORY_BUILDER_SENTENCE_MAX_CHARS,
+  WORDLE_COUNTDOWN_MS,
+  WORDLE_MAX_GUESSES,
+  WORDLE_WORD_LENGTH,
   gameTypeSchema,
   type GameStartOptions,
   type GameType,
@@ -41,6 +44,8 @@ import {
   type YahtzeeMode,
   type YahtzeeSheetRow,
   type MemoryCardPublic,
+  type WordleStanding,
+  type WordleTile,
   SCATTERGORIES_ANSWER_MAX_CHARS,
   SCATTERGORIES_COUNTDOWN_MS
 } from "../../shared/contracts";
@@ -50,6 +55,12 @@ import {
   grandTotalFromSheetRows,
   scoreCategory
 } from "../../shared/yahtzeeScoring";
+import {
+  computeWordlePlacement,
+  evaluateGuess,
+  isSolvedEvaluation
+} from "../../shared/wordleLogic";
+import { isValidWordleGuess, pickWordleAnswer } from "./wordleWords";
 import { pickPictionaryClue } from "./pictionaryClues";
 import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
@@ -555,6 +566,27 @@ type MemoryGameInternal = {
   finalScores: Record<string, number> | null;
 };
 
+type WordlePlayerInternal = {
+  evaluations: WordleTile[][];
+  guesses: string[];
+  status: "racing" | "solved" | "failed";
+  finishedAt: number | null;
+};
+
+type WordleGameInternal = {
+  id: string;
+  type: "wordle";
+  status: "idle" | "countdown" | "racing" | "roundComplete";
+  answer: string | null;
+  usedAnswers: string[];
+  countdownEndsAt: number | null;
+  startedAt: number | null;
+  players: Record<string, WordlePlayerInternal>;
+  standings: WordleStanding[] | null;
+  placementAwards: Record<string, number> | null;
+  scoresApplied: boolean;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -574,7 +606,8 @@ type GameInternal =
   | YahtzeeGameInternal
   | ScattergoriesGameInternal
   | StoryBuilderGameInternal
-  | MemoryGameInternal;
+  | MemoryGameInternal
+  | WordleGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1255,6 +1288,60 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       finalScores
     };
   }
+  if (game.type === "wordle") {
+    const g = game as WordleGameInternal;
+    const status =
+      g.status === "countdown" || g.status === "racing" || g.status === "roundComplete" || g.status === "idle"
+        ? g.status
+        : "idle";
+    const players: Record<string, WordlePlayerInternal> = {};
+    if (g.players && typeof g.players === "object") {
+      for (const [pid, raw] of Object.entries(g.players)) {
+        if (!raw || typeof raw !== "object") {
+          continue;
+        }
+        const evaluations = Array.isArray(raw.evaluations)
+          ? raw.evaluations
+              .filter((row) => Array.isArray(row) && row.length === WORDLE_WORD_LENGTH)
+              .map((row) =>
+                row.map((tile) =>
+                  tile === "correct" || tile === "present" || tile === "absent" ? tile : "absent"
+                )
+              )
+              .slice(0, WORDLE_MAX_GUESSES)
+          : [];
+        const guesses = Array.isArray(raw.guesses)
+          ? raw.guesses
+              .filter((w) => typeof w === "string" && w.length === WORDLE_WORD_LENGTH)
+              .map((w) => w.toLowerCase())
+              .slice(0, WORDLE_MAX_GUESSES)
+          : [];
+        players[pid] = {
+          evaluations,
+          guesses,
+          status: raw.status === "solved" || raw.status === "failed" ? raw.status : "racing",
+          finishedAt: typeof raw.finishedAt === "number" ? raw.finishedAt : null
+        };
+      }
+    }
+    // Mid-countdown/racing timers are not restored after process restart.
+    const restoredStatus = status === "countdown" || status === "racing" ? "idle" : status;
+    return {
+      id: g.id ?? nanoid(6),
+      type: "wordle",
+      status: restoredStatus,
+      answer: null,
+      usedAnswers: Array.isArray(g.usedAnswers)
+        ? g.usedAnswers.filter((w) => typeof w === "string").map((w) => w.toLowerCase())
+        : [],
+      countdownEndsAt: null,
+      startedAt: null,
+      players: restoredStatus === "idle" ? {} : players,
+      standings: Array.isArray(g.standings) ? g.standings : null,
+      placementAwards: g.placementAwards && typeof g.placementAwards === "object" ? { ...g.placementAwards } : null,
+      scoresApplied: g.scoresApplied === true
+    };
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -1628,6 +1715,7 @@ export class SessionService {
   private readonly catchPhraseResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly scattergoriesResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly memoryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly wordleResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -1976,6 +2064,9 @@ export class SessionService {
     }
     if (previousGame?.type === "memory") {
       this.clearMemoryTimer(sessionId);
+    }
+    if (previousGame?.type === "wordle") {
+      this.clearWordleTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -2481,6 +2572,24 @@ export class SessionService {
         resolveEndsAtMs: null,
         finalScores: null
       };
+    } else if (game === "wordle") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Wordle needs at least two active players.");
+      }
+      next = {
+        id: nanoid(6),
+        type: "wordle",
+        status: "idle",
+        answer: null,
+        usedAnswers: [],
+        countdownEndsAt: null,
+        startedAt: null,
+        players: {},
+        standings: null,
+        placementAwards: null,
+        scoresApplied: false
+      };
     } else if (game === "scattergories") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -2544,6 +2653,9 @@ export class SessionService {
     }
     if (active?.type === "memory") {
       this.clearMemoryTimer(sessionId);
+    }
+    if (active?.type === "wordle") {
+      this.clearWordleTimer(sessionId);
     }
     session.games = [];
     session.updatedAt = Date.now();
@@ -2643,6 +2755,7 @@ export class SessionService {
     this.clearCatchPhraseTimer(sessionId);
     this.clearScattergoriesTimer(sessionId);
     this.clearMemoryTimer(sessionId);
+    this.clearWordleTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2661,6 +2774,7 @@ export class SessionService {
     this.clearCatchPhraseTimer(sessionId);
     this.clearScattergoriesTimer(sessionId);
     this.clearMemoryTimer(sessionId);
+    this.clearWordleTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2786,6 +2900,26 @@ export class SessionService {
       session.games = [];
     }
 
+    const activeWordle = session.games[0];
+    if (activeWordle?.type === "wordle") {
+      delete activeWordle.players[participantId];
+      if (activeWordle.status === "racing" || activeWordle.status === "countdown") {
+        const remaining = Object.keys(activeWordle.players);
+        if (remaining.length === 0) {
+          this.clearWordleTimer(sessionId);
+          activeWordle.status = "idle";
+          activeWordle.answer = null;
+          activeWordle.countdownEndsAt = null;
+          activeWordle.startedAt = null;
+          activeWordle.standings = null;
+          activeWordle.placementAwards = null;
+          activeWordle.scoresApplied = false;
+        } else if (activeWordle.status === "racing") {
+          this.wordleMaybeFinalizeRound(session, activeWordle);
+        }
+      }
+    }
+
     const activeStoryBuilder = session.games[0];
     if (activeStoryBuilder?.type === "storyBuilder") {
       const sb = activeStoryBuilder;
@@ -2843,6 +2977,7 @@ export class SessionService {
       this.clearCatchPhraseTimer(sessionId);
       this.clearScattergoriesTimer(sessionId);
       this.clearMemoryTimer(sessionId);
+      this.clearWordleTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -6257,6 +6392,182 @@ export class SessionService {
     }
   }
 
+  private clearWordleTimer(sessionId: string): void {
+    const existing = this.wordleResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.wordleResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleWordleTimer(sessionId: string, deadlineMs: number, onFire: () => Promise<void>): void {
+    this.clearWordleTimer(sessionId);
+    const delay = Math.max(0, deadlineMs - Date.now());
+    const timer = setTimeout(() => {
+      void onFire().catch(() => {});
+    }, delay);
+    this.wordleResolveTimers.set(sessionId, timer);
+  }
+
+  private wordleEmptyPlayer(): WordlePlayerInternal {
+    return {
+      evaluations: [],
+      guesses: [],
+      status: "racing",
+      finishedAt: null
+    };
+  }
+
+  private wordlePublicPlayers(
+    game: WordleGameInternal
+  ): Record<string, { evaluations: WordleTile[][]; status: WordlePlayerInternal["status"]; guessCount: number; finishedAt: number | null }> {
+    const out: Record<
+      string,
+      { evaluations: WordleTile[][]; status: WordlePlayerInternal["status"]; guessCount: number; finishedAt: number | null }
+    > = {};
+    for (const [pid, player] of Object.entries(game.players)) {
+      out[pid] = {
+        evaluations: player.evaluations.map((row) => [...row]),
+        status: player.status,
+        guessCount: player.guesses.length,
+        finishedAt: player.finishedAt
+      };
+    }
+    return out;
+  }
+
+  private wordleMaybeFinalizeRound(session: SessionInternal, game: WordleGameInternal): void {
+    if (game.status !== "racing" || !game.startedAt || !game.answer) {
+      return;
+    }
+    const entries = Object.entries(game.players);
+    if (entries.length === 0) {
+      return;
+    }
+    if (!entries.every(([, p]) => p.status === "solved" || p.status === "failed")) {
+      return;
+    }
+    if (game.scoresApplied) {
+      return;
+    }
+    const results = entries.map(([participantId, player]) => ({
+      participantId,
+      solved: player.status === "solved",
+      guessCount: player.guesses.length,
+      elapsedMs: Math.max(0, (player.finishedAt ?? Date.now()) - game.startedAt!)
+    }));
+    const standings = computeWordlePlacement(results);
+    for (const row of standings) {
+      const p = session.participants.find((x) => x.id === row.participantId);
+      if (p) {
+        p.score += row.award;
+      }
+    }
+    game.scoresApplied = true;
+    game.status = "roundComplete";
+    game.standings = standings.map((row) => ({
+      participantId: row.participantId,
+      place: row.place,
+      solved: row.solved,
+      guessCount: row.guessCount,
+      elapsedMs: row.elapsedMs,
+      ffPoints: row.award
+    }));
+    game.placementAwards = Object.fromEntries(standings.map((s) => [s.participantId, s.award]));
+  }
+
+  private async wordleTransitionToRacing(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "wordle" || game.status !== "countdown") {
+      return;
+    }
+    this.clearWordleTimer(sessionId);
+    game.status = "racing";
+    game.countdownEndsAt = null;
+    game.startedAt = Date.now();
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  public async wordleStartRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const isHost = session.participants.some((p) => p.id === hostParticipantId && p.isHost);
+    if (!isHost) {
+      throw new Error("Only the host can start a Wordle race.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "wordle") {
+      throw new Error("Wordle is not the active game.");
+    }
+    if (game.status !== "idle" && game.status !== "roundComplete") {
+      throw new Error("A Wordle race is already in progress.");
+    }
+    const actives = activeParticipants(session);
+    if (actives.length < 2) {
+      throw new Error("Wordle needs at least two active players.");
+    }
+    this.clearWordleTimer(sessionId);
+    const answer = pickWordleAnswer(game.usedAnswers);
+    game.answer = answer;
+    game.usedAnswers = [...game.usedAnswers, answer];
+    game.players = Object.fromEntries(actives.map((p) => [p.id, this.wordleEmptyPlayer()]));
+    game.standings = null;
+    game.placementAwards = null;
+    game.scoresApplied = false;
+    game.startedAt = null;
+    const countdownEndsAt = Date.now() + WORDLE_COUNTDOWN_MS;
+    game.countdownEndsAt = countdownEndsAt;
+    game.status = "countdown";
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleWordleTimer(sessionId, countdownEndsAt, () => this.wordleTransitionToRacing(sessionId));
+  }
+
+  public async wordleSubmitGuess(sessionId: string, participantId: string, rawGuess: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wordle" || game.status !== "racing" || !game.answer || !game.startedAt) {
+      throw new Error("Wordle race is not in progress.");
+    }
+    const player = game.players[participantId];
+    if (!player) {
+      throw new Error("You are not in this Wordle race.");
+    }
+    if (player.status !== "racing") {
+      throw new Error("You have already finished this race.");
+    }
+    const guess = rawGuess.trim().toLowerCase();
+    if (guess.length !== WORDLE_WORD_LENGTH) {
+      throw new Error(`Guesses must be ${WORDLE_WORD_LENGTH} letters.`);
+    }
+    if (!isValidWordleGuess(guess)) {
+      throw new Error("Not in word list.");
+    }
+    if (player.guesses.includes(guess)) {
+      throw new Error("You already guessed that word.");
+    }
+    const evaluation = evaluateGuess(game.answer, guess);
+    player.guesses.push(guess);
+    player.evaluations.push(evaluation);
+    if (isSolvedEvaluation(evaluation)) {
+      player.status = "solved";
+      player.finishedAt = Date.now();
+    } else if (player.guesses.length >= WORDLE_MAX_GUESSES) {
+      player.status = "failed";
+      player.finishedAt = Date.now();
+    }
+    this.wordleMaybeFinalizeRound(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private scheduleMemoryMismatchResolve(sessionId: string): void {
     this.clearMemoryTimer(sessionId);
     const timer = setTimeout(() => {
@@ -8392,6 +8703,83 @@ export class SessionService {
             flippedCardIds: [...g.flippedCardIds],
             scores
           }
+        }
+      };
+    }
+
+    if (game.type === "wordle") {
+      const g = game as WordleGameInternal;
+      const players = this.wordlePublicPlayers(g);
+      const myGuesses =
+        viewerParticipantId && g.players[viewerParticipantId]
+          ? [...g.players[viewerParticipantId]!.guesses]
+          : undefined;
+      const shared = {
+        players,
+        myGuesses,
+        usedAnswers: [...g.usedAnswers]
+      };
+      if (g.status === "idle") {
+        return {
+          ...base,
+          activeGame: "wordle",
+          gameState: {
+            type: "wordle",
+            state: { status: "idle" as const, ...shared }
+          }
+        };
+      }
+      if (g.status === "countdown" && g.countdownEndsAt !== null) {
+        return {
+          ...base,
+          activeGame: "wordle",
+          gameState: {
+            type: "wordle",
+            state: {
+              status: "countdown" as const,
+              countdownEndsAt: g.countdownEndsAt,
+              ...shared
+            }
+          }
+        };
+      }
+      if (g.status === "racing" && g.startedAt !== null) {
+        return {
+          ...base,
+          activeGame: "wordle",
+          gameState: {
+            type: "wordle",
+            state: {
+              status: "racing" as const,
+              startedAt: g.startedAt,
+              ...shared
+            }
+          }
+        };
+      }
+      if (g.status === "roundComplete" && g.startedAt !== null && g.answer && g.standings && g.placementAwards) {
+        return {
+          ...base,
+          activeGame: "wordle",
+          gameState: {
+            type: "wordle",
+            state: {
+              status: "roundComplete" as const,
+              startedAt: g.startedAt,
+              answer: g.answer,
+              standings: g.standings.map((row) => ({ ...row })),
+              placementAwards: { ...g.placementAwards },
+              ...shared
+            }
+          }
+        };
+      }
+      return {
+        ...base,
+        activeGame: "wordle",
+        gameState: {
+          type: "wordle",
+          state: { status: "idle" as const, ...shared }
         }
       };
     }

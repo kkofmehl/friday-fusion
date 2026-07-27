@@ -200,3 +200,14 @@
 100. User requested full **player profiles**: keep join flow as display-name-only, add in-session create/load profile with unique username + password, profile editor panel (`My Profile`) with name/about/favorites/dream-job/avatar (upload or stock), persistent non-session-purged profile images, star indicator in Players for linked profiles, and a modal to view another player's public profile. Assistant implemented shared contracts, profile persistence service (`profiles.json`), durable profile upload routes, session profile-linking (`session:linkProfile`) with `hasProfile` participant state, new web components (`MyProfilePanel`, `ProfileViewModal`), Lobby/Game wiring, styles, and tests.
 101. User requested profile flow simplification: remove password requirement, hide `My Profile` by default behind a `Create/Load Profile` button, use username-only open semantics (create when missing, load when existing), and make profile panel content scrollable so favorites do not clip. Assistant updated contracts/server routes/services/web components/screens/styles/tests to support username-only profile open/link/edit and conditional panel visibility.
 102. User requested avatar rollout across all games: show avatars anywhere player names appear (turns, winners, summaries, chat/player lists), size avatars contextually with larger treatment for significant events, and add celebratory avatar shower effects on notable wins (including team wins). Assistant implemented backend avatar enrichment in session participant state, shared avatar/name components and helpers, game/surface UI integrations, celebration effects, styles, tests, and prompt log updates.
+
+## 2026-07-27
+
+103. User asked to explore the friday-fusion codebase to understand how games are structured and added: project structure/tech stack, game registration and selection, lifecycle (lobby/countdown/play/end/scoring), Friday Fusion points, realtime sync, and existing race/competitive patterns closest to a live race Wordle.
+104. User asked for a focused codebase exploration covering Friday Fusion points/scoring after games, realtime multiplayer state sync, spectator/other-players status UI, ranking/placement logic, countdown/race-start patterns, chat/presence live state, plus word-list assets — specifically to reuse for a live Wordle race with mini boards, rankings, and inverse placement points.
+
+## 2026-07-27
+
+105. User approved the Wordle Race plan and asked to implement it: multi-round live Wordle with host-started random answers, 3-2-1 countdown, realtime mini color boards, ranking by solved/guesses/time, and inverse-placement FF points.
+
+106. User reported Wordle Race layout overlapping when shrinking the display from full width (fine on full and portrait monitors); board/keyboard bleed into players rail and live standings.

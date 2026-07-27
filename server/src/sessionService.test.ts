@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SCATTERGORIES_COUNTDOWN_MS, type SessionState } from "../../shared/contracts";
+import { SCATTERGORIES_COUNTDOWN_MS, WORDLE_COUNTDOWN_MS, type SessionState } from "../../shared/contracts";
 import { SessionService } from "./sessionService";
 import { FileStore } from "./storage/fileStore";
 
@@ -3161,6 +3161,106 @@ describe("SessionService", () => {
       );
       await setup.service.scattergoriesNextPrompt(host.sessionId, host.participantId);
       vi.useRealTimers();
+    });
+  });
+
+  describe("wordle", () => {
+    it("transitions from countdown to racing after 3 seconds", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "wordle");
+      await setup.service.wordleStartRound(host.sessionId, host.participantId);
+      let state = setup.service.getState(host.sessionId, host.participantId);
+      expect(state.gameState?.type).toBe("wordle");
+      if (state.gameState?.type !== "wordle") {
+        throw new Error("expected wordle");
+      }
+      expect(state.gameState.state.status).toBe("countdown");
+      expect("answer" in state.gameState.state).toBe(false);
+      await vi.advanceTimersByTimeAsync(WORDLE_COUNTDOWN_MS + 100);
+      state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "wordle") {
+        throw new Error("expected wordle");
+      }
+      expect(state.gameState.state.status).toBe("racing");
+      vi.useRealTimers();
+    });
+
+    it("rejects invalid guesses and hides answer until round complete", async () => {
+      vi.useFakeTimers();
+      const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "wordle");
+      await setup.service.wordleStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(WORDLE_COUNTDOWN_MS + 50);
+
+      await expect(
+        setup.service.wordleSubmitGuess(host.sessionId, host.participantId, "zzzzz")
+      ).rejects.toThrow(/word list/i);
+
+      await setup.service.wordleSubmitGuess(host.sessionId, host.participantId, "aback");
+      const hostView = setup.service.getState(host.sessionId, host.participantId);
+      const guestView = setup.service.getState(host.sessionId, guest.participantId);
+      if (hostView.gameState?.type !== "wordle" || hostView.gameState.state.status !== "racing") {
+        throw new Error("host racing");
+      }
+      expect(hostView.gameState.state.myGuesses).toEqual(["aback"]);
+      expect(hostView.gameState.state.players[host.participantId]?.evaluations[0]).toEqual([
+        "correct",
+        "correct",
+        "correct",
+        "correct",
+        "correct"
+      ]);
+      expect(hostView.gameState.state.players[host.participantId]?.status).toBe("solved");
+      if (guestView.gameState?.type !== "wordle" || guestView.gameState.state.status !== "racing") {
+        throw new Error("guest racing");
+      }
+      expect(guestView.gameState.state.myGuesses ?? []).toEqual([]);
+      expect(guestView.gameState.state.players[host.participantId]?.evaluations[0]).toEqual([
+        "correct",
+        "correct",
+        "correct",
+        "correct",
+        "correct"
+      ]);
+      expect("answer" in guestView.gameState.state).toBe(false);
+
+      // Guest fails with 6 wrong guesses
+      const misses = ["crane", "trace", "slate", "adieu", "audio", "raise"];
+      for (const guess of misses) {
+        await setup.service.wordleSubmitGuess(host.sessionId, guest.participantId, guess);
+      }
+      const done = setup.service.getState(host.sessionId, host.participantId);
+      if (done.gameState?.type !== "wordle" || done.gameState.state.status !== "roundComplete") {
+        throw new Error("expected roundComplete");
+      }
+      expect(done.gameState.state.answer).toBe("aback");
+      expect(done.gameState.state.standings[0]?.participantId).toBe(host.participantId);
+      expect(done.gameState.state.standings[0]?.ffPoints).toBe(2);
+      expect(done.participants.find((p) => p.id === host.participantId)?.score).toBe(2);
+      expect(done.participants.find((p) => p.id === guest.participantId)?.score).toBe(1);
+
+      // Points applied once
+      await setup.service.wordleStartRound(host.sessionId, host.participantId);
+      const afterNext = setup.service.getState(host.sessionId);
+      expect(afterNext.participants.find((p) => p.id === host.participantId)?.score).toBe(2);
+
+      randomSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it("requires at least two players to start", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await expect(setup.service.startGame(host.sessionId, "wordle")).rejects.toThrow(/two/i);
     });
   });
 });

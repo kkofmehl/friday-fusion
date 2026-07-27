@@ -24,6 +24,7 @@ import { YahtzeeGame } from "../games/YahtzeeGame";
 import { ScattergoriesGame } from "../games/ScattergoriesGame";
 import { StoryBuilderGame } from "../games/StoryBuilderGame";
 import { MemoryGame } from "../games/MemoryGame";
+import { WordleGame } from "../games/WordleGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -44,7 +45,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   yahtzee: "/game_icons/yahtzee.png",
   scattergories: "/game_icons/scattegories.png",
   storyBuilder: "/game_icons/story_builder.png",
-  memory: "/game_icons/memory.png"
+  memory: "/game_icons/memory.png",
+  wordle: "/game_icons/wordle.png"
 };
 
 const GAME_TITLES_BY_ID: Record<GameType, string> = {
@@ -66,7 +68,8 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   yahtzee: "Yahtzee",
   scattergories: "Scattergories",
   storyBuilder: "Story Builder",
-  memory: "Memory"
+  memory: "Memory",
+  wordle: "Wordle Race"
 };
 
 export function GameScreen({
@@ -382,6 +385,17 @@ export function GameScreen({
         <MemoryGame
           session={session}
           currentParticipantId={currentParticipantId}
+          canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "wordle") {
+      return (
+        <WordleGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
           canPlay={canPlay}
           send={send}
         />

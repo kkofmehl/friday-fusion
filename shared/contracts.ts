@@ -19,7 +19,8 @@ export const gameTypeSchema = z.enum([
   "yahtzee",
   "scattergories",
   "storyBuilder",
-  "memory"
+  "memory",
+  "wordle"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -1110,6 +1111,63 @@ export const scattergoriesStateSchema = z.discriminatedUnion("status", [
 ]);
 export type ScattergoriesState = z.infer<typeof scattergoriesStateSchema>;
 
+export const WORDLE_COUNTDOWN_MS = 3_000;
+export const WORDLE_MAX_GUESSES = 6;
+export const WORDLE_WORD_LENGTH = 5;
+
+export const wordleTileSchema = z.enum(["absent", "present", "correct"]);
+export type WordleTile = z.infer<typeof wordleTileSchema>;
+
+export const wordlePlayerStatusSchema = z.enum(["racing", "solved", "failed"]);
+export type WordlePlayerStatus = z.infer<typeof wordlePlayerStatusSchema>;
+
+export const wordlePlayerPublicSchema = z.object({
+  evaluations: z.array(z.array(wordleTileSchema).length(WORDLE_WORD_LENGTH)).max(WORDLE_MAX_GUESSES),
+  status: wordlePlayerStatusSchema,
+  guessCount: z.number().int().nonnegative().max(WORDLE_MAX_GUESSES),
+  finishedAt: z.number().int().nullable()
+});
+export type WordlePlayerPublic = z.infer<typeof wordlePlayerPublicSchema>;
+
+export const wordleStandingSchema = z.object({
+  participantId: z.string(),
+  place: z.number().int().positive(),
+  solved: z.boolean(),
+  guessCount: z.number().int().nonnegative(),
+  elapsedMs: z.number().int().nonnegative(),
+  ffPoints: z.number().int().nonnegative()
+});
+export type WordleStanding = z.infer<typeof wordleStandingSchema>;
+
+const wordleSharedFieldsSchema = z.object({
+  players: z.record(z.string(), wordlePlayerPublicSchema),
+  /** Own committed guesses only; omitted/empty for other viewers. */
+  myGuesses: z.array(z.string().length(WORDLE_WORD_LENGTH)).max(WORDLE_MAX_GUESSES).optional(),
+  usedAnswers: z.array(z.string())
+});
+
+export const wordleStateSchema = z.discriminatedUnion("status", [
+  wordleSharedFieldsSchema.extend({
+    status: z.literal("idle")
+  }),
+  wordleSharedFieldsSchema.extend({
+    status: z.literal("countdown"),
+    countdownEndsAt: z.number().int()
+  }),
+  wordleSharedFieldsSchema.extend({
+    status: z.literal("racing"),
+    startedAt: z.number().int()
+  }),
+  wordleSharedFieldsSchema.extend({
+    status: z.literal("roundComplete"),
+    startedAt: z.number().int(),
+    answer: z.string().length(WORDLE_WORD_LENGTH),
+    standings: z.array(wordleStandingSchema),
+    placementAwards: z.record(z.string(), z.number().int())
+  })
+]);
+export type WordleState = z.infer<typeof wordleStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -1186,6 +1244,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("memory"),
     state: memoryStateSchema
+  }),
+  z.object({
+    type: z.literal("wordle"),
+    state: wordleStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1746,6 +1808,11 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("memory:flipCard"),
     payload: z.object({ cardId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("wordle:startRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("wordle:submitGuess"),
+    payload: z.object({ guess: z.string().min(1).max(WORDLE_WORD_LENGTH) })
   })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;

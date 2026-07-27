@@ -211,7 +211,8 @@ describe("LobbyScreen", () => {
       ["Yahtzee", "/game_icons/yahtzee.png"],
       ["Scattergories", "/game_icons/scattegories.png"],
       ["Story Builder", "/game_icons/story_builder.png"],
-      ["Memory", "/game_icons/memory.png"]
+      ["Memory", "/game_icons/memory.png"],
+      ["Wordle Race", "/game_icons/wordle.png"]
     ];
 
     for (const [gameName, iconPath] of expectedIcons) {

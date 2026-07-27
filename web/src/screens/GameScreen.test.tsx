@@ -67,6 +67,33 @@ describe("GameScreen", () => {
     expect(icon?.getAttribute("src")).toBe("/game_icons/memory.png");
   });
 
+  it("renders wordle game icon when wordle is active", () => {
+    render(
+      <GameScreen
+        session={buildSession({
+          activeGame: "wordle",
+          gameState: {
+            type: "wordle",
+            state: {
+              status: "idle",
+              players: {},
+              usedAnswers: []
+            }
+          }
+        })}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    const iconPanel = screen.getByLabelText(/current game icon/i);
+    const icon = iconPanel.querySelector("img.game-side-icon-image");
+    expect(icon?.getAttribute("src")).toBe("/game_icons/wordle.png");
+  });
+
   it("opens profile panel when Create/Load Profile is clicked", () => {
     render(
       <GameScreen
