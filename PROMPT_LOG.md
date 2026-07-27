@@ -211,3 +211,4 @@
 105. User approved the Wordle Race plan and asked to implement it: multi-round live Wordle with host-started random answers, 3-2-1 countdown, realtime mini color boards, ranking by solved/guesses/time, and inverse-placement FF points.
 
 106. User reported Wordle Race layout overlapping when shrinking the display from full width (fine on full and portrait monitors); board/keyboard bleed into players rail and live standings.
+107. User requested adding the GitHub URL (https://github.com/kkofmehl/friday-fusion) to the application footer.

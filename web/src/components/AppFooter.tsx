@@ -8,7 +8,12 @@ export function AppFooter(): JSX.Element {
         </a>{" "}
         or Paypal kkash2206@gmail.com
       </p>
-      <p className="app-footer-copy">© 2026 Kmofy Consulting</p>
+      <p className="app-footer-copy">
+        © 2026 Kmofy Consulting ·{" "}
+        <a href="https://github.com/kkofmehl/friday-fusion" target="_blank" rel="noopener noreferrer">
+          Contribute on GitHub
+        </a>
+      </p>
     </footer>
   );
 }
