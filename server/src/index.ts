@@ -1427,6 +1427,85 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.guess
           );
+        } else if (event.type === "monopolyDeal:setWager") {
+          await sessionService.monopolyDealSetWager(
+            context.sessionId,
+            context.participantId,
+            event.payload.amount
+          );
+        } else if (event.type === "monopolyDeal:startAfterWagers") {
+          await sessionService.monopolyDealStartAfterWagers(context.sessionId, context.participantId);
+        } else if (event.type === "monopolyDeal:bankCard") {
+          await sessionService.monopolyDealBankCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId
+          );
+        } else if (event.type === "monopolyDeal:undoBank") {
+          await sessionService.monopolyDealUndoBank(context.sessionId, context.participantId);
+        } else if (event.type === "monopolyDeal:layProperty") {
+          await sessionService.monopolyDealLayProperty(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId,
+            event.payload.color
+          );
+        } else if (event.type === "monopolyDeal:playAction") {
+          await sessionService.monopolyDealPlayAction(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardId,
+            {
+              doubleRentCardId: event.payload.doubleRentCardId,
+              targetId: event.payload.targetId,
+              rentColor: event.payload.rentColor,
+              propertyColor: event.payload.propertyColor
+            }
+          );
+        } else if (event.type === "monopolyDeal:flipWild") {
+          await sessionService.monopolyDealFlipWild(
+            context.sessionId,
+            context.participantId,
+            event.payload.instanceId,
+            event.payload.propertyColor,
+            event.payload.newColor
+          );
+        } else if (event.type === "monopolyDeal:moveWild") {
+          await sessionService.monopolyDealMoveWild(
+            context.sessionId,
+            context.participantId,
+            event.payload.instanceId,
+            event.payload.fromColor,
+            event.payload.toColor
+          );
+        } else if (event.type === "monopolyDeal:respondJustSayNo") {
+          await sessionService.monopolyDealRespondJustSayNo(
+            context.sessionId,
+            context.participantId,
+            event.payload.useCardId
+          );
+        } else if (event.type === "monopolyDeal:submitPayment") {
+          await sessionService.monopolyDealSubmitPayment(
+            context.sessionId,
+            context.participantId,
+            event.payload.cards
+          );
+        } else if (event.type === "monopolyDeal:selectTarget") {
+          await sessionService.monopolyDealSelectTarget(
+            context.sessionId,
+            context.participantId,
+            event.payload
+          );
+        } else if (event.type === "monopolyDeal:cancelResolution") {
+          await sessionService.monopolyDealCancelResolution(context.sessionId, context.participantId);
+        } else if (event.type === "monopolyDeal:discard") {
+          await sessionService.monopolyDealDiscard(
+            context.sessionId,
+            context.participantId,
+            event.payload.cardIds
+          );
+        } else if (event.type === "monopolyDeal:endTurn") {
+          await sessionService.monopolyDealEndTurn(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

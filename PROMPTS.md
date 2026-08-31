@@ -78,3 +78,39 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-05-28:** Session Queue — build ability to queue games into a Session Queue for session planning in the Players sidebar: each lobby game gets Start + Queue buttons; Start Queue below the queue jumps into the first game; during queued play host gets Next in queue (plus End game) and can return to lobby and resume the queue; include remove-from-queue on each item.
 
 **2026-05-28:** Add an easter egg where typing "emojistorm" in smack talk and hitting enter does not send chat but triggers a 3-second emoji storm for everyone in the session.
+
+**2026-08-27:** Implement Monopoly Deal for Friday Fusion — full official rules (106-card deck), wagering phase (min 1 FF point per player, winner takes pot), server-authoritative multiplayer with property/bank/rent/actions/wild cards, and color-accurate card UI.
+
+**2026-08-27:** Monopoly Deal UX fixes — card help tooltips, rent color bars, money card styling (3M format), lock hand after 3 plays with pulsing End Turn, server fix for illegal 4th play mutating state.
+
+**2026-08-27:** Monopoly Deal — fix Forced Deal multi-step target selection; compact opponent board with hover previews; floating card help tooltips so they are not clipped.
+
+**2026-08-27:** Monopoly Deal — prompt wild color assignment after Forced Deal steal; Deal Breaker only lists players with complete sets and adds cancel to return the card.
+
+**2026-08-28:** Fix Monopoly Deal card help tooltip — floating tooltip CSS conflict with base positioning.
+
+**2026-08-28:** Fix Monopoly Deal rent payment — count property cards in selected total and block underpayment.
+
+**2026-08-28:** Address Monopoly Deal feedback (monopoly_feedback.md): UI polish (property layout, end turn, icons, events, Just Say No window, set tracking, payment UX).
+
+**2026-08-28:** More Monopoly Deal feedback: payment modal highlight, prominent Just Say No panel, two-color rent charges all players, polished winner screen.
+
+**2026-08-28:** Monopoly Deal feedback round 3: block rent without qualifying properties, cancel in-progress action resolution without consuming a play, wager cap at FF score (min 1), native end-turn confirm modal, double-click to bank, undo banking until next play, Just Say No excludes actor and auto-dismisses after 5s.
+
+**2026-08-28:** Monopoly Deal — end turn clears bank undo X; rent card shows Play Rent Action / Play Rent Action 2x when Double the Rent is in hand.
+
+**2026-08-28:** Monopoly Deal feedback: inline end-turn confirm, dual wild flip on board, payment/set-stolen events, house/hotel sprites and play validation, forced deal + Just Say No hook fix.
+
+**2026-08-28:** Fix forced deal swap placing received properties in the wrong color set (use activeColor, not vacated slot).
+
+**2026-08-28:** Monopoly Deal feedback: fix discard selection when hand exceeds 7, opponents sidebar layout, late Just Say No window with undo until next play/end turn.
+
+**2026-08-28:** Monopoly Deal feedback: wild card value bubble styling, payment picker bank-first + cap at amount due, flip wild moves to correct property set, end-game winner board display.
+
+**2026-08-28:** Monopoly Deal feedback: event panel for steal/swap/deal breaker, double rent target-selection fix, wild-only set wins, multiple property groups per color, forced deal complete-set guard, Just Say No timer fix, house excludes railroads/utilities.
+
+**2026-08-28:** Fix forced deal target selection crash when opponent property sets are stored as arrays.
+
+**2026-08-28:** Monopoly Deal feedback: larger hand area, JSN bank-only + panel visibility fix, action card art, JSN event broadcast.
+
+**2026-08-28:** Address Monopoly Deal feedback in monopoly_feedback.md: allow all-in underpayment (excluding wilds), color money denominations, double-click to lay regular properties, fix rent payment queue mislabeled as birthday, restore original action after Just Say No cards cancel each other.

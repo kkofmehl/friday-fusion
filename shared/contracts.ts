@@ -20,7 +20,8 @@ export const gameTypeSchema = z.enum([
   "scattergories",
   "storyBuilder",
   "memory",
-  "wordle"
+  "wordle",
+  "monopolyDeal"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -787,6 +788,236 @@ export const bsStateSchema = z.discriminatedUnion("status", [
 ]);
 export type BsState = z.infer<typeof bsStateSchema>;
 
+export const monopolyDealPropertyColorSchema = z.enum([
+  "brown",
+  "lightBlue",
+  "pink",
+  "orange",
+  "red",
+  "yellow",
+  "green",
+  "darkBlue",
+  "railroad",
+  "utility"
+]);
+export type MonopolyDealPropertyColor = z.infer<typeof monopolyDealPropertyColorSchema>;
+
+export const monopolyDealCardInstanceSchema = z.object({
+  id: z.string().min(1),
+  defId: z.string().min(1)
+});
+export type MonopolyDealCardInstance = z.infer<typeof monopolyDealCardInstanceSchema>;
+
+export const monopolyDealPlacedPropertySchema = z.object({
+  instanceId: z.string().min(1),
+  defId: z.string().min(1),
+  activeColor: monopolyDealPropertyColorSchema
+});
+export type MonopolyDealPlacedProperty = z.infer<typeof monopolyDealPlacedPropertySchema>;
+
+export const monopolyDealPropertySetSchema = z.object({
+  cards: z.array(monopolyDealPlacedPropertySchema),
+  house: z.boolean(),
+  hotel: z.boolean()
+});
+export type MonopolyDealPropertySet = z.infer<typeof monopolyDealPropertySetSchema>;
+
+export const monopolyDealPropertySetsSchema = z.record(
+  z.string(),
+  z.union([monopolyDealPropertySetSchema, z.array(monopolyDealPropertySetSchema)])
+);
+
+export const monopolyDealPlayerBoardSchema = z.object({
+  participantId: z.string(),
+  bank: z.array(monopolyDealCardInstanceSchema),
+  propertySets: monopolyDealPropertySetsSchema,
+  handCount: z.number().int().nonnegative()
+});
+export type MonopolyDealPlayerBoard = z.infer<typeof monopolyDealPlayerBoardSchema>;
+
+export const monopolyDealPaymentRefSchema = z.object({
+  zone: z.enum(["bank", "property"]),
+  instanceId: z.string().min(1),
+  propertyColor: monopolyDealPropertyColorSchema.optional()
+});
+export type MonopolyDealPaymentRef = z.infer<typeof monopolyDealPaymentRefSchema>;
+
+export const monopolyDealPendingActionSchema = z.object({
+  type: z.enum([
+    "dealBreaker",
+    "slyDeal",
+    "forcedDeal",
+    "debtCollector",
+    "itsMyBirthday",
+    "rent",
+    "house",
+    "hotel",
+    "passGo",
+    "doubleTheRent"
+  ]),
+  actorId: z.string(),
+  cardInstanceId: z.string().optional(),
+  rentColor: monopolyDealPropertyColorSchema.optional(),
+  amount: z.number().int().nonnegative().optional(),
+  targetId: z.string().optional(),
+  doubleRent: z.boolean().optional(),
+  propertyColor: monopolyDealPropertyColorSchema.optional(),
+  myCardInstanceId: z.string().optional(),
+  theirCardInstanceId: z.string().optional(),
+  reason: z.string().optional(),
+  queueRemaining: z.array(z.string()).optional(),
+  chargeAll: z.boolean().optional()
+});
+export type MonopolyDealPendingAction = z.infer<typeof monopolyDealPendingActionSchema>;
+
+export const monopolyDealRecentEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("steal"),
+    actorId: z.string(),
+    targetId: z.string(),
+    actionName: z.string(),
+    card: monopolyDealPlacedPropertySchema
+  }),
+  z.object({
+    type: z.literal("swap"),
+    actorId: z.string(),
+    targetId: z.string(),
+    takenCard: monopolyDealPlacedPropertySchema,
+    givenCard: monopolyDealPlacedPropertySchema
+  }),
+  z.object({
+    type: z.literal("setComplete"),
+    playerId: z.string(),
+    color: monopolyDealPropertyColorSchema
+  }),
+  z.object({
+    type: z.literal("payment"),
+    payerId: z.string(),
+    payeeId: z.string(),
+    amount: z.number().int().nonnegative(),
+    reason: z.string()
+  }),
+  z.object({
+    type: z.literal("setStolen"),
+    actorId: z.string(),
+    targetId: z.string(),
+    color: monopolyDealPropertyColorSchema
+  }),
+  z.object({
+    type: z.literal("justSayNo"),
+    playerId: z.string(),
+    actorId: z.string(),
+    targetId: z.string().optional(),
+    actionLabel: z.string()
+  })
+]);
+export type MonopolyDealRecentEvent = z.infer<typeof monopolyDealRecentEventSchema>;
+
+export const monopolyDealPendingResolutionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("justSayNo"),
+    action: monopolyDealPendingActionSchema,
+    eligiblePlayerIds: z.array(z.string()),
+    primaryTargetId: z.string().optional(),
+    affectedPlayerIds: z.array(z.string()).optional(),
+    canCounter: z.boolean(),
+    expiresAt: z.number()
+  }),
+  z.object({
+    kind: z.literal("collectPayment"),
+    payerId: z.string(),
+    payeeId: z.string(),
+    amountDue: z.number().int().nonnegative(),
+    reason: z.string(),
+    queueRemaining: z.array(z.string())
+  }),
+  z.object({
+    kind: z.literal("selectTarget"),
+    actorId: z.string(),
+    actionType: z.enum(["slyDeal", "forcedDeal", "dealBreaker", "debtCollector", "rent", "house", "hotel"]),
+    targetId: z.string().optional(),
+    cardInstanceId: z.string().optional(),
+    rentColors: z.array(monopolyDealPropertyColorSchema).optional(),
+    doubleRentCardId: z.string().optional(),
+    doubleRent: z.boolean().optional(),
+    discardedCardId: z.string().optional()
+  }),
+  z.object({
+    kind: z.literal("selectRentColor"),
+    actorId: z.string(),
+    colors: z.array(monopolyDealPropertyColorSchema).min(1),
+    cardInstanceId: z.string(),
+    doubleRentCardId: z.string().optional()
+  }),
+  z.object({
+    kind: z.literal("selectWildColor"),
+    actorId: z.string(),
+    cardInstanceId: z.string(),
+    allowedColors: z.array(monopolyDealPropertyColorSchema),
+    fromPropertyColor: monopolyDealPropertyColorSchema.optional()
+  }),
+  z.object({
+    kind: z.literal("forcedDealPickMine"),
+    actorId: z.string(),
+    targetId: z.string(),
+    targetCard: monopolyDealPlacedPropertySchema
+  }),
+  z.object({
+    kind: z.literal("forcedDealPickTheirs"),
+    actorId: z.string(),
+    targetId: z.string(),
+    myCard: monopolyDealPlacedPropertySchema
+  })
+]);
+export type MonopolyDealPendingResolution = z.infer<typeof monopolyDealPendingResolutionSchema>;
+
+const monopolyDealPlayingBaseSchema = z.object({
+  currentPlayerId: z.string(),
+  playsRemaining: z.number().int().min(0).max(3),
+  drawPileCount: z.number().int().nonnegative(),
+  discardCount: z.number().int().nonnegative(),
+  boards: z.array(monopolyDealPlayerBoardSchema),
+  myHand: z.array(monopolyDealCardInstanceSchema),
+  pot: z.number().int().nonnegative(),
+  wagers: z.record(z.string(), z.number().int().positive()),
+  pendingResolution: monopolyDealPendingResolutionSchema.nullable(),
+  phase: z.enum(["playing", "discarding"]),
+  recentEvent: monopolyDealRecentEventSchema.nullable(),
+  recentEvents: z.array(monopolyDealRecentEventSchema),
+  eventSeq: z.number().int().nonnegative(),
+  canCancelPendingAction: z.boolean(),
+  undoableBankCardId: z.string().nullable(),
+  justSayNoLate: z
+    .object({
+      action: monopolyDealPendingActionSchema,
+      eligiblePlayerIds: z.array(z.string()),
+      primaryTargetId: z.string().optional(),
+      affectedPlayerIds: z.array(z.string()).optional()
+    })
+    .nullable()
+});
+
+export const monopolyDealStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("wagering"),
+    wagers: z.record(z.string(), z.number().int().positive()),
+    submittedWagerIds: z.array(z.string()),
+    pot: z.number().int().nonnegative()
+  }),
+  monopolyDealPlayingBaseSchema.extend({
+    status: z.literal("playing")
+  }),
+  z.object({
+    status: z.literal("finished"),
+    winnerParticipantId: z.string(),
+    winnerHand: z.array(monopolyDealCardInstanceSchema),
+    winnerBoard: monopolyDealPlayerBoardSchema,
+    pot: z.number().int().nonnegative(),
+    wagers: z.record(z.string(), z.number().int().positive())
+  })
+]);
+export type MonopolyDealState = z.infer<typeof monopolyDealStateSchema>;
+
 export const madlibsBlankPromptSchema = z.enum([
   "noun",
   "plural noun",
@@ -1248,6 +1479,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("wordle"),
     state: wordleStateSchema
+  }),
+  z.object({
+    type: z.literal("monopolyDeal"),
+    state: monopolyDealStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1813,7 +2048,72 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("wordle:submitGuess"),
     payload: z.object({ guess: z.string().min(1).max(WORDLE_WORD_LENGTH) })
-  })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:setWager"),
+    payload: z.object({ amount: z.number().int().min(1) })
+  }),
+  z.object({ type: z.literal("monopolyDeal:startAfterWagers"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("monopolyDeal:bankCard"),
+    payload: z.object({ cardId: z.string().min(1) })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:layProperty"),
+    payload: z.object({
+      cardId: z.string().min(1),
+      color: monopolyDealPropertyColorSchema
+    })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:playAction"),
+    payload: z.object({
+      cardId: z.string().min(1),
+      doubleRentCardId: z.string().min(1).optional(),
+      targetId: z.string().min(1).optional(),
+      rentColor: monopolyDealPropertyColorSchema.optional(),
+      propertyColor: monopolyDealPropertyColorSchema.optional()
+    })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:flipWild"),
+    payload: z.object({
+      instanceId: z.string().min(1),
+      propertyColor: monopolyDealPropertyColorSchema,
+      newColor: monopolyDealPropertyColorSchema
+    })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:moveWild"),
+    payload: z.object({
+      instanceId: z.string().min(1),
+      fromColor: monopolyDealPropertyColorSchema,
+      toColor: monopolyDealPropertyColorSchema
+    })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:respondJustSayNo"),
+    payload: z.object({ useCardId: z.string().min(1).nullable() })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:submitPayment"),
+    payload: z.object({ cards: z.array(monopolyDealPaymentRefSchema) })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:selectTarget"),
+    payload: z.object({
+      targetId: z.string().min(1).optional(),
+      propertyColor: monopolyDealPropertyColorSchema.optional(),
+      cardInstanceId: z.string().min(1).optional()
+    })
+  }),
+  z.object({ type: z.literal("monopolyDeal:cancelResolution"), payload: z.object({}) }),
+  z.object({ type: z.literal("monopolyDeal:undoBank"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("monopolyDeal:discard"),
+    payload: z.object({ cardIds: z.array(z.string().min(1)).min(1) })
+  }),
+  z.object({ type: z.literal("monopolyDeal:endTurn"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

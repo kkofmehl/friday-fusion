@@ -106,6 +106,13 @@ const GAMES: GameOption[] = [
     iconSrc: "/game_icons/bs.png"
   },
   {
+    id: "monopolyDeal",
+    title: "Monopoly Deal",
+    description:
+      "Collect three property sets—bank money, charge rent, steal deals, and wager Friday Fusion points for the pot.",
+    iconSrc: "/game_icons/monopoly_deal.png"
+  },
+  {
     id: "madlibs",
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",

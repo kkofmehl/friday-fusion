@@ -86,6 +86,29 @@ import {
   shuffledResponseCardIds
 } from "./applesToApplesCardLoader";
 import { shuffledBsDeck } from "./bsDeck";
+import {
+  createMonopolyDealGame,
+  monopolyDealBankCard,
+  monopolyDealUndoBank,
+  monopolyDealCancelResolution,
+  monopolyDealDiscard,
+  monopolyDealEndTurn,
+  monopolyDealFlipWild,
+  monopolyDealForcedDealPickMine,
+  monopolyDealLayProperty,
+  monopolyDealLayPropertyWithResolution,
+  monopolyDealMoveWild,
+  monopolyDealPlayAction,
+  monopolyDealRespondJustSayNo,
+  monopolyDealSelectRentColor,
+  monopolyDealSelectTarget,
+  monopolyDealSelectWildColor,
+  monopolyDealSetWager,
+  monopolyDealStartAfterWagers,
+  monopolyDealSubmitPayment,
+  projectMonopolyDealState,
+  type MonopolyDealGameInternal
+} from "./monopolyDealGame";
 import { buildMemoryDeck } from "./memoryDeck";
 import {
   fillMadlibTemplate,
@@ -607,7 +630,8 @@ type GameInternal =
   | ScattergoriesGameInternal
   | StoryBuilderGameInternal
   | MemoryGameInternal
-  | WordleGameInternal;
+  | WordleGameInternal
+  | MonopolyDealGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1029,6 +1053,39 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
         g.status === "playing" || g.status === "challenging" || g.status === "challenged" || g.status === "finished"
           ? g.status
           : "playing"
+    };
+  }
+  if (game.type === "monopolyDeal") {
+    const g = game as MonopolyDealGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      playerOrder: Array.isArray(g.playerOrder) ? g.playerOrder : [],
+      hands: g.hands && typeof g.hands === "object" ? g.hands : {},
+      boards: g.boards && typeof g.boards === "object" ? g.boards : {},
+      drawPile: Array.isArray(g.drawPile) ? g.drawPile : [],
+      discardPile: Array.isArray(g.discardPile) ? g.discardPile : [],
+      currentPlayerIndex: Math.max(0, Number(g.currentPlayerIndex) || 0),
+      playsRemaining: Math.max(0, Number(g.playsRemaining) || 0),
+      wagers: g.wagers && typeof g.wagers === "object" ? g.wagers : {},
+      submittedWagerIds: Array.isArray(g.submittedWagerIds) ? g.submittedWagerIds : [],
+      pot: Math.max(0, Number(g.pot) || 0),
+      pendingResolution: g.pendingResolution ?? null,
+      recentEvent: g.recentEvent ?? null,
+      recentEventBatch: Array.isArray(g.recentEventBatch) ? g.recentEventBatch : [],
+      eventSeq: Math.max(0, Number(g.eventSeq) || 0),
+      winnerHand: Array.isArray(g.winnerHand) ? g.winnerHand : null,
+      winnerBoard: g.winnerBoard ?? null,
+      pendingActionRestore: g.pendingActionRestore ?? null,
+      undoableBank: g.undoableBank ?? null,
+      justSayNoLate: g.justSayNoLate ?? null,
+      justSayNoUndoBoards: g.justSayNoUndoBoards ?? null,
+      winnerParticipantId: g.winnerParticipantId ?? null,
+      scoresApplied: g.scoresApplied === true,
+      status: g.status === "wagering" || g.status === "playing" || g.status === "finished" ? g.status : "wagering",
+      phase: g.phase === "discarding" ? "discarding" : "playing",
+      drawnThisTurn: g.drawnThisTurn === true,
+      hadEmptyHandAtTurnStart: g.hadEmptyHandAtTurnStart === true
     };
   }
   if (game.type === "madlibs") {
@@ -2427,6 +2484,15 @@ export class SessionService {
         finishedPlayerIds: [],
         finalScores: {}
       };
+    } else if (game === "monopolyDeal") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Monopoly Deal needs at least two active players.");
+      }
+      if (actives.length > 5) {
+        throw new Error("Monopoly Deal supports at most five active players.");
+      }
+      next = createMonopolyDealGame(actives.map((p) => p.id));
     } else if (game === "madlibs") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -8829,8 +8895,246 @@ export class SessionService {
       };
     }
 
+    if (game.type === "monopolyDeal") {
+      this.monopolyDealMaybeApplyScores(session, game);
+      return {
+        ...base,
+        activeGame: "monopolyDeal",
+        gameState: {
+          type: "monopolyDeal",
+          state: projectMonopolyDealState(game, viewerParticipantId ?? "")
+        }
+      };
+    }
+
     const _never: never = game;
     throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
+  }
+  private monopolyDealMaybeApplyScores(session: SessionInternal, game: MonopolyDealGameInternal): void {
+    if (game.status !== "finished" || game.scoresApplied || !game.winnerParticipantId) {
+      return;
+    }
+    const winner = session.participants.find((p) => p.id === game.winnerParticipantId);
+    if (winner) {
+      winner.score += game.pot;
+    }
+    game.scoresApplied = true;
+  }
+
+  private getMonopolyDealGame(session: SessionInternal): MonopolyDealGameInternal {
+    const g = session.games[0];
+    if (g?.type !== "monopolyDeal") {
+      throw new Error("Monopoly Deal is not active.");
+    }
+    return g;
+  }
+
+  private async monopolyDealPersist(session: SessionInternal): Promise<void> {
+    const game = this.getMonopolyDealGame(session);
+    this.monopolyDealMaybeApplyScores(session, game);
+    await this.persist();
+  }
+
+  public async monopolyDealSetWager(sessionId: string, participantId: string, amount: number): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    const participant = session.participants.find((p) => p.id === participantId);
+    const maxWager = Math.max(1, participant?.score ?? 0);
+    monopolyDealSetWager(game, participantId, amount, maxWager);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealStartAfterWagers(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant?.isHost) {
+      throw new Error("Only the host can start the game.");
+    }
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealStartAfterWagers(game);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealBankCard(sessionId: string, participantId: string, cardId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealBankCard(game, participantId, cardId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealUndoBank(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealUndoBank(game, participantId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealLayProperty(
+    sessionId: string,
+    participantId: string,
+    cardId: string,
+    color?: import("../../shared/monopolyDealData").PropertyColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    if (color) {
+      monopolyDealLayProperty(game, participantId, cardId, color);
+    } else {
+      monopolyDealLayPropertyWithResolution(game, participantId, cardId);
+    }
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealPlayAction(
+    sessionId: string,
+    participantId: string,
+    cardId: string,
+    options?: {
+      doubleRentCardId?: string;
+      targetId?: string;
+      rentColor?: import("../../shared/monopolyDealData").PropertyColor;
+      propertyColor?: import("../../shared/monopolyDealData").PropertyColor;
+      cardInstanceId?: string;
+    }
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealPlayAction(game, participantId, cardId, options);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealFlipWild(
+    sessionId: string,
+    participantId: string,
+    instanceId: string,
+    propertyColor: import("../../shared/monopolyDealData").PropertyColor,
+    newColor: import("../../shared/monopolyDealData").PropertyColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealFlipWild(game, participantId, instanceId, propertyColor, newColor);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealMoveWild(
+    sessionId: string,
+    participantId: string,
+    instanceId: string,
+    fromColor: import("../../shared/monopolyDealData").PropertyColor,
+    toColor: import("../../shared/monopolyDealData").PropertyColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealMoveWild(game, participantId, instanceId, fromColor, toColor);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealRespondJustSayNo(
+    sessionId: string,
+    participantId: string,
+    useCardId: string | null
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealRespondJustSayNo(game, participantId, useCardId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealSubmitPayment(
+    sessionId: string,
+    participantId: string,
+    cards: import("../../shared/monopolyDealLogic").PaymentCardRef[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealSubmitPayment(game, participantId, cards);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealSelectTarget(
+    sessionId: string,
+    participantId: string,
+    payload: {
+      targetId?: string;
+      propertyColor?: import("../../shared/monopolyDealData").PropertyColor;
+      cardInstanceId?: string;
+    }
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealSelectTarget(game, participantId, payload);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealCancelResolution(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealCancelResolution(game, participantId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealSelectRentColor(
+    sessionId: string,
+    participantId: string,
+    color: import("../../shared/monopolyDealData").PropertyColor,
+    targetId?: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealSelectRentColor(game, participantId, color, targetId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealSelectWildColor(
+    sessionId: string,
+    participantId: string,
+    color: import("../../shared/monopolyDealData").PropertyColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealSelectWildColor(game, participantId, color);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealForcedDealPickMine(
+    sessionId: string,
+    participantId: string,
+    cardInstanceId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealForcedDealPickMine(game, participantId, cardInstanceId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealDiscard(sessionId: string, participantId: string, cardIds: string[]): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealDiscard(game, participantId, cardIds);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealEndTurn(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealEndTurn(game, participantId);
+    await this.monopolyDealPersist(session);
   }
 }
 

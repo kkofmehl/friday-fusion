@@ -3263,4 +3263,57 @@ describe("SessionService", () => {
       await expect(setup.service.startGame(host.sessionId, "wordle")).rejects.toThrow(/two/i);
     });
   });
+
+  describe("Monopoly Deal", () => {
+    it("wagering phase then deals five cards per player", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "monopolyDeal");
+
+      let state = setup.service.getState(host.sessionId, host.participantId);
+      expect(state.gameState?.type).toBe("monopolyDeal");
+      if (state.gameState?.type !== "monopolyDeal") {
+        throw new Error("expected monopolyDeal");
+      }
+      expect(state.gameState.state.status).toBe("wagering");
+
+      await setup.service.monopolyDealSetWager(host.sessionId, host.participantId, 1);
+      await setup.service.monopolyDealSetWager(host.sessionId, guest.participantId, 1);
+      await setup.service.monopolyDealStartAfterWagers(host.sessionId, host.participantId);
+
+      state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "monopolyDeal") {
+        throw new Error("expected monopolyDeal");
+      }
+      expect(state.gameState.state.status).toBe("playing");
+      if (state.gameState.state.status === "playing") {
+        expect(state.gameState.state.myHand).toHaveLength(7);
+        expect(state.gameState.state.pot).toBe(2);
+        expect(state.gameState.state.playsRemaining).toBe(3);
+      }
+    });
+
+    it("rejects wagers above the player's FF score", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "monopolyDeal");
+
+      await expect(setup.service.monopolyDealSetWager(host.sessionId, host.participantId, 2)).rejects.toThrow(
+        /between 1 and 1/i
+      );
+      await setup.service.monopolyDealSetWager(host.sessionId, host.participantId, 1);
+      await setup.service.monopolyDealSetWager(host.sessionId, guest.participantId, 1);
+    });
+
+    it("requires at least two players to start", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await expect(setup.service.startGame(host.sessionId, "monopolyDeal")).rejects.toThrow(/two/i);
+    });
+  });
 });
