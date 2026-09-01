@@ -100,6 +100,8 @@ import {
   monopolyDealMoveWild,
   monopolyDealPlayAction,
   monopolyDealRespondJustSayNo,
+  monopolyDealExtendJustSayNo,
+  monopolyDealExpireJustSayNo,
   monopolyDealSelectRentColor,
   monopolyDealSelectTarget,
   monopolyDealSelectWildColor,
@@ -1078,6 +1080,7 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       winnerBoard: g.winnerBoard ?? null,
       pendingActionRestore: g.pendingActionRestore ?? null,
       undoableBank: g.undoableBank ?? null,
+      actionLog: Array.isArray(g.actionLog) ? g.actionLog : [],
       justSayNoLate: g.justSayNoLate ?? null,
       justSayNoUndoBoards: g.justSayNoUndoBoards ?? null,
       winnerParticipantId: g.winnerParticipantId ?? null,
@@ -9045,6 +9048,22 @@ export class SessionService {
     assertParticipantActiveForGameplay(session, participantId);
     const game = this.getMonopolyDealGame(session);
     monopolyDealRespondJustSayNo(game, participantId, useCardId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealExtendJustSayNo(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealExtendJustSayNo(game, participantId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealExpireJustSayNo(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealExpireJustSayNo(game, participantId);
     await this.monopolyDealPersist(session);
   }
 

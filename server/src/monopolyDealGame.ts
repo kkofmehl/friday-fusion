@@ -7,6 +7,7 @@ import {
   MONOPOLY_DEAL_PLAYS_PER_TURN,
   MONOPOLY_DEAL_STARTING_HAND,
   PROPERTY_COLORS,
+  PROPERTY_COLOR_LABELS,
   canBankCard,
   getCardDef,
   type PropertyColor
@@ -35,7 +36,9 @@ import {
   placeCardOnColor,
   removePlacedCard,
   rentableColors,
+  setColorSets,
   validatePayment,
+  stripBuildingsFromIncompleteSets,
   type MonopolyDealCardInstance,
   type PaymentCardRef,
   type PlayerBoard,
@@ -44,6 +47,7 @@ import {
 } from "../../shared/monopolyDealLogic";
 import { justSayNoActionLabel } from "../../shared/monopolyDealJustSayNo";
 import type {
+  MonopolyDealActionLogEntry,
   MonopolyDealPendingAction,
   MonopolyDealPendingResolution,
   MonopolyDealPlayerBoard,
@@ -88,11 +92,13 @@ export type MonopolyDealGameInternal = {
     playsConsumed: number;
   } | null;
   undoableBank: { participantId: string; cardId: string } | null;
+  actionLog: MonopolyDealActionLogEntry[];
   justSayNoLate: {
     action: MonopolyDealPendingAction;
     eligiblePlayerIds: string[];
     primaryTargetId?: string;
     affectedPlayerIds?: string[];
+    effect?: "undo" | "apply";
   } | null;
   justSayNoUndoBoards: Record<string, MonopolyDealBoardInternal> | null;
 };
@@ -140,6 +146,7 @@ export const createMonopolyDealGame = (playerOrder: string[]): MonopolyDealGameI
   scoresApplied: false,
   pendingActionRestore: null,
   undoableBank: null,
+  actionLog: [],
   justSayNoLate: null,
   justSayNoUndoBoards: null
 });
@@ -192,6 +199,62 @@ const assertCurrentPlayer = (game: MonopolyDealGameInternal, pid: string): void 
 };
 
 const JUST_SAY_NO_WINDOW_MS = 5000;
+const JUST_SAY_NO_THINKING_MS = 30_000;
+const ACTION_LOG_LIMIT = 200;
+
+const colorLabel = (color: PropertyColor): string => PROPERTY_COLOR_LABELS[color] ?? color;
+
+const logAction = (
+  game: MonopolyDealGameInternal,
+  actorId: string,
+  summary: string,
+  extra?: { targetId?: string; suffix?: string }
+): void => {
+  game.actionLog.push({
+    id: nanoid(8),
+    actorId,
+    summary,
+    targetId: extra?.targetId,
+    suffix: extra?.suffix
+  });
+  if (game.actionLog.length > ACTION_LOG_LIMIT) {
+    game.actionLog.splice(0, game.actionLog.length - ACTION_LOG_LIMIT);
+  }
+};
+
+const logRecentEvent = (game: MonopolyDealGameInternal, event: MonopolyDealRecentEvent): void => {
+  switch (event.type) {
+    case "steal": {
+      const stolen = getCardDef(event.card.defId);
+      logAction(game, event.actorId, `used ${event.actionName} and stole ${stolen.propertyName ?? stolen.name} from`, {
+        targetId: event.targetId
+      });
+      break;
+    }
+    case "swap":
+      logAction(game, event.actorId, "swapped properties with", { targetId: event.targetId });
+      break;
+    case "setComplete":
+      logAction(game, event.playerId, `completed a ${colorLabel(event.color)} set`);
+      break;
+    case "payment":
+      logAction(game, event.payerId, `paid ${event.amount}M to`, {
+        targetId: event.payeeId,
+        suffix: `(${event.reason})`
+      });
+      break;
+    case "setStolen":
+      logAction(game, event.actorId, `stole the ${colorLabel(event.color)} set from`, {
+        targetId: event.targetId
+      });
+      break;
+    case "justSayNo":
+      logAction(game, event.playerId, "played Just Say No");
+      break;
+    default:
+      break;
+  }
+};
 
 const playerBoard = (game: MonopolyDealGameInternal, pid: string): PlayerBoard => {
   const b = getBoard(game, pid);
@@ -205,6 +268,7 @@ const recordEvent = (game: MonopolyDealGameInternal, event: MonopolyDealRecentEv
   game.recentEvent = event;
   game.recentEventBatch.push(event);
   game.eventSeq += 1;
+  logRecentEvent(game, event);
 };
 
 const detectNewCompleteSets = (
@@ -327,7 +391,8 @@ const openJustSayNoLateWindow = (
   action: MonopolyDealPendingAction,
   eligiblePlayerIds: string[],
   primaryTargetId?: string,
-  affectedPlayerIds?: string[]
+  affectedPlayerIds?: string[],
+  effect: "undo" | "apply" = "undo"
 ): void => {
   const stillEligible = eligiblePlayerIds.filter((pid) =>
     getHand(game, pid).some((c) => getCardDef(c.defId).action === "justSayNo")
@@ -340,7 +405,8 @@ const openJustSayNoLateWindow = (
     action,
     eligiblePlayerIds: stillEligible,
     primaryTargetId,
-    affectedPlayerIds
+    affectedPlayerIds,
+    effect
   };
 };
 
@@ -413,7 +479,7 @@ const executeForcedDealSwap = (
     };
     return;
   }
-  checkWin(game, actorId);
+  checkWins(game);
 };
 
 const executePendingAction = (game: MonopolyDealGameInternal, action: MonopolyDealPendingAction): void => {
@@ -463,6 +529,7 @@ const executePendingAction = (game: MonopolyDealGameInternal, action: MonopolyDe
     default:
       break;
   }
+  checkWins(game);
 };
 
 export const monopolyDealMaybeExpireJustSayNo = (game: MonopolyDealGameInternal): void => {
@@ -471,11 +538,19 @@ export const monopolyDealMaybeExpireJustSayNo = (game: MonopolyDealGameInternal)
     return;
   }
   if (Date.now() >= resolution.expiresAt) {
+    const action = resolution.action;
     if (!resolution.canCounter) {
       game.pendingResolution = null;
+      openJustSayNoLateWindow(
+        game,
+        action,
+        resolution.eligiblePlayerIds,
+        resolution.primaryTargetId,
+        resolution.affectedPlayerIds,
+        "apply"
+      );
       return;
     }
-    const action = resolution.action;
     game.justSayNoUndoBoards = captureJustSayNoUndoBoards(game, action);
     game.pendingResolution = null;
     executePendingAction(game, action);
@@ -484,7 +559,8 @@ export const monopolyDealMaybeExpireJustSayNo = (game: MonopolyDealGameInternal)
       action,
       resolution.eligiblePlayerIds,
       resolution.primaryTargetId,
-      resolution.affectedPlayerIds
+      resolution.affectedPlayerIds,
+      "undo"
     );
   }
 };
@@ -517,13 +593,19 @@ const offerJustSayNoOrExecute = (game: MonopolyDealGameInternal, action: Monopol
   };
 };
 
-const checkWin = (game: MonopolyDealGameInternal, pid: string): void => {
-  const b = getBoard(game, pid);
-  if (hasWon({ bank: b.bank, propertySets: b.propertySets })) {
-    game.status = "finished";
-    game.winnerParticipantId = pid;
-    game.winnerHand = [...getHand(game, pid)];
-    game.winnerBoard = boardToPlayerBoard(pid, getBoard(game, pid), getHand(game, pid).length);
+const checkWins = (game: MonopolyDealGameInternal): void => {
+  if (game.status !== "playing") {
+    return;
+  }
+  for (const pid of game.playerOrder) {
+    const b = getBoard(game, pid);
+    if (hasWon({ bank: b.bank, propertySets: b.propertySets })) {
+      game.status = "finished";
+      game.winnerParticipantId = pid;
+      game.winnerHand = [...getHand(game, pid)];
+      game.winnerBoard = boardToPlayerBoard(pid, getBoard(game, pid), getHand(game, pid).length);
+      return;
+    }
   }
 };
 
@@ -590,6 +672,7 @@ export const monopolyDealBankCard = (game: MonopolyDealGameInternal, participant
   getBoard(game, participantId).bank.push(card);
   usePlay(game);
   game.undoableBank = { participantId, cardId: card.id };
+  logAction(game, participantId, `banked ${def.value}M (${def.name})`);
 };
 
 export const monopolyDealUndoBank = (game: MonopolyDealGameInternal, participantId: string): void => {
@@ -607,6 +690,7 @@ export const monopolyDealUndoBank = (game: MonopolyDealGameInternal, participant
   getHand(game, participantId).push(card);
   game.playsRemaining += 1;
   game.undoableBank = null;
+  logAction(game, participantId, `undid banking ${getCardDef(card.defId).name}`);
 };
 
 export const monopolyDealLayProperty = (
@@ -630,7 +714,8 @@ export const monopolyDealLayProperty = (
   placeCardOnColor({ bank: b.bank, propertySets: b.propertySets }, { instanceId: card.id, defId: card.defId, activeColor: color });
   usePlay(game);
   detectNewCompleteSets(game, participantId, before);
-  checkWin(game, participantId);
+  checkWins(game);
+  logAction(game, participantId, `laid ${def.propertyName ?? def.name} as ${colorLabel(color)}`);
 };
 
 export const monopolyDealLayPropertyWithResolution = (
@@ -682,7 +767,7 @@ const assignWildColorOnBoard = (
   }
   placed.activeColor = toColor;
   placeCardOnColor(playerBoard, placed);
-  checkWin(game, participantId);
+  checkWins(game);
 };
 
 export const monopolyDealSelectWildColor = (
@@ -734,6 +819,7 @@ export const monopolyDealFlipWild = (
   assignWildColorOnBoard(game, participantId, instanceId, propertyColor, newColor);
   detectNewCompleteSets(game, participantId, before);
   usePlay(game);
+  logAction(game, participantId, `flipped a wild to ${colorLabel(newColor)}`);
 };
 
 export const monopolyDealMoveWild = (
@@ -743,8 +829,13 @@ export const monopolyDealMoveWild = (
   fromColor: PropertyColor,
   toColor: PropertyColor
 ): void => {
+  tickPending(game);
+  clearUndoableBank(game);
   assertCurrentPlayer(game, participantId);
   assertPlaysRemaining(game);
+  if (fromColor === toColor) {
+    throw new Error("Wild is already on that color.");
+  }
   const b = getBoard(game, participantId);
   const playerBoard = { bank: b.bank, propertySets: b.propertySets };
   const found = findPlacedCard(playerBoard, instanceId);
@@ -752,8 +843,8 @@ export const monopolyDealMoveWild = (
     throw new Error("Card not in source set.");
   }
   const def = getCardDef(found.card.defId);
-  if (def.kind !== "propertyWildDual" && def.kind !== "propertyWildMulti") {
-    throw new Error("Only wild property cards can be moved.");
+  if (def.kind !== "propertyWildMulti") {
+    throw new Error("Only rainbow wild cards can be moved this way.");
   }
   if (!canLayWildOnColor(def, toColor)) {
     throw new Error("Cannot move wild to that color.");
@@ -763,8 +854,9 @@ export const monopolyDealMoveWild = (
   placed.activeColor = toColor;
   placeCardOnColor(playerBoard, placed);
   detectNewCompleteSets(game, participantId, before);
-  checkWin(game, participantId);
+  checkWins(game);
   usePlay(game);
+  logAction(game, participantId, `moved a Property Wild Card to ${colorLabel(toColor)}`);
 };
 
 const startPayment = (
@@ -775,6 +867,7 @@ const startPayment = (
   reason: string,
   queueRemaining: string[] = []
 ): void => {
+  clearPendingActionRestore(game);
   game.pendingResolution = { kind: "collectPayment", payerId, payeeId, amountDue, reason, queueRemaining };
 };
 
@@ -867,6 +960,10 @@ export const monopolyDealSubmitPayment = (
     reason: resolution.reason
   });
   game.pendingResolution = null;
+  checkWins(game);
+  if (game.status !== "playing") {
+    return;
+  }
   advancePaymentQueue(game, resolution.payeeId, resolution.queueRemaining, resolution.amountDue, resolution.reason);
 };
 
@@ -893,33 +990,38 @@ const stealProperty = (
   placeCardOnColor({ bank: actorBoard.bank, propertySets: actorBoard.propertySets }, placed);
   detectNewCompleteSets(game, actorId, beforeActor);
   recordEvent(game, { type: "steal", actorId, targetId, actionName, card: placed });
-  checkWin(game, actorId);
+  checkWins(game);
 };
 
 const stealFullSet = (game: MonopolyDealGameInternal, actorId: string, targetId: string, color: PropertyColor): void => {
   const beforeActor = completeSetSnapshot(game, actorId);
   const targetBoard = getBoard(game, targetId);
   const targetPlayerBoard = { bank: targetBoard.bank, propertySets: targetBoard.propertySets };
-  const sets = mutableColorSets(targetPlayerBoard, color);
-  const setIndex = sets.findIndex((set) => canStealWithDealBreaker(set, color));
+  const targetSets = getColorSets(targetPlayerBoard, color);
+  const setIndex = targetSets.findIndex((set) => canStealWithDealBreaker(set, color));
   if (setIndex < 0) {
     throw new Error("Set is not complete.");
   }
-  const stolen = sets.splice(setIndex, 1)[0]!;
-  if (sets.length === 0) {
-    delete targetPlayerBoard.propertySets[color];
-  } else {
-    compactColorStorage(targetPlayerBoard, color);
-  }
+  const stolen = targetSets[setIndex]!;
+  setColorSets(
+    targetPlayerBoard,
+    color,
+    targetSets.filter((_, index) => index !== setIndex)
+  );
   const actorBoard = getBoard(game, actorId);
   const actorPlayerBoard = { bank: actorBoard.bank, propertySets: actorBoard.propertySets };
-  const actorSets = mutableColorSets(actorPlayerBoard, color);
-  actorSets.push({
-    cards: stolen.cards.map((c) => ({ ...c })),
-    house: stolen.house,
-    hotel: stolen.hotel
-  });
-  compactColorStorage(actorPlayerBoard, color);
+  setColorSets(actorPlayerBoard, color, [
+    ...getColorSets(actorPlayerBoard, color),
+    {
+      cards: stolen.cards.map((c) => ({ ...c })),
+      house: stolen.house,
+      hotel: stolen.hotel
+    }
+  ]);
+  const stolenIds = new Set(stolen.cards.map((c) => c.instanceId));
+  for (const pid of game.playerOrder) {
+    game.hands[pid] = getHand(game, pid).filter((c) => !stolenIds.has(c.id));
+  }
   detectNewCompleteSets(game, actorId, beforeActor);
   recordEvent(game, {
     type: "setStolen",
@@ -927,7 +1029,7 @@ const stealFullSet = (game: MonopolyDealGameInternal, actorId: string, targetId:
     targetId,
     color
   });
-  checkWin(game, actorId);
+  checkWins(game);
 };
 
 const addHouse = (game: MonopolyDealGameInternal, actorId: string, color: PropertyColor): void => {
@@ -1049,6 +1151,7 @@ export const monopolyDealPlayAction = (
     discardAction(game, card);
     usePlay(game);
     clearUndoableBank(game);
+    logAction(game, participantId, "played Pass Go");
     return;
   }
 
@@ -1091,6 +1194,7 @@ export const monopolyDealPlayAction = (
   discardAction(game, card);
   usePlay(game);
   clearUndoableBank(game);
+  logAction(game, participantId, `played ${def.name}`);
 
   if (def.kind === "action" && def.action === "itsMyBirthday") {
     const others = game.playerOrder.filter((id) => id !== participantId);
@@ -1243,6 +1347,7 @@ export const monopolyDealPlayRentWithDouble = (
   discardAction(game, discardedRent);
   usePlay(game);
   clearUndoableBank(game);
+  logAction(game, participantId, `played ${rentDef.name} with Double the Rent`);
   if (!options?.rentColor) {
     setPendingActionRestore(game, participantId, [discardedDouble.id, discardedRent.id], 1);
     game.pendingResolution = {
@@ -1386,11 +1491,13 @@ export const monopolyDealSelectTarget = (
   }
   if (resolution.actionType === "house" && payload.propertyColor) {
     game.pendingResolution = null;
+    clearPendingActionRestore(game);
     addHouse(game, participantId, payload.propertyColor);
     return;
   }
   if (resolution.actionType === "hotel" && payload.propertyColor) {
     game.pendingResolution = null;
+    clearPendingActionRestore(game);
     addHotel(game, participantId, payload.propertyColor);
     return;
   }
@@ -1450,6 +1557,7 @@ export const monopolyDealCancelResolution = (game: MonopolyDealGameInternal, par
   game.playsRemaining += restore.playsConsumed;
   game.pendingResolution = null;
   clearPendingActionRestore(game);
+  logAction(game, participantId, "cancelled their action");
 };
 
 export const monopolyDealSelectRentColor = (
@@ -1499,6 +1607,7 @@ export const monopolyDealRespondJustSayNo = (
     }
     discardAction(game, card);
     const lateAction = game.justSayNoLate.action;
+    const lateEffect = game.justSayNoLate.effect ?? "undo";
     recordEvent(game, {
       type: "justSayNo",
       playerId: participantId,
@@ -1506,6 +1615,11 @@ export const monopolyDealRespondJustSayNo = (
       targetId: lateAction.targetId,
       actionLabel: justSayNoActionLabel(lateAction)
     });
+    if (lateEffect === "apply") {
+      clearJustSayNoLateWindow(game);
+      executePendingAction(game, lateAction);
+      return;
+    }
     undoLateJustSayNo(game);
     return;
   }
@@ -1515,9 +1629,10 @@ export const monopolyDealRespondJustSayNo = (
     return;
   }
   if (!useCardId) {
-    const canAccept = resolution.canCounter
-      ? resolution.primaryTargetId === participantId || resolution.action.actorId === participantId
-      : resolution.action.actorId === participantId;
+    const canAccept =
+      resolution.eligiblePlayerIds.includes(participantId) ||
+      resolution.primaryTargetId === participantId ||
+      resolution.action.actorId === participantId;
     if (!canAccept) {
       throw new Error("You cannot respond to this action.");
     }
@@ -1564,6 +1679,43 @@ export const monopolyDealRespondJustSayNo = (
   }
 };
 
+export const monopolyDealExtendJustSayNo = (
+  game: MonopolyDealGameInternal,
+  participantId: string
+): void => {
+  const resolution = game.pendingResolution;
+  if (!resolution || resolution.kind !== "justSayNo") {
+    throw new Error("No Just Say No window.");
+  }
+  if (!resolution.eligiblePlayerIds.includes(participantId)) {
+    throw new Error("You cannot extend this window.");
+  }
+  if (resolution.thinkingExtended) {
+    throw new Error("Extra time was already used.");
+  }
+  resolution.thinkingExtended = true;
+  resolution.expiresAt = Date.now() + JUST_SAY_NO_THINKING_MS;
+  logAction(game, participantId, "needs more time on Just Say No");
+};
+
+export const monopolyDealExpireJustSayNo = (
+  game: MonopolyDealGameInternal,
+  participantId: string
+): void => {
+  const resolution = game.pendingResolution;
+  if (!resolution || resolution.kind !== "justSayNo") {
+    return;
+  }
+  const canExpire =
+    resolution.eligiblePlayerIds.includes(participantId) ||
+    resolution.primaryTargetId === participantId ||
+    resolution.action.actorId === participantId;
+  if (!canExpire) {
+    return;
+  }
+  monopolyDealMaybeExpireJustSayNo(game);
+};
+
 export const monopolyDealDiscard = (
   game: MonopolyDealGameInternal,
   participantId: string,
@@ -1578,6 +1730,7 @@ export const monopolyDealDiscard = (
   for (const id of cardIds) {
     game.discardPile.unshift(removeFromHand(game, participantId, id));
   }
+  logAction(game, participantId, `discarded ${cardIds.length} card${cardIds.length === 1 ? "" : "s"}`);
   if (getHand(game, participantId).length <= MONOPOLY_DEAL_MAX_HAND) {
     monopolyDealEndTurn(game, participantId);
   }
@@ -1598,7 +1751,17 @@ export const monopolyDealEndTurn = (game: MonopolyDealGameInternal, participantI
     game.phase = "discarding";
     return;
   }
+  const stripped = stripBuildingsFromIncompleteSets(playerBoard(game, participantId));
+  for (const item of stripped) {
+    const parts = [item.house ? "House" : null, item.hotel ? "Hotel" : null].filter(Boolean).join(" and ");
+    logAction(game, participantId, `discarded ${parts} from incomplete ${colorLabel(item.color)} set`);
+  }
+  checkWins(game);
+  if (game.status !== "playing") {
+    return;
+  }
   clearUndoableBank(game);
+  logAction(game, participantId, "ended their turn");
   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.playerOrder.length;
   game.drawnThisTurn = false;
   beginTurnDraw(game);
@@ -1624,7 +1787,8 @@ export const projectMonopolyDealState = (game: MonopolyDealGameInternal, viewerI
       winnerHand: game.winnerHand ?? [],
       winnerBoard,
       pot: game.pot,
-      wagers: { ...game.wagers }
+      wagers: { ...game.wagers },
+      actionLog: [...game.actionLog]
     };
   }
   const recentEvents = [...game.recentEventBatch];
@@ -1648,6 +1812,7 @@ export const projectMonopolyDealState = (game: MonopolyDealGameInternal, viewerI
       game.pendingActionRestore?.actorId === viewerId && canCancelPendingResolution(game.pendingResolution),
     undoableBankCardId:
       game.undoableBank?.participantId === viewerId ? game.undoableBank.cardId : null,
+    actionLog: [...game.actionLog],
     justSayNoLate: game.justSayNoLate
   };
 };

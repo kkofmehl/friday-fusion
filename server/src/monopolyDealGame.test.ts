@@ -9,10 +9,13 @@ import {
   monopolyDealEndTurn,
   monopolyDealFlipWild,
   monopolyDealLayProperty,
+  monopolyDealMoveWild,
   monopolyDealPlayAction,
   monopolyDealPlayRentWithDouble,
   monopolyDealMaybeExpireJustSayNo,
   monopolyDealRespondJustSayNo,
+  monopolyDealExtendJustSayNo,
+  monopolyDealExpireJustSayNo,
   monopolyDealSelectRentColor,
   monopolyDealSelectTarget,
   monopolyDealSetWager,
@@ -350,6 +353,49 @@ describe("monopolyDealGame flip wild", () => {
   });
 });
 
+describe("monopolyDealGame move rainbow wild", () => {
+  it("moves a rainbow wild to any color using one play", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets.brown = {
+      cards: [{ instanceId: "rainbow-1", defId: "wild-multi-0", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealMoveWild(game, "p1", "rainbow-1", "brown", "green");
+    expect(game.playsRemaining).toBe(2);
+    expect(game.boards.p1!.propertySets.brown).toBeUndefined();
+    expect(game.boards.p1!.propertySets.green?.cards[0]?.instanceId).toBe("rainbow-1");
+    expect(game.boards.p1!.propertySets.green?.cards[0]?.activeColor).toBe("green");
+    expect(game.actionLog.some((entry) => entry.summary.includes("Property Wild Card") && entry.summary.includes("Green"))).toBe(
+      true
+    );
+  });
+
+  it("rejects moving a rainbow wild to its current color", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+    game.boards.p1!.propertySets.brown = {
+      cards: [{ instanceId: "rainbow-1", defId: "wild-multi-0", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    expect(() => monopolyDealMoveWild(game, "p1", "rainbow-1", "brown", "brown")).toThrow(/already on that color/i);
+    expect(game.playsRemaining).toBe(3);
+  });
+});
+
 describe("monopolyDealGame rent validation", () => {
   it("rejects rent when player has no matching properties", () => {
     const game = createMonopolyDealGame(["p1", "p2"]);
@@ -403,8 +449,8 @@ describe("monopolyDealGame undo bank", () => {
     monopolyDealSetWager(game, "p1", 1, 10);
     monopolyDealSetWager(game, "p2", 1, 10);
     monopolyDealStartAfterWagers(game);
-    const money = game.hands.p1!.find((c) => getCardDef(c.defId).kind === "money");
-    expect(money).toBeTruthy();
+    game.hands.p1 = [{ id: "m1", defId: "money-1m-0" }, ...game.hands.p1!];
+    const money = game.hands.p1[0]!;
     game.currentPlayerIndex = 0;
     game.playsRemaining = 3;
 
@@ -515,6 +561,7 @@ describe("monopolyDealGame double the rent", () => {
       hotel: false
     };
     game.currentPlayerIndex = 0;
+    game.hands.p2 = game.hands.p2!.filter((c) => getCardDef(c.defId).action !== "justSayNo");
     game.pendingResolution = {
       kind: "selectTarget",
       actorId: "p1",
@@ -559,6 +606,41 @@ describe("monopolyDealGame property groups", () => {
     expect(sets[0]!.cards).toHaveLength(3);
     expect(sets[1]!.cards).toHaveLength(1);
   });
+
+  it("combines leftover incomplete groups after a wild is removed from a complete set", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets.green = [
+      {
+        cards: [
+          { instanceId: "g1", defId: "prop-green-pacific", activeColor: "green" },
+          { instanceId: "g2", defId: "prop-green-northcarolina", activeColor: "green" },
+          { instanceId: "w1", defId: "wild-green-darkBlue", activeColor: "green" }
+        ],
+        house: false,
+        hotel: false
+      },
+      {
+        cards: [{ instanceId: "g3", defId: "prop-green-pennsylvania", activeColor: "green" }],
+        house: false,
+        hotel: false
+      }
+    ];
+    game.hands.p1 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+    game.drawnThisTurn = true;
+
+    monopolyDealFlipWild(game, "p1", "w1", "green", "darkBlue");
+    const greens = getColorSets({ bank: [], propertySets: game.boards.p1!.propertySets }, "green");
+    expect(greens).toHaveLength(1);
+    expect(greens[0]!.cards.map((c) => c.instanceId)).toEqual(["g1", "g2", "g3"]);
+    const blues = getColorSets({ bank: [], propertySets: game.boards.p1!.propertySets }, "darkBlue");
+    expect(blues[0]!.cards.map((c) => c.instanceId)).toEqual(["w1"]);
+  });
 });
 
 describe("monopolyDealGame just say no", () => {
@@ -591,6 +673,133 @@ describe("monopolyDealGame just say no", () => {
       targetId: "p2",
       actionLabel: "Sly Deal"
     });
+  });
+
+  it("lets any eligible player allow a Just Say No window", () => {
+    const game = createMonopolyDealGame(["p1", "p2", "p3"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealSetWager(game, "p3", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [{ instanceId: "their-brown", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [{ id: "sly-1", defId: "action-slyDeal-0" }];
+    game.hands.p2 = [];
+    game.hands.p3 = [{ id: "jsn-3", defId: "action-justSayNo-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "sly-1", { targetId: "p2", cardInstanceId: "their-brown" });
+    expect(game.pendingResolution).toMatchObject({
+      kind: "justSayNo",
+      eligiblePlayerIds: ["p3"],
+      primaryTargetId: "p2",
+      canCounter: true
+    });
+
+    monopolyDealRespondJustSayNo(game, "p3", null);
+    expect(game.pendingResolution).toBeNull();
+    expect(game.boards.p1!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+    expect(game.boards.p2!.propertySets.brown).toBeUndefined();
+  });
+
+  it("lets an eligible player add 30 seconds of thinking time once", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [{ instanceId: "their-brown", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [{ id: "sly-1", defId: "action-slyDeal-0" }];
+    game.hands.p2 = [{ id: "jsn-1", defId: "action-justSayNo-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "sly-1", { targetId: "p2", cardInstanceId: "their-brown" });
+    expect(game.pendingResolution?.kind).toBe("justSayNo");
+    const before = Date.now();
+
+    monopolyDealExtendJustSayNo(game, "p2");
+    expect(game.pendingResolution).toMatchObject({ kind: "justSayNo", thinkingExtended: true });
+    if (game.pendingResolution?.kind === "justSayNo") {
+      expect(game.pendingResolution.expiresAt).toBeGreaterThanOrEqual(before + 30_000);
+      expect(game.pendingResolution.expiresAt).toBeLessThan(before + 31_000);
+    }
+    expect(game.actionLog.some((entry) => entry.summary.includes("more time"))).toBe(true);
+    expect(() => monopolyDealExtendJustSayNo(game, "p2")).toThrow(/already used/i);
+  });
+
+  it("keeps the action blocked and resets the timer when I'm thinking is used after the original window elapsed", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [{ instanceId: "their-brown", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [{ id: "sly-1", defId: "action-slyDeal-0" }];
+    game.hands.p2 = [{ id: "jsn-1", defId: "action-justSayNo-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "sly-1", { targetId: "p2", cardInstanceId: "their-brown" });
+    expect(game.pendingResolution?.kind).toBe("justSayNo");
+    game.pendingResolution = {
+      ...game.pendingResolution!,
+      expiresAt: Date.now() - 1
+    } as typeof game.pendingResolution;
+
+    const before = Date.now();
+    monopolyDealExtendJustSayNo(game, "p2");
+    expect(game.pendingResolution).toMatchObject({ kind: "justSayNo", thinkingExtended: true });
+    if (game.pendingResolution?.kind === "justSayNo") {
+      expect(game.pendingResolution.expiresAt).toBeGreaterThanOrEqual(before + 30_000);
+    }
+    expect(game.boards.p2!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+    expect(game.justSayNoLate).toBeNull();
+
+    monopolyDealMaybeExpireJustSayNo(game);
+    expect(game.pendingResolution?.kind).toBe("justSayNo");
+    expect(game.boards.p2!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+  });
+
+  it("executes the action and opens the late window when the Just Say No timer is expired", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [{ instanceId: "their-brown", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [{ id: "sly-1", defId: "action-slyDeal-0" }];
+    game.hands.p2 = [{ id: "jsn-1", defId: "action-justSayNo-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "sly-1", { targetId: "p2", cardInstanceId: "their-brown" });
+    game.pendingResolution = {
+      ...game.pendingResolution!,
+      expiresAt: Date.now() - 1
+    } as typeof game.pendingResolution;
+
+    monopolyDealExpireJustSayNo(game, "p2");
+    expect(game.pendingResolution).toBeNull();
+    expect(game.boards.p1!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+    expect(game.justSayNoLate).toMatchObject({ eligiblePlayerIds: ["p2"] });
   });
 
   it("applies the original action when Just Say No cards cancel each other", () => {
@@ -685,6 +894,50 @@ describe("monopolyDealGame just say no", () => {
 
     monopolyDealMaybeExpireJustSayNo(game);
     expect(game.pendingResolution).toBeNull();
+    expect(game.justSayNoLate).toMatchObject({
+      eligiblePlayerIds: ["p1"],
+      effect: "apply"
+    });
+    expect(game.boards.p2!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+    expect(game.boards.p1!.propertySets.brown).toBeUndefined();
+
+    monopolyDealRespondJustSayNo(game, "p1", "jsn-1");
+    expect(game.justSayNoLate).toBeNull();
+    expect(game.boards.p1!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
+    expect(game.boards.p2!.propertySets.brown).toBeUndefined();
+  });
+
+  it("closes the counter Just Say No late window when the actor makes another play", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [{ instanceId: "their-brown", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [
+      { id: "sly-1", defId: "action-slyDeal-0" },
+      { id: "jsn-1", defId: "action-justSayNo-0" },
+      { id: "money-1", defId: "money-1m-0" }
+    ];
+    game.hands.p2 = [{ id: "jsn-2", defId: "action-justSayNo-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "sly-1", { targetId: "p2", cardInstanceId: "their-brown" });
+    monopolyDealRespondJustSayNo(game, "p2", "jsn-2");
+    game.pendingResolution = {
+      ...game.pendingResolution!,
+      expiresAt: Date.now() - 1
+    } as typeof game.pendingResolution;
+    monopolyDealMaybeExpireJustSayNo(game);
+    expect(game.justSayNoLate).toMatchObject({ effect: "apply" });
+
+    monopolyDealBankCard(game, "p1", "money-1");
+    expect(game.justSayNoLate).toBeNull();
     expect(game.boards.p2!.propertySets.brown?.cards.some((c) => c.instanceId === "their-brown")).toBe(true);
     expect(game.boards.p1!.propertySets.brown).toBeUndefined();
   });
@@ -872,6 +1125,41 @@ describe("monopolyDealGame deal breaker", () => {
     monopolyDealPlayAction(game, "p1", dealBreakerId);
     expect(() => monopolyDealSelectTarget(game, "p1", { targetId: "p2" })).toThrow(/no complete sets/i);
   });
+
+  it("steals the complete set, discards Deal Breaker, and does not add properties to hand", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p2!.propertySets.brown = {
+      cards: [
+        { instanceId: "b1", defId: "prop-brown-mediterranean", activeColor: "brown" },
+        { instanceId: "b2", defId: "prop-brown-baltic", activeColor: "brown" }
+      ],
+      house: false,
+      hotel: false
+    };
+    const dealBreakerId = "db-1";
+    game.hands.p1 = [{ id: dealBreakerId, defId: "action-dealBreaker-0" }];
+    game.hands.p2 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", dealBreakerId);
+    monopolyDealSelectTarget(game, "p1", { targetId: "p2" });
+    monopolyDealSelectTarget(game, "p1", { propertyColor: "brown" });
+
+    expect(game.pendingResolution).toBeNull();
+    expect(game.pendingActionRestore).toBeNull();
+    expect(game.hands.p1!.some((c) => c.id === dealBreakerId)).toBe(false);
+    expect(game.discardPile.some((c) => c.id === dealBreakerId)).toBe(true);
+    expect(game.hands.p1!.some((c) => c.id === "b1" || c.id === "b2")).toBe(false);
+    expect(getColorSets({ bank: [], propertySets: game.boards.p1!.propertySets }, "brown")[0]?.cards.map((c) => c.instanceId)).toEqual(
+      ["b1", "b2"]
+    );
+    expect(game.boards.p2!.propertySets.brown).toBeUndefined();
+  });
 });
 
 describe("monopolyDealGame payment", () => {
@@ -946,5 +1234,163 @@ describe("monopolyDealGame payment", () => {
     expect(game.boards.p1!.bank).toHaveLength(1);
     const redSets = getColorSets({ bank: [], propertySets: game.boards.p1!.propertySets }, "red");
     expect(redSets.flatMap((set) => set.cards)).toHaveLength(1);
+  });
+});
+
+describe("monopolyDealGame incomplete set buildings", () => {
+  it("discards house and hotel from an incomplete set when the player ends their turn", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets.brown = {
+      cards: [
+        { instanceId: "b1", defId: "prop-brown-mediterranean", activeColor: "brown" },
+        { instanceId: "w1", defId: "wild-brown-lightBlue", activeColor: "brown" }
+      ],
+      house: true,
+      hotel: true
+    };
+    game.hands.p1 = [];
+    game.hands.p2 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+    game.drawnThisTurn = true;
+
+    monopolyDealFlipWild(game, "p1", "w1", "brown", "lightBlue");
+    expect(game.boards.p1!.propertySets.brown).toMatchObject({ house: true, hotel: true });
+    expect(getColorSets({ bank: [], propertySets: game.boards.p1!.propertySets }, "brown")[0]?.cards).toHaveLength(1);
+
+    monopolyDealEndTurn(game, "p1");
+    expect(game.boards.p1!.propertySets.brown).toMatchObject({ house: false, hotel: false });
+    expect(game.boards.p1!.propertySets.lightBlue).toMatchObject({ house: false, hotel: false });
+  });
+
+  it("keeps house and hotel on a set that is still complete at end of turn", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets.brown = {
+      cards: [
+        { instanceId: "b1", defId: "prop-brown-mediterranean", activeColor: "brown" },
+        { instanceId: "b2", defId: "prop-brown-baltic", activeColor: "brown" }
+      ],
+      house: true,
+      hotel: true
+    };
+    game.hands.p1 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 0;
+    game.drawnThisTurn = true;
+
+    monopolyDealEndTurn(game, "p1");
+    expect(game.boards.p1!.propertySets.brown).toMatchObject({ house: true, hotel: true });
+  });
+});
+
+describe("monopolyDealGame win checks", () => {
+  const twoCompleteSets = {
+    brown: {
+      cards: [
+        { instanceId: "b1", defId: "prop-brown-mediterranean", activeColor: "brown" as const },
+        { instanceId: "b2", defId: "prop-brown-baltic", activeColor: "brown" as const }
+      ],
+      house: false,
+      hotel: false
+    },
+    utility: {
+      cards: [
+        { instanceId: "u1", defId: "prop-utility-electric", activeColor: "utility" as const },
+        { instanceId: "u2", defId: "prop-utility-water", activeColor: "utility" as const }
+      ],
+      house: false,
+      hotel: false
+    }
+  };
+
+  it("ends the game when a laid property completes a third set", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets = {
+      ...twoCompleteSets,
+      darkBlue: {
+        cards: [{ instanceId: "d1", defId: "prop-darkBlue-parkplace", activeColor: "darkBlue" }],
+        house: false,
+        hotel: false
+      }
+    };
+    game.hands.p1 = [{ id: "d2", defId: "prop-darkBlue-boardwalk" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealLayProperty(game, "p1", "d2", "darkBlue");
+    expect(game.status).toBe("finished");
+    expect(game.winnerParticipantId).toBe("p1");
+  });
+
+  it("ends the game when payment completes a third set for the payee", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets = {
+      ...twoCompleteSets,
+      darkBlue: {
+        cards: [{ instanceId: "d1", defId: "prop-darkBlue-parkplace", activeColor: "darkBlue" }],
+        house: false,
+        hotel: false
+      }
+    };
+    game.pendingResolution = {
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      amountDue: 4,
+      reason: "Debt Collector",
+      queueRemaining: []
+    };
+    game.boards.p2!.propertySets.darkBlue = {
+      cards: [{ instanceId: "d2", defId: "prop-darkBlue-boardwalk", activeColor: "darkBlue" }],
+      house: false,
+      hotel: false
+    };
+
+    monopolyDealSubmitPayment(game, "p2", [{ zone: "property", instanceId: "d2", propertyColor: "darkBlue" }]);
+    expect(game.status).toBe("finished");
+    expect(game.winnerParticipantId).toBe("p1");
+  });
+
+  it("ends the game when Deal Breaker steals a third complete set", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+
+    game.boards.p1!.propertySets = { ...twoCompleteSets };
+    game.boards.p2!.propertySets.darkBlue = {
+      cards: [
+        { instanceId: "d1", defId: "prop-darkBlue-parkplace", activeColor: "darkBlue" },
+        { instanceId: "d2", defId: "prop-darkBlue-boardwalk", activeColor: "darkBlue" }
+      ],
+      house: false,
+      hotel: false
+    };
+    game.hands.p1 = [{ id: "db-1", defId: "action-dealBreaker-0" }];
+    game.hands.p2 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "db-1");
+    monopolyDealSelectTarget(game, "p1", { targetId: "p2" });
+    monopolyDealSelectTarget(game, "p1", { propertyColor: "darkBlue" });
+    expect(game.status).toBe("finished");
+    expect(game.winnerParticipantId).toBe("p1");
   });
 });

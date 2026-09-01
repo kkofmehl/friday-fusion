@@ -9,6 +9,7 @@ type LateWindow = {
   eligiblePlayerIds: string[];
   primaryTargetId?: string;
   affectedPlayerIds?: string[];
+  effect?: "undo" | "apply";
 };
 
 function ActionDescription({
@@ -58,11 +59,19 @@ export function JustSayNoPanel({
   currentParticipantId: string;
   myHand: { id: string; defId: string }[];
   participants: SessionState["participants"];
-  send: (event: { type: "monopolyDeal:respondJustSayNo"; payload: { useCardId: string | null } }) => void;
+  send: (
+    event:
+      | { type: "monopolyDeal:respondJustSayNo"; payload: { useCardId: string | null } }
+      | { type: "monopolyDeal:extendJustSayNo"; payload: Record<string, never> }
+      | { type: "monopolyDeal:expireJustSayNo"; payload: Record<string, never> }
+  ) => void;
 }): JSX.Element | null {
   const [secondsLeft, setSecondsLeft] = useState(5);
   const sendRef = useRef(send);
   const autoRespondedRef = useRef(false);
+  const thinkingRequestedRef = useRef(false);
+  const thinkingUntilRef = useRef(0);
+  const expireSentRef = useRef(false);
   sendRef.current = send;
 
   const action = pending?.action ?? late?.action;
@@ -75,7 +84,7 @@ export function JustSayNoPanel({
   const hasJustSayNo = myHand.some((c) => getCardDef(c.defId).action === "justSayNo");
   const eligibleIds = pending?.eligiblePlayerIds ?? late?.eligiblePlayerIds ?? [];
   const canCounter = eligibleIds.includes(currentParticipantId) && hasJustSayNo;
-  const isLateWindow = Boolean(late);
+  const isLateWindow = Boolean(late) && !pending;
   const shouldShowPanel = canCounter;
 
   useEffect(() => {
@@ -100,8 +109,33 @@ export function JustSayNoPanel({
       return;
     }
     const expiresAt = pending.expiresAt;
+    if (pending.thinkingExtended && expiresAt - Date.now() > 1000) {
+      thinkingRequestedRef.current = false;
+    }
     const tick = (): void => {
-      setSecondsLeft(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
+      const deadline =
+        thinkingRequestedRef.current && thinkingUntilRef.current > 0 ? thinkingUntilRef.current : expiresAt;
+      setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    };
+    tick();
+    const interval = window.setInterval(tick, 250);
+    return () => window.clearInterval(interval);
+  }, [pending?.expiresAt, pending?.thinkingExtended, isLateWindow, shouldShowPanel, pending]);
+
+  useEffect(() => {
+    if (!pending || isLateWindow || !shouldShowPanel) {
+      return;
+    }
+    expireSentRef.current = false;
+    const expiresAt = pending.expiresAt;
+    const tick = (): void => {
+      if (thinkingRequestedRef.current || expireSentRef.current) {
+        return;
+      }
+      if (expiresAt - Date.now() <= 0) {
+        expireSentRef.current = true;
+        sendRef.current({ type: "monopolyDeal:expireJustSayNo", payload: {} });
+      }
     };
     tick();
     const interval = window.setInterval(tick, 250);
@@ -113,10 +147,7 @@ export function JustSayNoPanel({
   }
 
   const jsnCard = myHand.find((c) => getCardDef(c.defId).action === "justSayNo");
-  const canAllow =
-    Boolean(pending) &&
-    hasJustSayNo &&
-    (pending?.canCounter ? isPrimaryTarget : currentParticipantId === action.actorId);
+  const canAllow = Boolean(pending) && !isLateWindow;
 
   return (
     <div className="md-jsn-panel" role="alertdialog" aria-live="assertive">
@@ -124,7 +155,9 @@ export function JustSayNoPanel({
       <ActionDescription action={action} participants={participants} />
       {isLateWindow ? (
         <p className="md-jsn-panel-note">
-          The action was applied. Play Just Say No before they take another play or end their turn to undo it.
+          {late?.effect === "apply"
+            ? "Play Just Say No before they take another play or end their turn to block their Just Say No so the original action still happens."
+            : "The action was applied. Play Just Say No before they take another play or end their turn to undo it."}
         </p>
       ) : (
         <p className="md-jsn-panel-timer">{secondsLeft}s remaining to counter</p>
@@ -146,6 +179,21 @@ export function JustSayNoPanel({
             onClick={() => send({ type: "monopolyDeal:respondJustSayNo", payload: { useCardId: jsnCard.id } })}
           >
             Just Say No
+          </button>
+        ) : null}
+        {pending && !pending.thinkingExtended ? (
+          <button
+            type="button"
+            className="md-btn md-btn--ghost"
+            onClick={() => {
+              thinkingRequestedRef.current = true;
+              thinkingUntilRef.current = Date.now() + 30_000;
+              expireSentRef.current = true;
+              setSecondsLeft(30);
+              send({ type: "monopolyDeal:extendJustSayNo", payload: {} });
+            }}
+          >
+            I&apos;m thinking...
           </button>
         ) : null}
       </div>

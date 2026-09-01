@@ -13,6 +13,9 @@ import {
   canTogglePaymentRef,
   paymentSelectionTotal,
   canPlayAsAction,
+  stripBuildingsFromIncompleteSets,
+  compactColorStorage,
+  getColorSets,
   type PlayerBoard,
   type PlacedPropertyCard
 } from "../../shared/monopolyDealLogic";
@@ -307,5 +310,57 @@ describe("monopolyDealLogic", () => {
     expect(canPlayAsAction(getCardDef("action-doubleTheRent-0"))).toBe(false);
     expect(canPlayAsAction(getCardDef("action-slyDeal-0"))).toBe(true);
     expect(canPlayAsAction(getCardDef("rent-brown-lightBlue-0"))).toBe(true);
+  });
+
+  it("strips house and hotel from incomplete sets but leaves complete sets alone", () => {
+    const board: PlayerBoard = {
+      bank: [],
+      propertySets: {
+        brown: {
+          cards: [{ instanceId: "b1", defId: "prop-brown-mediterranean", activeColor: "brown" }],
+          house: true,
+          hotel: true
+        },
+        darkBlue: {
+          cards: [
+            { instanceId: "d1", defId: "prop-darkBlue-parkplace", activeColor: "darkBlue" },
+            { instanceId: "d2", defId: "prop-darkBlue-boardwalk", activeColor: "darkBlue" }
+          ],
+          house: true,
+          hotel: false
+        }
+      }
+    };
+    expect(stripBuildingsFromIncompleteSets(board)).toEqual([{ color: "brown", house: true, hotel: true }]);
+    expect(board.propertySets.brown).toMatchObject({ house: false, hotel: false });
+    expect(board.propertySets.darkBlue).toMatchObject({ house: true, hotel: false });
+  });
+
+  it("merges leftover incomplete groups of a color into complete sets when possible", () => {
+    const board: PlayerBoard = {
+      bank: [],
+      propertySets: {
+        green: [
+          {
+            cards: [
+              { instanceId: "g1", defId: "prop-green-pacific", activeColor: "green" },
+              { instanceId: "g2", defId: "prop-green-northcarolina", activeColor: "green" }
+            ],
+            house: false,
+            hotel: false
+          },
+          {
+            cards: [{ instanceId: "g3", defId: "prop-green-pennsylvania", activeColor: "green" }],
+            house: false,
+            hotel: false
+          }
+        ]
+      }
+    };
+    compactColorStorage(board, "green");
+    const sets = getColorSets(board, "green");
+    expect(sets).toHaveLength(1);
+    expect(sets[0]!.cards).toHaveLength(3);
+    expect(isSetComplete(sets[0]!, "green")).toBe(true);
   });
 });

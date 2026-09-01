@@ -84,6 +84,7 @@ export function setColorSets(board: PlayerBoard, color: PropertyColor, sets: Pro
     return;
   }
   board.propertySets[color] = sets.length === 1 ? sets[0]! : sets;
+  compactColorStorage(board, color);
 }
 
 export function placementSetForColor(board: PlayerBoard, color: PropertyColor): PropertySetState {
@@ -154,13 +155,46 @@ export function isCardInCompleteSet(board: PlayerBoard, instanceId: string): boo
 
 export function compactColorStorage(board: PlayerBoard, color: PropertyColor): void {
   const entry = board.propertySets[color];
-  if (Array.isArray(entry)) {
-    if (entry.length === 0) {
-      delete board.propertySets[color];
-    } else if (entry.length === 1) {
-      board.propertySets[color] = entry[0]!;
+  if (!entry) {
+    return;
+  }
+  const size = PROPERTY_SET_SIZES[color];
+  const sets = mutableColorSets(board, color).filter((set) => set.cards.length > 0);
+  const complete = sets.filter((set) => isSetComplete(set, color));
+  const incomplete = sets.filter((set) => !isSetComplete(set, color));
+  const packed: PropertySetState[] = complete.map((set) => ({
+    cards: set.cards,
+    house: set.house,
+    hotel: set.hotel
+  }));
+  if (incomplete.length === 1) {
+    packed.push({
+      cards: incomplete[0]!.cards,
+      house: incomplete[0]!.house,
+      hotel: incomplete[0]!.hotel
+    });
+  } else if (incomplete.length > 1) {
+    const pool = incomplete.flatMap((set) => [...set.cards]);
+    let house = incomplete.some((set) => set.house);
+    let hotel = incomplete.some((set) => set.hotel);
+    while (pool.length >= size) {
+      packed.push({
+        cards: pool.splice(0, size),
+        house,
+        hotel
+      });
+      house = false;
+      hotel = false;
+    }
+    if (pool.length > 0) {
+      packed.push({ cards: pool, house, hotel });
     }
   }
+  if (packed.length === 0) {
+    delete board.propertySets[color];
+    return;
+  }
+  board.propertySets[color] = packed.length === 1 ? packed[0]! : packed;
 }
 
 export function placeCardOnColor(board: PlayerBoard, placed: PlacedPropertyCard): void {
@@ -309,6 +343,29 @@ export function canAddHouse(set: PropertySetState, color: PropertyColor): boolea
 
 export function canAddHotel(set: PropertySetState, color: PropertyColor): boolean {
   return isSetComplete(set, color) && supportsHouseHotel(color) && set.house && !set.hotel;
+}
+
+export type StrippedSetBuilding = {
+  color: PropertyColor;
+  house: boolean;
+  hotel: boolean;
+};
+
+/** Remove house/hotel from any incomplete set. Buildings on complete sets are left in place. */
+export function stripBuildingsFromIncompleteSets(board: PlayerBoard): StrippedSetBuilding[] {
+  const stripped: StrippedSetBuilding[] = [];
+  for (const color of PROPERTY_COLORS) {
+    const sets = mutableColorSets(board, color);
+    for (const set of sets) {
+      if (!isSetComplete(set, color) && (set.house || set.hotel)) {
+        stripped.push({ color, house: set.house, hotel: set.hotel });
+        set.house = false;
+        set.hotel = false;
+      }
+    }
+    compactColorStorage(board, color);
+  }
+  return stripped;
 }
 
 export type PaymentCardRef = {

@@ -215,11 +215,11 @@ function MonopolyDealPlayingView({
     setSelectedHandIds((prev) => (prev.includes(id) ? [] : [id]));
   };
 
-  const canFlipBoardWild =
+  const canMoveBoardWild =
     isMyTurn && canPlay && game.playsRemaining > 0 && !pending && game.phase === "playing";
 
   const flipSelectedBoardWild = (): void => {
-    if (!canFlipBoardWild || !selectedBoardWild || !myBoard) {
+    if (!canMoveBoardWild || !selectedBoardWild || !myBoard) {
       return;
     }
     const found = findPlacedCard(
@@ -244,6 +244,33 @@ function MonopolyDealPlayingView({
         instanceId: placed.instanceId,
         propertyColor: found.color,
         newColor
+      }
+    });
+    setSelectedBoardWild(null);
+  };
+
+  const moveSelectedBoardWild = (toColor: MonopolyDealPropertyColor): void => {
+    if (!canMoveBoardWild || !selectedBoardWild || !myBoard) {
+      return;
+    }
+    const found = findPlacedCard(
+      { bank: myBoard.bank, propertySets: myBoard.propertySets },
+      selectedBoardWild.instanceId
+    );
+    const placed = found?.card;
+    if (!placed || !found) {
+      return;
+    }
+    const def = getCardDef(placed.defId);
+    if (def.kind !== "propertyWildMulti" || toColor === found.color) {
+      return;
+    }
+    send({
+      type: "monopolyDeal:moveWild",
+      payload: {
+        instanceId: placed.instanceId,
+        fromColor: found.color,
+        toColor
       }
     });
     setSelectedBoardWild(null);
@@ -434,7 +461,7 @@ function MonopolyDealPlayingView({
       {justSayNoPending || game.justSayNoLate ? (
         <JustSayNoPanel
           pending={justSayNoPending ?? undefined}
-          late={game.justSayNoLate}
+          late={justSayNoPending ? null : game.justSayNoLate}
           currentParticipantId={currentParticipantId}
           myHand={game.myHand}
           participants={session.participants}
@@ -490,7 +517,8 @@ function MonopolyDealPlayingView({
                               <div className="md-card-row">
                                 {set.cards.map((c) => {
                                   const cardDef = getCardDef(c.defId);
-                                  const isDualWild = cardDef.kind === "propertyWildDual";
+                                  const isBoardWild =
+                                    cardDef.kind === "propertyWildDual" || cardDef.kind === "propertyWildMulti";
                                   const isSelectedWild =
                                     selectedBoardWild?.instanceId === c.instanceId &&
                                     selectedBoardWild.propertyColor === color;
@@ -501,9 +529,9 @@ function MonopolyDealPlayingView({
                                       activeColor={c.activeColor}
                                       compact
                                       selected={isSelectedWild}
-                                      disabled={!canFlipBoardWild || !isDualWild}
+                                      disabled={!canMoveBoardWild || !isBoardWild}
                                       onClick={
-                                        isDualWild && canFlipBoardWild
+                                        isBoardWild && canMoveBoardWild
                                           ? () => {
                                               setSelectedHandIds([]);
                                               setSelectedBoardWild(
@@ -660,13 +688,33 @@ function MonopolyDealPlayingView({
               ) : null}
             </div>
           ) : null}
-          {canFlipBoardWild && selectedBoardWild && selectedBoardWildFlipColor ? (
+          {canMoveBoardWild && selectedBoardWild && selectedBoardWildFlipColor ? (
             <div className="md-hand-actions">
               <PropertyColorButton color={selectedBoardWildFlipColor} onClick={flipSelectedBoardWild}>
                 Flip wild to {COLOR_LABEL[selectedBoardWildFlipColor]}
               </PropertyColorButton>
             </div>
           ) : null}
+          {canMoveBoardWild && selectedBoardWild && selectedBoardWildDef?.kind === "propertyWildMulti" && myBoard
+            ? (() => {
+                const found = findPlacedCard(
+                  { bank: myBoard.bank, propertySets: myBoard.propertySets },
+                  selectedBoardWild.instanceId
+                );
+                if (!found) {
+                  return null;
+                }
+                return (
+                  <div className="md-hand-actions">
+                    {PROPERTY_COLORS.filter((color) => color !== found.color).map((color) => (
+                      <PropertyColorButton key={color} color={color} onClick={() => moveSelectedBoardWild(color)}>
+                        Move wild to {COLOR_LABEL[color]}
+                      </PropertyColorButton>
+                    ))}
+                  </div>
+                );
+              })()
+            : null}
             </div>
           ) : null}
         </div>

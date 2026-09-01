@@ -114,3 +114,13 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-08-28:** Monopoly Deal feedback: larger hand area, JSN bank-only + panel visibility fix, action card art, JSN event broadcast.
 
 **2026-08-28:** Address Monopoly Deal feedback in monopoly_feedback.md: allow all-in underpayment (excluding wilds), color money denominations, double-click to lay regular properties, fix rent payment queue mislabeled as birthday, restore original action after Just Say No cards cancel each other.
+
+**2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: move any-property wilds as a play, Just Say No "I'm thinking..." +30s, persistent action feed in the game side column.
+
+**2026-08-31:** Fix Monopoly Deal "I'm thinking..." so it keeps blocking the action, resets the Just Say No timer to 30s, and still waits for Allow / Just Say No (late window unchanged).
+
+**2026-08-31:** Restore the Allow button on the timed Just Say No panel for every eligible player (it was restricted to the primary target / actor). Keep Allow hidden on the late window.
+
+**2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: discard house/hotel from incomplete sets at end of turn, fix Deal Breaker leaving the action card (and extra property) in hand, end the game as soon as any player has three complete sets.
+
+**2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: keep counter-Just Say No playable after the 5s timer until the next play or end turn, and merge incomplete same-color property groups when none are complete.

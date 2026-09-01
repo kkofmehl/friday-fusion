@@ -144,4 +144,50 @@ describe("GameScreen", () => {
 
     expect(screen.queryByRole("button", { name: "Next in queue" })).toBeNull();
   });
+
+  it("renders the Monopoly Deal action feed below the game icon", () => {
+    render(
+      <GameScreen
+        session={buildSession({
+          activeGame: "monopolyDeal",
+          gameState: {
+            type: "monopolyDeal",
+            state: {
+              status: "playing",
+              currentPlayerId: "p1",
+              playsRemaining: 2,
+              drawPileCount: 80,
+              discardCount: 1,
+              boards: [
+                { participantId: "p1", bank: [], propertySets: {}, handCount: 5 },
+                { participantId: "p2", bank: [], propertySets: {}, handCount: 5 }
+              ],
+              myHand: [],
+              pot: 2,
+              wagers: { p1: 1, p2: 1 },
+              pendingResolution: null,
+              phase: "playing",
+              recentEvent: null,
+              recentEvents: [],
+              eventSeq: 1,
+              canCancelPendingAction: false,
+              undoableBankCardId: null,
+              actionLog: [{ id: "e1", actorId: "p1", summary: "banked 3M (3M)" }],
+              justSayNoLate: null
+            }
+          }
+        })}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    const feed = screen.getByLabelText(/game action feed/i);
+    expect(feed).toBeTruthy();
+    expect(feed.textContent).toMatch(/banked 3M/i);
+    expect(feed.textContent).toMatch(/Host/i);
+  });
 });

@@ -913,6 +913,15 @@ export const monopolyDealRecentEventSchema = z.discriminatedUnion("type", [
 ]);
 export type MonopolyDealRecentEvent = z.infer<typeof monopolyDealRecentEventSchema>;
 
+export const monopolyDealActionLogEntrySchema = z.object({
+  id: z.string().min(1),
+  actorId: z.string().min(1),
+  summary: z.string().min(1),
+  targetId: z.string().min(1).optional(),
+  suffix: z.string().min(1).optional()
+});
+export type MonopolyDealActionLogEntry = z.infer<typeof monopolyDealActionLogEntrySchema>;
+
 export const monopolyDealPendingResolutionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("justSayNo"),
@@ -921,6 +930,7 @@ export const monopolyDealPendingResolutionSchema = z.discriminatedUnion("kind", 
     primaryTargetId: z.string().optional(),
     affectedPlayerIds: z.array(z.string()).optional(),
     canCounter: z.boolean(),
+    thinkingExtended: z.boolean().optional(),
     expiresAt: z.number()
   }),
   z.object({
@@ -987,12 +997,14 @@ const monopolyDealPlayingBaseSchema = z.object({
   eventSeq: z.number().int().nonnegative(),
   canCancelPendingAction: z.boolean(),
   undoableBankCardId: z.string().nullable(),
+  actionLog: z.array(monopolyDealActionLogEntrySchema),
   justSayNoLate: z
     .object({
       action: monopolyDealPendingActionSchema,
       eligiblePlayerIds: z.array(z.string()),
       primaryTargetId: z.string().optional(),
-      affectedPlayerIds: z.array(z.string()).optional()
+      affectedPlayerIds: z.array(z.string()).optional(),
+      effect: z.enum(["undo", "apply"]).optional()
     })
     .nullable()
 });
@@ -1013,7 +1025,8 @@ export const monopolyDealStateSchema = z.discriminatedUnion("status", [
     winnerHand: z.array(monopolyDealCardInstanceSchema),
     winnerBoard: monopolyDealPlayerBoardSchema,
     pot: z.number().int().nonnegative(),
-    wagers: z.record(z.string(), z.number().int().positive())
+    wagers: z.record(z.string(), z.number().int().positive()),
+    actionLog: z.array(monopolyDealActionLogEntrySchema)
   })
 ]);
 export type MonopolyDealState = z.infer<typeof monopolyDealStateSchema>;
@@ -2094,6 +2107,14 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("monopolyDeal:respondJustSayNo"),
     payload: z.object({ useCardId: z.string().min(1).nullable() })
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:extendJustSayNo"),
+    payload: z.object({})
+  }),
+  z.object({
+    type: z.literal("monopolyDeal:expireJustSayNo"),
+    payload: z.object({})
   }),
   z.object({
     type: z.literal("monopolyDeal:submitPayment"),

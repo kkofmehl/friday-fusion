@@ -26,6 +26,7 @@ import { StoryBuilderGame } from "../games/StoryBuilderGame";
 import { MemoryGame } from "../games/MemoryGame";
 import { WordleGame } from "../games/WordleGame";
 import { MonopolyDealGame } from "../games/MonopolyDealGame";
+import { MonopolyDealActionFeed } from "../games/monopolyDeal/ActionFeed";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -203,6 +204,10 @@ export function GameScreen({
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
   const currentGameId = session.gameState?.type ?? session.activeGame;
   const currentGameIcon = currentGameId ? GAME_ICON_BY_ID[currentGameId] : null;
+  const monopolyDealActionLog =
+    session.gameState?.type === "monopolyDeal" && session.gameState.state.status !== "wagering"
+      ? session.gameState.state.actionLog ?? []
+      : null;
 
   const renderGame = () => {
     if (session.gameState?.type === "hangman") {
@@ -497,6 +502,9 @@ export function GameScreen({
             <img src={currentGameIcon} alt="" className="game-side-icon-image" loading="lazy" />
           </div>
         )}
+        {monopolyDealActionLog ? (
+          <MonopolyDealActionFeed entries={monopolyDealActionLog} participants={session.participants} />
+        ) : null}
       </div>
 
       <div className={`game-stage${canPlay ? "" : " game-stage--readonly"}`}>{renderGame()}</div>

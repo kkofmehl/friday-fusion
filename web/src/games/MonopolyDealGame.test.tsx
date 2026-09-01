@@ -467,6 +467,205 @@ describe("MonopolyDealGame", () => {
     expect(within(jsnPanel as HTMLElement).getByText(/Bob/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Allow$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /I'm thinking/i })).toBeTruthy();
+  });
+
+  it("shows Allow to an eligible player who is not the primary target", () => {
+    const playingState = {
+      status: "playing" as const,
+      currentPlayerId: "a",
+      playsRemaining: 2,
+      drawPileCount: 80,
+      discardCount: 2,
+      boards: [
+        {
+          participantId: "a",
+          bank: [],
+          propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+          handCount: 5
+        },
+        {
+          participantId: "b",
+          bank: [],
+          propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+          handCount: 5
+        },
+        {
+          participantId: "c",
+          bank: [],
+          propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+          handCount: 5
+        }
+      ],
+      myHand: [{ id: "jsn-1", defId: "action-justSayNo-0" }],
+      pot: 6,
+      wagers: { a: 2, b: 2, c: 2 },
+      pendingResolution: {
+        kind: "justSayNo" as const,
+        action: {
+          type: "itsMyBirthday" as const,
+          actorId: "a",
+          targetId: "b"
+        },
+        eligiblePlayerIds: ["b", "c"],
+        primaryTargetId: "b",
+        affectedPlayerIds: ["b", "c"],
+        canCounter: true,
+        expiresAt: Date.now() + 5000
+      },
+      phase: "playing" as const,
+      recentEvent: null,
+      recentEvents: [],
+      eventSeq: 0,
+      canCancelPendingAction: false,
+      undoableBankCardId: null,
+      justSayNoLate: null
+    };
+
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          participants: [
+            { id: "a", displayName: "Ann", score: 0, isHost: true, isActive: true },
+            { id: "b", displayName: "Bob", score: 0, isHost: false, isActive: true },
+            { id: "c", displayName: "Cam", score: 0, isHost: false, isActive: true }
+          ],
+          gameState: { type: "monopolyDeal", state: playingState }
+        })}
+        currentParticipantId="c"
+        isHost={false}
+        canPlay
+        send={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Just Say No\?/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Allow$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
+  });
+
+  it("does not show Allow during the late Just Say No window", () => {
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: {
+              status: "playing",
+              currentPlayerId: "a",
+              playsRemaining: 2,
+              drawPileCount: 80,
+              discardCount: 2,
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                },
+                {
+                  participantId: "b",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                }
+              ],
+              myHand: [{ id: "jsn-1", defId: "action-justSayNo-0" }],
+              pot: 4,
+              wagers: { a: 2, b: 2 },
+              pendingResolution: null,
+              phase: "playing",
+              recentEvent: null,
+              recentEvents: [],
+              eventSeq: 0,
+              canCancelPendingAction: false,
+              undoableBankCardId: null,
+              justSayNoLate: {
+                action: {
+                  type: "slyDeal",
+                  actorId: "a",
+                  targetId: "b",
+                  cardInstanceId: "their-brown"
+                },
+                eligiblePlayerIds: ["b"],
+                primaryTargetId: "b"
+              }
+            }
+          }
+        })}
+        currentParticipantId="b"
+        isHost={false}
+        canPlay
+        send={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Last chance/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Allow$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
+  });
+
+  it("keeps Just Say No available after a counter window with apply late effect", () => {
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: {
+              status: "playing",
+              currentPlayerId: "a",
+              playsRemaining: 2,
+              drawPileCount: 80,
+              discardCount: 2,
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                },
+                {
+                  participantId: "b",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                }
+              ],
+              myHand: [{ id: "jsn-1", defId: "action-justSayNo-0" }],
+              pot: 4,
+              wagers: { a: 2, b: 2 },
+              pendingResolution: null,
+              phase: "playing",
+              recentEvent: null,
+              recentEvents: [],
+              eventSeq: 0,
+              canCancelPendingAction: false,
+              undoableBankCardId: null,
+              justSayNoLate: {
+                action: {
+                  type: "slyDeal",
+                  actorId: "a",
+                  targetId: "b",
+                  cardInstanceId: "their-brown"
+                },
+                eligiblePlayerIds: ["a"],
+                primaryTargetId: "b",
+                effect: "apply"
+              }
+            }
+          }
+        })}
+        currentParticipantId="a"
+        isHost
+        canPlay
+        send={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Last chance/i)).toBeTruthy();
+    expect(screen.getByText(/original action still happens/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Allow$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
   });
 
   it("lays a regular property on double-click", () => {
@@ -517,5 +716,130 @@ describe("MonopolyDealGame", () => {
       type: "monopolyDeal:layProperty",
       payload: { cardId: "brown-1", color: "brown" }
     });
+  });
+
+  it("offers move-to-color buttons for a selected rainbow wild", () => {
+    const send = vi.fn();
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: {
+              status: "playing",
+              currentPlayerId: "a",
+              playsRemaining: 3,
+              drawPileCount: 80,
+              discardCount: 2,
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {
+                    brown: {
+                      cards: [{ instanceId: "rainbow-1", defId: "wild-multi-0", activeColor: "brown" }],
+                      house: false,
+                      hotel: false
+                    }
+                  } as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 1
+                }
+              ],
+              myHand: [],
+              pot: 2,
+              wagers: { a: 1, b: 1 },
+              pendingResolution: null,
+              phase: "playing",
+              recentEvent: null,
+              recentEvents: [],
+              eventSeq: 0,
+              canCancelPendingAction: false,
+              undoableBankCardId: null,
+              justSayNoLate: null
+            }
+          }
+        })}
+        currentParticipantId="a"
+        isHost
+        canPlay
+        send={send}
+      />
+    );
+
+    const properties = document.querySelector(".md-properties");
+    fireEvent.click(within(properties as HTMLElement).getByRole("button"));
+    const greenButton = screen.getByRole("button", { name: /Move wild to Green/i });
+    fireEvent.click(greenButton);
+    expect(send).toHaveBeenCalledWith({
+      type: "monopolyDeal:moveWild",
+      payload: { instanceId: "rainbow-1", fromColor: "brown", toColor: "green" }
+    });
+  });
+
+  it("sends extendJustSayNo when I'm thinking is clicked", () => {
+    const send = vi.fn();
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: {
+              status: "playing",
+              currentPlayerId: "a",
+              playsRemaining: 2,
+              drawPileCount: 80,
+              discardCount: 2,
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                },
+                {
+                  participantId: "b",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                }
+              ],
+              myHand: [{ id: "jsn-1", defId: "action-justSayNo-0" }],
+              pot: 4,
+              wagers: { a: 2, b: 2 },
+              pendingResolution: {
+                kind: "justSayNo",
+                action: {
+                  type: "slyDeal",
+                  actorId: "a",
+                  targetId: "b",
+                  cardInstanceId: "their-brown"
+                },
+                eligiblePlayerIds: ["b"],
+                primaryTargetId: "b",
+                canCounter: true,
+                expiresAt: Date.now() + 5000
+              },
+              phase: "playing",
+              recentEvent: null,
+              recentEvents: [],
+              eventSeq: 0,
+              canCancelPendingAction: false,
+              undoableBankCardId: null,
+              justSayNoLate: null
+            }
+          }
+        })}
+        currentParticipantId="b"
+        isHost={false}
+        canPlay
+        send={send}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /I'm thinking/i }));
+    expect(send).toHaveBeenCalledWith({ type: "monopolyDeal:extendJustSayNo", payload: {} });
+    expect(screen.getByRole("button", { name: /^Allow$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
+    expect(screen.getByText(/30s remaining to counter/i)).toBeTruthy();
   });
 });

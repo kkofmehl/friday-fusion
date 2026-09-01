@@ -1484,6 +1484,10 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.useCardId
           );
+        } else if (event.type === "monopolyDeal:extendJustSayNo") {
+          await sessionService.monopolyDealExtendJustSayNo(context.sessionId, context.participantId);
+        } else if (event.type === "monopolyDeal:expireJustSayNo") {
+          await sessionService.monopolyDealExpireJustSayNo(context.sessionId, context.participantId);
         } else if (event.type === "monopolyDeal:submitPayment") {
           await sessionService.monopolyDealSubmitPayment(
             context.sessionId,
