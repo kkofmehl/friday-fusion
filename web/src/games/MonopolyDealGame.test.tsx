@@ -1,7 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MonopolyDealGame } from "./MonopolyDealGame";
-import type { MonopolyDealPlayerBoard, SessionState } from "../../../shared/contracts";
+import type { MonopolyDealPlayerBoard, MonopolyDealState, SessionState } from "../../../shared/contracts";
+
+type MonopolyDealPlayingState = Extract<MonopolyDealState, { status: "playing" }>;
+
+const makePlayingState = (overrides: Partial<MonopolyDealPlayingState> = {}): MonopolyDealPlayingState => ({
+  status: "playing",
+  currentPlayerId: "a",
+  playsRemaining: 3,
+  drawPileCount: 80,
+  discardCount: 2,
+  boards: [
+    {
+      participantId: "a",
+      bank: [],
+      propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+      handCount: 2
+    }
+  ],
+  myHand: [{ id: "c1", defId: "money-1m-0" }],
+  pot: 4,
+  wagers: { a: 2, b: 2 },
+  pendingResolution: null,
+  phase: "playing",
+  recentEvent: null,
+  recentEvents: [],
+  eventSeq: 0,
+  canCancelPendingAction: false,
+  undoableBankCardId: null,
+  actionLog: [],
+  justSayNoLate: null,
+  ...overrides
+});
 
 const baseSession = (over: Partial<SessionState> = {}): SessionState => ({
   sessionId: "s1",
@@ -63,6 +94,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -108,6 +140,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -165,6 +198,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -186,12 +220,9 @@ describe("MonopolyDealGame", () => {
         session={baseSession({
           gameState: {
             type: "monopolyDeal",
-            state: {
-              status: "playing",
+            state: makePlayingState({
               currentPlayerId: "b",
               playsRemaining: 2,
-              drawPileCount: 80,
-              discardCount: 2,
               boards: [
                 {
                   participantId: "a",
@@ -213,8 +244,6 @@ describe("MonopolyDealGame", () => {
                 }
               ],
               myHand: [],
-              pot: 4,
-              wagers: { a: 2, b: 2 },
               pendingResolution: {
                 kind: "collectPayment",
                 payerId: "b",
@@ -222,9 +251,8 @@ describe("MonopolyDealGame", () => {
                 amountDue: 4,
                 reason: "Rent (pink)",
                 queueRemaining: []
-              },
-              phase: "playing"
-            }
+              }
+            })
           }
         })}
         currentParticipantId="b"
@@ -313,6 +341,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -369,6 +398,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -429,6 +459,7 @@ describe("MonopolyDealGame", () => {
       eventSeq: 0,
       canCancelPendingAction: false,
       undoableBankCardId: null,
+      actionLog: [],
       justSayNoLate: null
     };
 
@@ -519,6 +550,7 @@ describe("MonopolyDealGame", () => {
       eventSeq: 0,
       canCancelPendingAction: false,
       undoableBankCardId: null,
+      actionLog: [],
       justSayNoLate: null
     };
 
@@ -580,6 +612,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: {
                 action: {
                   type: "slyDeal",
@@ -641,6 +674,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: {
                 action: {
                   type: "slyDeal",
@@ -699,6 +733,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -755,6 +790,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }
@@ -825,6 +861,7 @@ describe("MonopolyDealGame", () => {
               eventSeq: 0,
               canCancelPendingAction: false,
               undoableBankCardId: null,
+              actionLog: [],
               justSayNoLate: null
             }
           }

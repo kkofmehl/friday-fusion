@@ -1778,9 +1778,16 @@ export const projectMonopolyDealState = (game: MonopolyDealGameInternal, viewerI
   }
   if (game.status === "finished") {
     const winnerId = game.winnerParticipantId ?? "";
-    const winnerBoard =
+    const winnerBoard: MonopolyDealPlayerBoard =
       game.winnerBoard ??
-      (winnerId ? boardToPlayerBoard(winnerId, getBoard(game, winnerId), getHand(game, winnerId).length) : null);
+      (winnerId
+        ? boardToPlayerBoard(winnerId, getBoard(game, winnerId), getHand(game, winnerId).length)
+        : {
+            participantId: "",
+            bank: [],
+            propertySets: {},
+            handCount: 0
+          });
     return {
       status: "finished",
       winnerParticipantId: winnerId,

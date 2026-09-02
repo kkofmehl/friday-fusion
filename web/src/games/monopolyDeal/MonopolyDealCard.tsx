@@ -243,9 +243,9 @@ export function MonopolyDealCard({
               />
             </svg>
           </div>
-        ) : (
+        ) : def.action ? (
           <ActionCardArt action={def.action} />
-        )}
+        ) : null}
         <div className="md-action-name">{def.name}</div>
         {isPassGo ? <div className="md-action-subtitle">(Draw Two Cards)</div> : null}
       </CardShell>

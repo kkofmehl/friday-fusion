@@ -11,6 +11,7 @@ import {
   type SessionState
 } from "../../../shared/contracts";
 import { GameAttributeBadge, GameAttributeLegend } from "../components/GameAttributeBadge";
+import { GameBetaBadge, LobbyGameInfoTooltip } from "../components/LobbyGameInfoTooltip";
 import { PlayerList } from "../components/PlayerList";
 import { SessionQueuePanel } from "../components/SessionQueuePanel";
 import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
@@ -23,6 +24,7 @@ type GameOption = {
   title: string;
   description: string;
   iconSrc: string;
+  beta?: boolean;
 };
 
 const GAMES: GameOption[] = [
@@ -110,7 +112,8 @@ const GAMES: GameOption[] = [
     title: "Monopoly Deal",
     description:
       "Collect three property sets—bank money, charge rent, steal deals, and wager Friday Fusion points for the pot.",
-    iconSrc: "/game_icons/monopoly_deal.png"
+    iconSrc: "/game_icons/monopoly_deal.png",
+    beta: true
   },
   {
     id: "madlibs",
@@ -361,24 +364,34 @@ export function LobbyScreen({
             <h2>Choose a game</h2>
             {!isHost && <span className="pill pill-muted">Host picks</span>}
           </header>
-          <GameAttributeLegend />
-          <div className="game-grid">
-            {GAMES.map((game) => (
-            <article key={game.id} className="game-card">
-              <div className="game-card-emoji" aria-hidden="true">
-                <img className="game-card-icon" src={game.iconSrc} alt="" loading="lazy" />
-              </div>
-              <h3>{game.title}</h3>
-              <ul className="game-card-attributes" aria-label={`${game.title} attributes`}>
-                {getGameAttributes(game.id).map((attr) => (
-                  <li key={attr}>
-                    <GameAttributeBadge attribute={attr} />
-                  </li>
-                ))}
-              </ul>
-              <p>{game.description}</p>
+          {isHost ? (
+            <>
+              <GameAttributeLegend />
+              <div className="game-grid">
+                {GAMES.map((game) => (
+                  <article key={game.id} className="game-card">
+                    <div className="game-card-emoji" aria-hidden="true">
+                      <img className="game-card-icon" src={game.iconSrc} alt="" loading="lazy" />
+                    </div>
+                    <h3>
+                      {game.title}
+                      {game.beta ? (
+                        <>
+                          {" "}
+                          <GameBetaBadge />
+                        </>
+                      ) : null}
+                    </h3>
+                    <ul className="game-card-attributes" aria-label={`${game.title} attributes`}>
+                      {getGameAttributes(game.id).map((attr) => (
+                        <li key={attr}>
+                          <GameAttributeBadge attribute={attr} />
+                        </li>
+                      ))}
+                    </ul>
+                    <p>{game.description}</p>
               {game.id === "hangman" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Mode & creator</legend>
                   <label className={`mode-option${hangmanMode === "team" ? " is-active" : ""}`}>
                     <input
@@ -419,7 +432,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "guessTheImage" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">First-round setup</legend>
                   <label className="mode-picker-label" htmlFor="guess-image-lobby-setup-select">
                     Who prepares the image?
@@ -442,7 +455,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "twentyQuestions" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Round setup</legend>
                   <label className="mode-picker-label" htmlFor="twenty-q-selector-select">
                     Item selector (answers yes / no)
@@ -474,7 +487,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "wouldYouRather" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Round setup</legend>
                   <label className="mode-picker-label" htmlFor="would-you-rather-count">
                     How many prompts?
@@ -499,7 +512,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "captionThis" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Round setup</legend>
                   <label className="mode-picker-label" htmlFor="caption-this-provider-select">
                     First image provider
@@ -520,7 +533,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "pictionary" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Drawing timer</legend>
                   <label className="mode-picker-label" htmlFor="pictionary-draw-seconds">
                     Seconds per drawing turn
@@ -541,7 +554,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "applesToApples" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Mode</legend>
                   <label className={`mode-option${applesMode === "standard" ? " is-active" : ""}`}>
                     <input
@@ -573,7 +586,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "yahtzee" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Mode</legend>
                   <label className={`mode-option${yahtzeeMode === "turns" ? " is-active" : ""}`}>
                     <input
@@ -602,7 +615,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "memory" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Board size</legend>
                   <label className={`mode-option${memoryBoardSize === "30" ? " is-active" : ""}`}>
                     <input
@@ -630,7 +643,7 @@ export function LobbyScreen({
                 </fieldset>
               )}
               {game.id === "storyBuilder" && (
-                <fieldset className="mode-picker" disabled={!isHost}>
+                <fieldset className="mode-picker">
                   <legend className="mode-picker-label">Story setup</legend>
                   <label className={`mode-option${storyBuilderMode === "stock" ? " is-active" : ""}`}>
                     <input
@@ -672,31 +685,59 @@ export function LobbyScreen({
                   <p className="mode-option-hint">Needs at least two active players.</p>
                 </fieldset>
               )}
-              {isHost ? (
-                <div className="game-card-actions">
-                  <button type="button" className="btn btn-primary" onClick={() => startGame(game.id)}>
-                    Start
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => queueGame(game.id)}>
-                    Queue
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className={`btn btn-secondary lobby-want-game${
-                    lobbyPrefs[currentParticipantId] === game.id ? " is-selected" : ""
-                  }`}
-                  disabled={!canInteractAsGuest}
-                  title={!canInteractAsGuest ? "You are benched and cannot vote from the lobby." : undefined}
-                  onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
-                >
-                  I want to play this
-                </button>
-              )}
-            </article>
-            ))}
-          </div>
+                    <div className="game-card-actions">
+                      <button type="button" className="btn btn-primary" onClick={() => startGame(game.id)}>
+                        Start
+                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={() => queueGame(game.id)}>
+                        Queue
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="game-grid-compact">
+              {GAMES.map((game) => (
+                <article key={game.id} className="game-tile-compact">
+                  <LobbyGameInfoTooltip
+                    gameTitle={game.title}
+                    description={game.description}
+                    attributes={getGameAttributes(game.id)}
+                    beta={game.beta}
+                  />
+                  <div className="game-tile-compact-body">
+                    <div className="game-tile-compact-icon" aria-hidden="true">
+                      <img className="game-tile-compact-icon-img" src={game.iconSrc} alt="" loading="lazy" />
+                    </div>
+                    <div className="game-tile-compact-main">
+                      <h3 className="game-tile-compact-title">
+                        {game.title}
+                        {game.beta ? (
+                          <>
+                            {" "}
+                            <GameBetaBadge />
+                          </>
+                        ) : null}
+                      </h3>
+                      <button
+                        type="button"
+                        className={`btn btn-secondary btn-sm lobby-want-game${
+                          lobbyPrefs[currentParticipantId] === game.id ? " is-selected" : ""
+                        }`}
+                        disabled={!canInteractAsGuest}
+                        title={!canInteractAsGuest ? "You are benched and cannot vote from the lobby." : undefined}
+                        onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
+                      >
+                        Play this!
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       )}
       <ProfileViewModal

@@ -121,6 +121,8 @@ Return: files changed, brief summary of behavior, test commands run and results,
 
 **2026-08-31:** Restore the Allow button on the timed Just Say No panel for every eligible player (it was restricted to the primary target / actor). Keep Allow hidden on the late window.
 
+**2026-09-01:** Add a Beta tag to Monopoly Deal in the lobby main menu. For non-host players, use a compact game tile listing (icon, name, Play this! button, info tooltip with description and tags); host view stays the same.
+
 **2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: discard house/hotel from incomplete sets at end of turn, fix Deal Breaker leaving the action card (and extra property) in hand, end the game as soon as any player has three complete sets.
 
 **2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: keep counter-Just Say No playable after the 5s timer until the next play or end turn, and merge incomplete same-color property groups when none are complete.

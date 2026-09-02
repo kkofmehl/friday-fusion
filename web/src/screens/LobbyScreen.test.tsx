@@ -127,20 +127,59 @@ describe("LobbyScreen", () => {
     });
   });
 
-  it("sends lobby:setGamePreference when a guest clicks I want to play this", () => {
+  it("sends lobby:setGamePreference when a guest clicks Play this!", () => {
     const send = vi.fn();
     render(
       <LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={send} />
     );
 
-    const captionCard = screen.getByRole("heading", { name: "Caption This" }).closest("article");
-    if (!captionCard) throw new Error("expected Caption This card");
-    fireEvent.click(captionCard.querySelector(".lobby-want-game")!);
+    const captionTile = screen.getByRole("heading", { name: /Caption This/ }).closest("article");
+    if (!captionTile) throw new Error("expected Caption This tile");
+    fireEvent.click(within(captionTile).getByRole("button", { name: "Play this!" }));
 
     expect(send).toHaveBeenCalledWith({
       type: "lobby:setGamePreference",
       payload: { game: "captionThis" }
     });
+  });
+
+  it("renders compact guest tiles without attribute legend or mode pickers", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Game attribute legend")).toBeNull();
+    expect(screen.queryByLabelText("Mode & creator")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Play this!" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "About Hangman" })).toBeDefined();
+  });
+
+  it("shows Beta tag on Monopoly Deal for host and guest", () => {
+    const { rerender } = render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />
+    );
+
+    const hostCard = screen.getByRole("heading", { name: /Monopoly Deal/ }).closest("article");
+    if (!hostCard) throw new Error("expected Monopoly Deal host card");
+    expect(within(hostCard).getByLabelText("Beta release")).toBeDefined();
+
+    rerender(
+      <LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />
+    );
+
+    const guestTile = screen.getByRole("heading", { name: /Monopoly Deal/ }).closest("article");
+    if (!guestTile) throw new Error("expected Monopoly Deal guest tile");
+    expect(within(guestTile).getByLabelText("Beta release")).toBeDefined();
+  });
+
+  it("shows game description and tags in guest info tooltip on focus", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />);
+
+    fireEvent.focus(screen.getByRole("button", { name: "About Monopoly Deal" }));
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip.textContent).toContain("Collect three property sets");
+    expect(within(tooltip).getByLabelText("Beta release")).toBeDefined();
+    expect(within(tooltip).getByLabelText(/Scorable points\. Session scoreboard tracks points/i)).toBeDefined();
+    expect(within(tooltip).getByLabelText(/^Game\. Structured rounds/i)).toBeDefined();
   });
 
   it("renders the game attribute legend with all six attribute labels", () => {
@@ -206,6 +245,7 @@ describe("LobbyScreen", () => {
       ["Apples to Apples", "/game_icons/apples_to_apples.png"],
       ["UNO", "/game_icons/uno.png"],
       ["BS", "/game_icons/bs.png"],
+      ["Monopoly Deal", "/game_icons/monopoly_deal.png"],
       ["Madlibs", "/game_icons/madlibs.png"],
       ["Catch Phrase", "/game_icons/catchphrase.png"],
       ["Yahtzee", "/game_icons/yahtzee.png"],
@@ -216,9 +256,9 @@ describe("LobbyScreen", () => {
     ];
 
     for (const [gameName, iconPath] of expectedIcons) {
-      const card = screen.getByRole("heading", { name: gameName }).closest("article");
+      const card = screen.getByRole("heading", { name: new RegExp(`^${gameName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }).closest("article");
       if (!card) throw new Error(`expected ${gameName} card`);
-      const icon = card.querySelector("img.game-card-icon");
+      const icon = card.querySelector("img.game-card-icon, img.game-tile-compact-icon-img");
       expect(icon).not.toBeNull();
       expect(icon?.getAttribute("src")).toBe(iconPath);
     }
