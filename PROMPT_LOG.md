@@ -212,3 +212,10 @@
 
 106. User reported Wordle Race layout overlapping when shrinking the display from full width (fine on full and portrait monitors); board/keyboard bleed into players rail and live standings.
 107. User requested adding the GitHub URL (https://github.com/kkofmehl/friday-fusion) to the application footer.
+
+## 2026-09-02
+
+108. User asked to explore friday-fusion multiplayer game architecture: registration/listing, server patterns (esp. Monopoly Deal), client/UI, shared types, turns/actions/win conditions — and return key paths, patterns, data models, checklist, and complexity estimates.
+109. User requested adding **Splendor** to Friday Fusion (gem tokens, three-tier development cards, nobles, 15 prestige, turn actions: collect gems / buy / reserve). Approved plan: official 2–4 players, full 90-card / 10-noble catalog, server-authoritative engine, abstract beta UI.
+110. User requested Splendor UI polish from `splendor_feedback.md`: light tinted card backgrounds (keep top accent, drop bonus square), compact opponent status strip at top with full board only for self, stacked mini purchased cards with count on top card.
+111. User requested removing cost pips from purchased cards on player boards (market/reserved cards still show costs).

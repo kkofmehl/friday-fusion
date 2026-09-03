@@ -27,6 +27,7 @@ import { MemoryGame } from "../games/MemoryGame";
 import { WordleGame } from "../games/WordleGame";
 import { MonopolyDealGame } from "../games/MonopolyDealGame";
 import { MonopolyDealActionFeed } from "../games/monopolyDeal/ActionFeed";
+import { SplendorGame } from "../games/SplendorGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -49,7 +50,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   storyBuilder: "/game_icons/story_builder.png",
   memory: "/game_icons/memory.png",
   wordle: "/game_icons/wordle.png",
-  monopolyDeal: "/game_icons/monopoly_deal.png"
+  monopolyDeal: "/game_icons/monopoly_deal.png",
+  splendor: "/game_icons/splendor.png"
 };
 
 const GAME_TITLES_BY_ID: Record<GameType, string> = {
@@ -73,7 +75,8 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   storyBuilder: "Story Builder",
   memory: "Memory",
   wordle: "Wordle Race",
-  monopolyDeal: "Monopoly Deal"
+  monopolyDeal: "Monopoly Deal",
+  splendor: "Splendor"
 };
 
 export function GameScreen({
@@ -412,6 +415,17 @@ export function GameScreen({
     if (session.gameState?.type === "monopolyDeal") {
       return (
         <MonopolyDealGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "splendor") {
+      return (
+        <SplendorGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

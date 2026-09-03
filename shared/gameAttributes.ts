@@ -72,7 +72,8 @@ export const GAME_ATTRIBUTES_BY_TYPE: Record<GameType, readonly GameAttribute[]>
   storyBuilder: ["activity", "long"],
   memory: ["scorable", "game", "short"],
   wordle: ["scorable", "game", "short"],
-  monopolyDeal: ["scorable", "game", "short"]
+  monopolyDeal: ["scorable", "game", "short"],
+  splendor: ["scorable", "game", "long"]
 };
 
 export function getGameAttributes(game: GameType): readonly GameAttribute[] {

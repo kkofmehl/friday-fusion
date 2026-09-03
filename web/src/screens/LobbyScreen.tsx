@@ -116,6 +116,14 @@ const GAMES: GameOption[] = [
     beta: true
   },
   {
+    id: "splendor",
+    title: "Splendor",
+    description:
+      "Collect gems, buy development cards, attract nobles, and race to 15 prestige in this classic engine-builder.",
+    iconSrc: "/game_icons/splendor.png",
+    beta: true
+  },
+  {
     id: "madlibs",
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",

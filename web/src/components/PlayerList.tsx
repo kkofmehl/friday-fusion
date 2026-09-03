@@ -98,6 +98,12 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Your turn", tone: "answerer" };
     }
   }
+  if (session.gameState.type === "splendor") {
+    const st = session.gameState.state;
+    if (st.status === "playing" && st.currentPlayerId === participantId) {
+      return { label: "Your turn", tone: "answerer" };
+    }
+  }
   if (session.gameState.type === "bs") {
     const st = session.gameState.state;
     if ((st.status === "playing" || st.status === "challenging" || st.status === "challenged") && st.currentPlayerId === participantId) {

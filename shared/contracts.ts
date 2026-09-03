@@ -21,7 +21,8 @@ export const gameTypeSchema = z.enum([
   "storyBuilder",
   "memory",
   "wordle",
-  "monopolyDeal"
+  "monopolyDeal",
+  "splendor"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -1412,6 +1413,120 @@ export const wordleStateSchema = z.discriminatedUnion("status", [
 ]);
 export type WordleState = z.infer<typeof wordleStateSchema>;
 
+export const splendorGemColorSchema = z.enum(["white", "blue", "green", "red", "black"]);
+export type SplendorGemColorContract = z.infer<typeof splendorGemColorSchema>;
+
+export const splendorTokenColorSchema = z.enum(["white", "blue", "green", "red", "black", "gold"]);
+export type SplendorTokenColorContract = z.infer<typeof splendorTokenColorSchema>;
+
+export const splendorTierSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+export type SplendorTierContract = z.infer<typeof splendorTierSchema>;
+
+export const splendorGemCostSchema = z
+  .object({
+    white: z.number().int().nonnegative().optional(),
+    blue: z.number().int().nonnegative().optional(),
+    green: z.number().int().nonnegative().optional(),
+    red: z.number().int().nonnegative().optional(),
+    black: z.number().int().nonnegative().optional()
+  })
+  .strict();
+
+export const splendorCardViewSchema = z.object({
+  id: z.string(),
+  tier: splendorTierSchema,
+  bonus: splendorGemColorSchema,
+  prestige: z.number().int().nonnegative(),
+  cost: splendorGemCostSchema
+});
+export type SplendorCardView = z.infer<typeof splendorCardViewSchema>;
+
+export const splendorNobleViewSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  prestige: z.literal(3),
+  requirements: splendorGemCostSchema
+});
+export type SplendorNobleView = z.infer<typeof splendorNobleViewSchema>;
+
+export const splendorTokenCountsSchema = z.object({
+  white: z.number().int().nonnegative(),
+  blue: z.number().int().nonnegative(),
+  green: z.number().int().nonnegative(),
+  red: z.number().int().nonnegative(),
+  black: z.number().int().nonnegative(),
+  gold: z.number().int().nonnegative()
+});
+export type SplendorTokenCountsView = z.infer<typeof splendorTokenCountsSchema>;
+
+export const splendorBonusCountsSchema = z.object({
+  white: z.number().int().nonnegative(),
+  blue: z.number().int().nonnegative(),
+  green: z.number().int().nonnegative(),
+  red: z.number().int().nonnegative(),
+  black: z.number().int().nonnegative()
+});
+export type SplendorBonusCountsView = z.infer<typeof splendorBonusCountsSchema>;
+
+export const splendorPlayerPublicSchema = z.object({
+  participantId: z.string(),
+  tokens: splendorTokenCountsSchema,
+  bonuses: splendorBonusCountsSchema,
+  prestige: z.number().int().nonnegative(),
+  purchasedCardCount: z.number().int().nonnegative(),
+  reservedCount: z.number().int().nonnegative(),
+  nobles: z.array(splendorNobleViewSchema),
+  /** Purchased cards grouped by bonus color for board display. */
+  purchasedByBonus: z.record(splendorGemColorSchema, z.array(splendorCardViewSchema))
+});
+export type SplendorPlayerPublic = z.infer<typeof splendorPlayerPublicSchema>;
+
+export const splendorPendingSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("returnTokens"),
+    participantId: z.string(),
+    mustReturn: z.number().int().positive()
+  }),
+  z.object({
+    type: z.literal("chooseNoble"),
+    participantId: z.string(),
+    nobleIds: z.array(z.string()).min(2)
+  })
+]);
+export type SplendorPending = z.infer<typeof splendorPendingSchema>;
+
+export const splendorStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("playing"),
+    playerOrder: z.array(z.string()).min(2).max(4),
+    currentPlayerId: z.string(),
+    bank: splendorTokenCountsSchema,
+    market: z.object({
+      1: z.array(splendorCardViewSchema.nullable()).length(4),
+      2: z.array(splendorCardViewSchema.nullable()).length(4),
+      3: z.array(splendorCardViewSchema.nullable()).length(4)
+    }),
+    deckCounts: z.object({
+      1: z.number().int().nonnegative(),
+      2: z.number().int().nonnegative(),
+      3: z.number().int().nonnegative()
+    }),
+    nobles: z.array(splendorNobleViewSchema),
+    players: z.array(splendorPlayerPublicSchema),
+    myReserved: z.array(splendorCardViewSchema),
+    pending: splendorPendingSchema.nullable(),
+    /** Set when a player first reaches 15+; remaining players finish the round. */
+    finalRoundAnchorPlayerId: z.string().nullable()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    winnerParticipantIds: z.array(z.string()).min(1),
+    players: z.array(splendorPlayerPublicSchema),
+    prestigeByParticipant: z.record(z.string(), z.number().int().nonnegative())
+  })
+]);
+export type SplendorState = z.infer<typeof splendorStateSchema>;
+
 export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hangman"),
@@ -1496,6 +1611,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("monopolyDeal"),
     state: monopolyDealStateSchema
+  }),
+  z.object({
+    type: z.literal("splendor"),
+    state: splendorStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -2134,7 +2253,42 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("monopolyDeal:discard"),
     payload: z.object({ cardIds: z.array(z.string().min(1)).min(1) })
   }),
-  z.object({ type: z.literal("monopolyDeal:endTurn"), payload: z.object({}) })
+  z.object({ type: z.literal("monopolyDeal:endTurn"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("splendor:takeDifferentGems"),
+    payload: z.object({
+      colors: z.array(splendorGemColorSchema).min(1).max(3)
+    })
+  }),
+  z.object({
+    type: z.literal("splendor:takeSameGems"),
+    payload: z.object({ color: splendorGemColorSchema })
+  }),
+  z.object({
+    type: z.literal("splendor:reserveCard"),
+    payload: z.object({
+      source: z.enum(["market", "deck"]),
+      tier: splendorTierSchema,
+      cardId: z.string().min(1).optional()
+    })
+  }),
+  z.object({
+    type: z.literal("splendor:buyCard"),
+    payload: z.object({
+      source: z.enum(["market", "reserved"]),
+      tier: splendorTierSchema.optional(),
+      cardId: z.string().min(1),
+      payment: splendorTokenCountsSchema.optional()
+    })
+  }),
+  z.object({
+    type: z.literal("splendor:returnTokens"),
+    payload: z.object({ tokens: splendorTokenCountsSchema })
+  }),
+  z.object({
+    type: z.literal("splendor:chooseNoble"),
+    payload: z.object({ nobleId: z.string().min(1) })
+  })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

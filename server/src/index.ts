@@ -1510,6 +1510,47 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "monopolyDeal:endTurn") {
           await sessionService.monopolyDealEndTurn(context.sessionId, context.participantId);
+        } else if (event.type === "splendor:takeDifferentGems") {
+          await sessionService.splendorTakeDifferentGems(
+            context.sessionId,
+            context.participantId,
+            event.payload.colors
+          );
+        } else if (event.type === "splendor:takeSameGems") {
+          await sessionService.splendorTakeSameGems(
+            context.sessionId,
+            context.participantId,
+            event.payload.color
+          );
+        } else if (event.type === "splendor:reserveCard") {
+          await sessionService.splendorReserveCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.source,
+            event.payload.tier,
+            event.payload.cardId
+          );
+        } else if (event.type === "splendor:buyCard") {
+          await sessionService.splendorBuyCard(
+            context.sessionId,
+            context.participantId,
+            event.payload.source,
+            event.payload.cardId,
+            event.payload.tier,
+            event.payload.payment
+          );
+        } else if (event.type === "splendor:returnTokens") {
+          await sessionService.splendorReturnTokens(
+            context.sessionId,
+            context.participantId,
+            event.payload.tokens
+          );
+        } else if (event.type === "splendor:chooseNoble") {
+          await sessionService.splendorChooseNoble(
+            context.sessionId,
+            context.participantId,
+            event.payload.nobleId
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

@@ -111,6 +111,17 @@ import {
   projectMonopolyDealState,
   type MonopolyDealGameInternal
 } from "./monopolyDealGame";
+import {
+  createSplendorGame,
+  projectSplendorState,
+  splendorBuyCard,
+  splendorChooseNoble,
+  splendorReserveCard,
+  splendorReturnTokens,
+  splendorTakeDifferentGems,
+  splendorTakeSameGems,
+  type SplendorGameInternal
+} from "./splendorGame";
 import { buildMemoryDeck } from "./memoryDeck";
 import {
   fillMadlibTemplate,
@@ -633,7 +644,8 @@ type GameInternal =
   | StoryBuilderGameInternal
   | MemoryGameInternal
   | WordleGameInternal
-  | MonopolyDealGameInternal;
+  | MonopolyDealGameInternal
+  | SplendorGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1089,6 +1101,39 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       phase: g.phase === "discarding" ? "discarding" : "playing",
       drawnThisTurn: g.drawnThisTurn === true,
       hadEmptyHandAtTurnStart: g.hadEmptyHandAtTurnStart === true
+    };
+  }
+  if (game.type === "splendor") {
+    const g = game as SplendorGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      type: "splendor" as const,
+      playerOrder: Array.isArray(g.playerOrder) ? g.playerOrder : [],
+      currentPlayerIndex: Math.max(0, Number(g.currentPlayerIndex) || 0),
+      bank: g.bank ?? {
+        white: 0,
+        blue: 0,
+        green: 0,
+        red: 0,
+        black: 0,
+        gold: 0
+      },
+      decks: g.decks ?? { 1: [], 2: [], 3: [] },
+      market: g.market ?? {
+        1: [null, null, null, null],
+        2: [null, null, null, null],
+        3: [null, null, null, null]
+      },
+      nobleIds: Array.isArray(g.nobleIds) ? g.nobleIds : [],
+      players: g.players && typeof g.players === "object" ? g.players : {},
+      pending: g.pending ?? null,
+      finalRoundAnchorPlayerId:
+        typeof g.finalRoundAnchorPlayerId === "string" ? g.finalRoundAnchorPlayerId : null,
+      finalRoundCompletedIds: Array.isArray(g.finalRoundCompletedIds) ? g.finalRoundCompletedIds : [],
+      winnerParticipantIds: Array.isArray(g.winnerParticipantIds) ? g.winnerParticipantIds : null,
+      scoresApplied: g.scoresApplied === true,
+      status: g.status === "finished" || g.status === "playing" ? g.status : "playing"
     };
   }
   if (game.type === "madlibs") {
@@ -2496,6 +2541,15 @@ export class SessionService {
         throw new Error("Monopoly Deal supports at most five active players.");
       }
       next = createMonopolyDealGame(actives.map((p) => p.id));
+    } else if (game === "splendor") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Splendor needs at least two active players.");
+      }
+      if (actives.length > 4) {
+        throw new Error("Splendor supports at most four active players.");
+      }
+      next = createSplendorGame(actives.map((p) => p.id));
     } else if (game === "madlibs") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -8910,6 +8964,18 @@ export class SessionService {
       };
     }
 
+    if (game.type === "splendor") {
+      this.splendorMaybeApplyScores(session, game);
+      return {
+        ...base,
+        activeGame: "splendor",
+        gameState: {
+          type: "splendor",
+          state: projectSplendorState(game, viewerParticipantId ?? "")
+        }
+      };
+    }
+
     const _never: never = game;
     throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
   }
@@ -9154,6 +9220,111 @@ export class SessionService {
     const game = this.getMonopolyDealGame(session);
     monopolyDealEndTurn(game, participantId);
     await this.monopolyDealPersist(session);
+  }
+
+  private splendorMaybeApplyScores(session: SessionInternal, game: SplendorGameInternal): void {
+    if (game.status !== "finished" || game.scoresApplied || !game.winnerParticipantIds?.length) {
+      return;
+    }
+    const pts = Math.max(0, activeParticipants(session).length - 1);
+    for (const winnerId of game.winnerParticipantIds) {
+      const winner = session.participants.find((p) => p.id === winnerId);
+      if (winner) {
+        winner.score += pts;
+      }
+    }
+    game.scoresApplied = true;
+  }
+
+  private getSplendorGame(session: SessionInternal): SplendorGameInternal {
+    const g = session.games[0];
+    if (g?.type !== "splendor") {
+      throw new Error("Splendor is not active.");
+    }
+    return g;
+  }
+
+  private async splendorPersist(session: SessionInternal): Promise<void> {
+    const game = this.getSplendorGame(session);
+    this.splendorMaybeApplyScores(session, game);
+    await this.persist();
+  }
+
+  public async splendorTakeDifferentGems(
+    sessionId: string,
+    participantId: string,
+    colors: import("../../shared/splendorData").SplendorGemColor[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorTakeDifferentGems(game, participantId, colors);
+    await this.splendorPersist(session);
+  }
+
+  public async splendorTakeSameGems(
+    sessionId: string,
+    participantId: string,
+    color: import("../../shared/splendorData").SplendorGemColor
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorTakeSameGems(game, participantId, color);
+    await this.splendorPersist(session);
+  }
+
+  public async splendorReserveCard(
+    sessionId: string,
+    participantId: string,
+    source: "market" | "deck",
+    tier: import("../../shared/splendorData").SplendorTier,
+    cardId?: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorReserveCard(game, participantId, source, tier, cardId);
+    await this.splendorPersist(session);
+  }
+
+  public async splendorBuyCard(
+    sessionId: string,
+    participantId: string,
+    source: "market" | "reserved",
+    cardId: string,
+    tier?: import("../../shared/splendorData").SplendorTier,
+    payment?: import("../../shared/splendorLogic").SplendorTokenCounts
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorBuyCard(game, participantId, source, cardId, tier, payment);
+    await this.splendorPersist(session);
+  }
+
+  public async splendorReturnTokens(
+    sessionId: string,
+    participantId: string,
+    tokens: import("../../shared/splendorLogic").SplendorTokenCounts
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorReturnTokens(game, participantId, tokens);
+    await this.splendorPersist(session);
+  }
+
+  public async splendorChooseNoble(
+    sessionId: string,
+    participantId: string,
+    nobleId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = this.getSplendorGame(session);
+    splendorChooseNoble(game, participantId, nobleId);
+    await this.splendorPersist(session);
   }
 }
 

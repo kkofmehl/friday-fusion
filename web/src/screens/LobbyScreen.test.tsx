@@ -246,6 +246,7 @@ describe("LobbyScreen", () => {
       ["UNO", "/game_icons/uno.png"],
       ["BS", "/game_icons/bs.png"],
       ["Monopoly Deal", "/game_icons/monopoly_deal.png"],
+      ["Splendor", "/game_icons/splendor.png"],
       ["Madlibs", "/game_icons/madlibs.png"],
       ["Catch Phrase", "/game_icons/catchphrase.png"],
       ["Yahtzee", "/game_icons/yahtzee.png"],
