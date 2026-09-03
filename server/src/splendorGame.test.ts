@@ -29,8 +29,24 @@ describe("splendorGame", () => {
   });
 
   it("rejects invalid player counts", () => {
-    expect(() => createSplendorGame(["a"])).toThrow(/2 to 4/);
-    expect(() => createSplendorGame(["a", "b", "c", "d", "e"])).toThrow(/2 to 4/);
+    expect(() => createSplendorGame(["a"])).toThrow(/2 to 6/);
+    expect(() => createSplendorGame(["a", "b", "c", "d", "e", "f", "g"])).toThrow(/2 to 6/);
+  });
+
+  it("scales bank, market, nobles, and win threshold for 5–6 players", () => {
+    const five = createSplendorGame(["a", "b", "c", "d", "e"]);
+    expect(five.bank.white).toBe(9);
+    expect(five.bank.gold).toBe(6);
+    expect(five.market[1]).toHaveLength(5);
+    expect(five.nobleIds).toHaveLength(6);
+    expect(five.prestigeToEnd).toBe(12);
+
+    const six = createSplendorGame(["a", "b", "c", "d", "e", "f"]);
+    expect(six.bank.white).toBe(11);
+    expect(six.bank.gold).toBe(7);
+    expect(six.market[1]).toHaveLength(5);
+    expect(six.nobleIds).toHaveLength(7);
+    expect(six.prestigeToEnd).toBe(12);
   });
 
   it("takes different gems and advances turn", () => {
@@ -105,6 +121,29 @@ describe("splendorGame", () => {
     splendorBuyCard(game, "a", "market", cardId, 1, payment);
     expect(game.players.a!.purchasedCardIds).toContain(cardId);
     expect(game.market[1].some((id) => id === cardId)).toBe(false);
+  });
+
+  it("ends the game at 12 prestige for five-player tables", () => {
+    const game = createSplendorGame(["a", "b", "c", "d", "e"]);
+    const highCards = SPLENDOR_CARDS.filter((c) => c.prestige >= 3).slice(0, 4);
+    splendorDebugSetPurchased(
+      game,
+      "a",
+      highCards.map((c) => c.id)
+    );
+    expect(
+      highCards.reduce((sum, c) => sum + c.prestige, 0)
+    ).toBeGreaterThanOrEqual(12);
+
+    splendorTakeDifferentGems(game, "a", ["white"]);
+    expect(game.finalRoundAnchorPlayerId).toBe("a");
+
+    splendorTakeDifferentGems(game, "b", ["blue"]);
+    splendorTakeDifferentGems(game, "c", ["green"]);
+    splendorTakeDifferentGems(game, "d", ["red"]);
+    splendorTakeDifferentGems(game, "e", ["black"]);
+    expect(game.status).toBe("finished");
+    expect(game.winnerParticipantIds).toContain("a");
   });
 
   it("ends the game after equal turns once prestige hits 15", () => {

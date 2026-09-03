@@ -1,11 +1,14 @@
 export const SPLENDOR_PRESTIGE_TO_END = 15;
+export const SPLENDOR_PRESTIGE_TO_END_LARGE = 12;
 export const SPLENDOR_MAX_TOKENS = 10;
 export const SPLENDOR_MAX_RESERVED = 3;
 export const SPLENDOR_MARKET_SLOTS = 4;
+export const SPLENDOR_MARKET_SLOTS_LARGE = 5;
 export const SPLENDOR_GOLD_SUPPLY = 5;
 export const SPLENDOR_NOBLE_PRESTIGE = 3;
 export const SPLENDOR_MIN_PLAYERS = 2;
-export const SPLENDOR_MAX_PLAYERS = 4;
+export const SPLENDOR_MAX_PLAYERS = 6;
+export const SPLENDOR_LARGE_TABLE_PLAYER_COUNT = 5;
 
 /** Gem colors for tokens and card bonuses (excludes gold). */
 export type SplendorGemColor = "white" | "blue" | "green" | "red" | "black";
@@ -253,8 +256,40 @@ export function totalTokens(tokens: Record<SplendorTokenColor, number>): number 
 }
 
 export function gemSupplyForPlayerCount(playerCount: number): number {
-  if (playerCount === 2 || playerCount === 3 || playerCount === 4) {
-    return SPLENDOR_GEM_SUPPLY_BY_PLAYERS[playerCount];
+  if (playerCount < SPLENDOR_MIN_PLAYERS || playerCount > SPLENDOR_MAX_PLAYERS) {
+    throw new Error("Splendor supports 2 to 6 players.");
   }
-  throw new Error("Splendor supports 2 to 4 players.");
+  const base =
+    playerCount === 2 ? 4 : playerCount === 3 ? 5 : 7;
+  const extraPlayers = Math.max(0, playerCount - 4);
+  return base + extraPlayers * 2;
+}
+
+export function goldSupplyForPlayerCount(playerCount: number): number {
+  if (playerCount < SPLENDOR_MIN_PLAYERS || playerCount > SPLENDOR_MAX_PLAYERS) {
+    throw new Error("Splendor supports 2 to 6 players.");
+  }
+  return SPLENDOR_GOLD_SUPPLY + Math.max(0, playerCount - 4);
+}
+
+export function marketSlotsForPlayerCount(playerCount: number): number {
+  if (playerCount < SPLENDOR_MIN_PLAYERS || playerCount > SPLENDOR_MAX_PLAYERS) {
+    throw new Error("Splendor supports 2 to 6 players.");
+  }
+  return playerCount >= SPLENDOR_LARGE_TABLE_PLAYER_COUNT
+    ? SPLENDOR_MARKET_SLOTS_LARGE
+    : SPLENDOR_MARKET_SLOTS;
+}
+
+export function prestigeToEndForPlayerCount(playerCount: number): number {
+  if (playerCount < SPLENDOR_MIN_PLAYERS || playerCount > SPLENDOR_MAX_PLAYERS) {
+    throw new Error("Splendor supports 2 to 6 players.");
+  }
+  return playerCount >= SPLENDOR_LARGE_TABLE_PLAYER_COUNT
+    ? SPLENDOR_PRESTIGE_TO_END_LARGE
+    : SPLENDOR_PRESTIGE_TO_END;
+}
+
+export function nobleCountForPlayerCount(playerCount: number): number {
+  return playerCount + 1;
 }

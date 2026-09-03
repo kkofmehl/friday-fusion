@@ -423,7 +423,7 @@ export function SplendorGame({
         <div>
           <h2>Splendor</h2>
           <p className="splendor-sub">
-            First to 15 prestige ends the round. Current turn: {nameNode(game.currentPlayerId)}
+            First to {game.prestigeToEnd} prestige ends the round. Current turn: {nameNode(game.currentPlayerId)}
             {game.finalRoundAnchorPlayerId ? " · Final round!" : ""}
           </p>
         </div>

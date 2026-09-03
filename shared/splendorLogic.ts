@@ -198,8 +198,8 @@ export function eligibleNobles(
   return result;
 }
 
-export function triggersEndGame(prestige: number): boolean {
-  return prestige >= SPLENDOR_PRESTIGE_TO_END;
+export function triggersEndGame(prestige: number, prestigeToEnd = SPLENDOR_PRESTIGE_TO_END): boolean {
+  return prestige >= prestigeToEnd;
 }
 
 export type SplendorStanding = {

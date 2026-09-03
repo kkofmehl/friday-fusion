@@ -4,7 +4,12 @@ import {
   SPLENDOR_CARDS_BY_TIER,
   SPLENDOR_NOBLES,
   emptyTokenCounts,
-  getSplendorCard
+  gemSupplyForPlayerCount,
+  getSplendorCard,
+  goldSupplyForPlayerCount,
+  marketSlotsForPlayerCount,
+  nobleCountForPlayerCount,
+  prestigeToEndForPlayerCount
 } from "../../shared/splendorData";
 import {
   bonusesFromPurchasedCards,
@@ -31,6 +36,21 @@ describe("splendorData", () => {
   it("has 10 nobles each worth 3 prestige", () => {
     expect(SPLENDOR_NOBLES).toHaveLength(10);
     expect(SPLENDOR_NOBLES.every((n) => n.prestige === 3)).toBe(true);
+  });
+
+  it("scales supplies and win threshold for larger tables", () => {
+    expect(gemSupplyForPlayerCount(4)).toBe(7);
+    expect(gemSupplyForPlayerCount(5)).toBe(9);
+    expect(gemSupplyForPlayerCount(6)).toBe(11);
+    expect(goldSupplyForPlayerCount(4)).toBe(5);
+    expect(goldSupplyForPlayerCount(5)).toBe(6);
+    expect(goldSupplyForPlayerCount(6)).toBe(7);
+    expect(marketSlotsForPlayerCount(4)).toBe(4);
+    expect(marketSlotsForPlayerCount(5)).toBe(5);
+    expect(marketSlotsForPlayerCount(6)).toBe(5);
+    expect(prestigeToEndForPlayerCount(4)).toBe(15);
+    expect(prestigeToEndForPlayerCount(5)).toBe(12);
+    expect(nobleCountForPlayerCount(6)).toBe(7);
   });
 });
 

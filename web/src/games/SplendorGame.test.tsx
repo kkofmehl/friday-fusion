@@ -55,6 +55,7 @@ const playingState = (): Extract<SplendorState, { status: "playing" }> => ({
   ],
   myReserved: [],
   pending: null,
+  prestigeToEnd: 15,
   finalRoundAnchorPlayerId: null
 });
 

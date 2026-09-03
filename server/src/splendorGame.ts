@@ -10,14 +10,16 @@ import type {
 import {
   SPLENDOR_CARDS_BY_TIER,
   SPLENDOR_GEM_COLORS,
-  SPLENDOR_GOLD_SUPPLY,
-  SPLENDOR_MARKET_SLOTS,
   SPLENDOR_MAX_PLAYERS,
   SPLENDOR_MIN_PLAYERS,
   SPLENDOR_NOBLES,
   emptyGemCounts,
   emptyTokenCounts,
   gemSupplyForPlayerCount,
+  goldSupplyForPlayerCount,
+  marketSlotsForPlayerCount,
+  nobleCountForPlayerCount,
+  prestigeToEndForPlayerCount,
   getSplendorCard,
   getSplendorNoble,
   totalTokens,
@@ -61,7 +63,8 @@ export type SplendorGameInternal = {
   nobleIds: string[];
   players: Record<string, SplendorPlayerInternal>;
   pending: SplendorPending | null;
-  /** Player who first hit 15+; finish until the player before them has acted. */
+  prestigeToEnd: number;
+  /** Player who first hit the prestige threshold; finish until the player before them has acted. */
   finalRoundAnchorPlayerId: string | null;
   /** Players who have completed a turn after the end was triggered (including the triggerer). */
   finalRoundCompletedIds: string[];
@@ -213,7 +216,7 @@ const finishTurn = (game: SplendorGameInternal, participantId: string): void => 
   const player = getPlayer(game, participantId);
   const prestige = playerPrestige(player.purchasedCardIds, player.nobleIds);
 
-  if (!game.finalRoundAnchorPlayerId && triggersEndGame(prestige)) {
+  if (!game.finalRoundAnchorPlayerId && triggersEndGame(prestige, game.prestigeToEnd)) {
     game.finalRoundAnchorPlayerId = participantId;
     game.finalRoundCompletedIds = [participantId];
   } else if (game.finalRoundAnchorPlayerId) {
@@ -251,14 +254,15 @@ const endGame = (game: SplendorGameInternal): void => {
 
 export const createSplendorGame = (playerOrder: string[]): SplendorGameInternal => {
   if (playerOrder.length < SPLENDOR_MIN_PLAYERS || playerOrder.length > SPLENDOR_MAX_PLAYERS) {
-    throw new Error("Splendor needs 2 to 4 active players.");
+    throw new Error("Splendor needs 2 to 6 active players.");
   }
+  const marketSlots = marketSlotsForPlayerCount(playerOrder.length);
   const gemSupply = gemSupplyForPlayerCount(playerOrder.length);
   const bank = emptyTokenCounts();
   for (const color of SPLENDOR_GEM_COLORS) {
     bank[color] = gemSupply;
   }
-  bank.gold = SPLENDOR_GOLD_SUPPLY;
+  bank.gold = goldSupplyForPlayerCount(playerOrder.length);
 
   const decks: Record<SplendorTier, string[]> = {
     1: shuffle(SPLENDOR_CARDS_BY_TIER[1].map((c) => c.id)),
@@ -267,12 +271,12 @@ export const createSplendorGame = (playerOrder: string[]): SplendorGameInternal 
   };
 
   const market: Record<SplendorTier, (string | null)[]> = {
-    1: Array.from({ length: SPLENDOR_MARKET_SLOTS }, () => decks[1].shift() ?? null),
-    2: Array.from({ length: SPLENDOR_MARKET_SLOTS }, () => decks[2].shift() ?? null),
-    3: Array.from({ length: SPLENDOR_MARKET_SLOTS }, () => decks[3].shift() ?? null)
+    1: Array.from({ length: marketSlots }, () => decks[1].shift() ?? null),
+    2: Array.from({ length: marketSlots }, () => decks[2].shift() ?? null),
+    3: Array.from({ length: marketSlots }, () => decks[3].shift() ?? null)
   };
 
-  const nobleCount = playerOrder.length + 1;
+  const nobleCount = nobleCountForPlayerCount(playerOrder.length);
   const nobleIds = shuffle(SPLENDOR_NOBLES.map((n) => n.id)).slice(0, nobleCount);
 
   const players: Record<string, SplendorPlayerInternal> = {};
@@ -297,6 +301,7 @@ export const createSplendorGame = (playerOrder: string[]): SplendorGameInternal 
     nobleIds,
     players,
     pending: null,
+    prestigeToEnd: prestigeToEndForPlayerCount(playerOrder.length),
     finalRoundAnchorPlayerId: null,
     finalRoundCompletedIds: [],
     winnerParticipantIds: null,
@@ -347,6 +352,7 @@ export const projectSplendorState = (
     players,
     myReserved,
     pending: game.pending ? { ...game.pending } : null,
+    prestigeToEnd: game.prestigeToEnd,
     finalRoundAnchorPlayerId: game.finalRoundAnchorPlayerId
   };
 };

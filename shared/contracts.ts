@@ -1498,13 +1498,13 @@ export type SplendorPending = z.infer<typeof splendorPendingSchema>;
 export const splendorStateSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("playing"),
-    playerOrder: z.array(z.string()).min(2).max(4),
+    playerOrder: z.array(z.string()).min(2).max(6),
     currentPlayerId: z.string(),
     bank: splendorTokenCountsSchema,
     market: z.object({
-      1: z.array(splendorCardViewSchema.nullable()).length(4),
-      2: z.array(splendorCardViewSchema.nullable()).length(4),
-      3: z.array(splendorCardViewSchema.nullable()).length(4)
+      1: z.array(splendorCardViewSchema.nullable()).min(4).max(5),
+      2: z.array(splendorCardViewSchema.nullable()).min(4).max(5),
+      3: z.array(splendorCardViewSchema.nullable()).min(4).max(5)
     }),
     deckCounts: z.object({
       1: z.number().int().nonnegative(),
@@ -1515,7 +1515,8 @@ export const splendorStateSchema = z.discriminatedUnion("status", [
     players: z.array(splendorPlayerPublicSchema),
     myReserved: z.array(splendorCardViewSchema),
     pending: splendorPendingSchema.nullable(),
-    /** Set when a player first reaches 15+; remaining players finish the round. */
+    prestigeToEnd: z.number().int().positive(),
+    /** Set when a player first reaches the prestige threshold; remaining players finish the round. */
     finalRoundAnchorPlayerId: z.string().nullable()
   }),
   z.object({

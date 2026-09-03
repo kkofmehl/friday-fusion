@@ -219,3 +219,5 @@
 109. User requested adding **Splendor** to Friday Fusion (gem tokens, three-tier development cards, nobles, 15 prestige, turn actions: collect gems / buy / reserve). Approved plan: official 2–4 players, full 90-card / 10-noble catalog, server-authoritative engine, abstract beta UI.
 110. User requested Splendor UI polish from `splendor_feedback.md`: light tinted card backgrounds (keep top accent, drop bonus square), compact opponent status strip at top with full board only for self, stacked mini purchased cards with count on top card.
 111. User requested removing cost pips from purchased cards on player boards (market/reserved cards still show costs).
+112. User requested expanding Splendor to 6 players with scaled supplies (+2 gems and +1 gold per player above 4), five face-up market cards at 5+, 12-prestige win threshold above 4 players, and nobles always player count + 1.
+113. User reported Zod broadcast failure starting Splendor with 5 players; fixed `splendorStateSchema` `playerOrder` max from 4 to 6.

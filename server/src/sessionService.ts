@@ -122,6 +122,12 @@ import {
   splendorTakeSameGems,
   type SplendorGameInternal
 } from "./splendorGame";
+import {
+  SPLENDOR_MAX_PLAYERS,
+  SPLENDOR_MIN_PLAYERS,
+  marketSlotsForPlayerCount,
+  prestigeToEndForPlayerCount
+} from "../../shared/splendorData";
 import { buildMemoryDeck } from "./memoryDeck";
 import {
   fillMadlibTemplate,
@@ -1105,11 +1111,21 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
   }
   if (game.type === "splendor") {
     const g = game as SplendorGameInternal;
+    const playerOrder = Array.isArray(g.playerOrder) ? g.playerOrder : [];
+    const playerCount = Math.max(SPLENDOR_MIN_PLAYERS, Math.min(playerOrder.length, SPLENDOR_MAX_PLAYERS));
+    const marketSlots = marketSlotsForPlayerCount(playerCount || SPLENDOR_MIN_PLAYERS);
+    const normalizeMarketTier = (tier: 1 | 2 | 3): (string | null)[] => {
+      const row = Array.isArray(g.market?.[tier]) ? [...g.market[tier]] : [];
+      while (row.length < marketSlots) {
+        row.push(null);
+      }
+      return row.slice(0, marketSlots);
+    };
     return {
       ...g,
       id: g.id ?? nanoid(6),
       type: "splendor" as const,
-      playerOrder: Array.isArray(g.playerOrder) ? g.playerOrder : [],
+      playerOrder,
       currentPlayerIndex: Math.max(0, Number(g.currentPlayerIndex) || 0),
       bank: g.bank ?? {
         white: 0,
@@ -1120,14 +1136,18 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
         gold: 0
       },
       decks: g.decks ?? { 1: [], 2: [], 3: [] },
-      market: g.market ?? {
-        1: [null, null, null, null],
-        2: [null, null, null, null],
-        3: [null, null, null, null]
+      market: {
+        1: normalizeMarketTier(1),
+        2: normalizeMarketTier(2),
+        3: normalizeMarketTier(3)
       },
       nobleIds: Array.isArray(g.nobleIds) ? g.nobleIds : [],
       players: g.players && typeof g.players === "object" ? g.players : {},
       pending: g.pending ?? null,
+      prestigeToEnd:
+        typeof g.prestigeToEnd === "number" && g.prestigeToEnd > 0
+          ? g.prestigeToEnd
+          : prestigeToEndForPlayerCount(playerCount || SPLENDOR_MIN_PLAYERS),
       finalRoundAnchorPlayerId:
         typeof g.finalRoundAnchorPlayerId === "string" ? g.finalRoundAnchorPlayerId : null,
       finalRoundCompletedIds: Array.isArray(g.finalRoundCompletedIds) ? g.finalRoundCompletedIds : [],
@@ -2546,8 +2566,8 @@ export class SessionService {
       if (actives.length < 2) {
         throw new Error("Splendor needs at least two active players.");
       }
-      if (actives.length > 4) {
-        throw new Error("Splendor supports at most four active players.");
+      if (actives.length > SPLENDOR_MAX_PLAYERS) {
+        throw new Error("Splendor supports at most six active players.");
       }
       next = createSplendorGame(actives.map((p) => p.id));
     } else if (game === "madlibs") {

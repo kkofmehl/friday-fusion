@@ -119,7 +119,7 @@ const GAMES: GameOption[] = [
     id: "splendor",
     title: "Splendor",
     description:
-      "Collect gems, buy development cards, attract nobles, and race to 15 prestige in this classic engine-builder.",
+      "Collect gems, buy development cards, attract nobles, and race to prestige in this classic engine-builder (2–6 players).",
     iconSrc: "/game_icons/splendor.png",
     beta: true
   },
