@@ -4534,6 +4534,292 @@ label {
   font-weight: 700;
 }
 
+.friendly-feud-setup-card,
+.friendly-feud-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.friendly-feud-setup-lead {
+  margin: 0;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.friendly-feud-score {
+  display: flex;
+  gap: 0.85rem;
+  font-weight: 700;
+}
+
+.friendly-feud-meta {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.friendly-feud-question {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.friendly-feud-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.55rem;
+}
+
+.friendly-feud-slot {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.55rem;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  font-weight: 600;
+}
+
+.friendly-feud-slot.is-revealed {
+  background: #fef9c3;
+  border-color: #facc15;
+}
+
+.friendly-feud-slot-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #1e40af;
+  color: #fff;
+  font-size: 0.8rem;
+}
+
+.friendly-feud-slot-blank {
+  grid-column: 2 / -1;
+  text-align: center;
+  color: #64748b;
+}
+
+.friendly-feud-slot-ans {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friendly-feud-slot-pnt {
+  font-variant-numeric: tabular-nums;
+  color: #1e3a8a;
+}
+
+.friendly-feud-strikes {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.friendly-feud-strike {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
+  background: #e2e8f0;
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.friendly-feud-strike.is-on {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+.friendly-feud-faceoff,
+.friendly-feud-status,
+.friendly-feud-last-guess,
+.friendly-feud-winner,
+.friendly-feud-waiting {
+  margin: 0;
+}
+
+.friendly-feud-timer {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: #1e40af;
+}
+
+.friendly-feud-timer--answer.is-urgent {
+  color: #b91c1c;
+}
+
+.friendly-feud-last-guess.is-correct {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.friendly-feud-last-guess.is-miss {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.friendly-feud-buzz {
+  margin-top: 0.5rem;
+  min-width: 8rem;
+  min-height: 3rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.friendly-feud-reveal-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.friendly-feud-guess-form {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.friendly-feud-guess-label {
+  font-weight: 600;
+  color: #334155;
+}
+
+.friendly-feud-guess-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.friendly-feud-guess-row .input {
+  flex: 1 1 12rem;
+}
+
+.friendly-feud-card--finished {
+  position: relative;
+  overflow: hidden;
+}
+
+.friendly-feud-finished-winner {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.friendly-feud-final-scores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.friendly-feud-final-team {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+}
+
+.friendly-feud-final-team.is-winner {
+  background: #fef9c3;
+  border-color: #facc15;
+}
+
+.friendly-feud-final-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.friendly-feud-final-pts {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: #1e3a8a;
+}
+
+.friendly-feud-final-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  margin-top: 0.15rem;
+  font-size: 0.9rem;
+}
+
+.friendly-feud-recap-wrap {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.friendly-feud-recap-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.friendly-feud-recap {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.friendly-feud-recap thead th {
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 2px solid #cbd5e1;
+  color: #64748b;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.friendly-feud-recap tbody th,
+.friendly-feud-recap tbody td {
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.friendly-feud-recap tbody th {
+  font-weight: 600;
+  text-align: left;
+}
+
+.friendly-feud-recap-pts {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.friendly-feud-ff-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .friendly-feud-final-scores {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Shared “your turn” emphasis for turn-based card games */
 .game-area-turn {
   border-radius: 0.65rem;

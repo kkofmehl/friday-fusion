@@ -221,3 +221,16 @@
 111. User requested removing cost pips from purchased cards on player boards (market/reserved cards still show costs).
 112. User requested expanding Splendor to 6 players with scaled supplies (+2 gems and +1 gold per player above 4), five face-up market cards at 5+, 12-prestige win threshold above 4 players, and nobles always player count + 1.
 113. User reported Zod broadcast failure starting Splendor with 5 players; fixed `splendorStateSchema` `playerOrder` max from 4 to 6.
+
+## 2026-09-03
+
+114. User asked to explore how games are registered and how Pictionary implements team assignment (contracts, lobby, session service, lifecycle, player-count constraints, any feud-related code).
+115. User requested adding **Friendly Feud** to Friday Fusion (≥6 players, Pictionary-style team assignment, virtual host with buzz/type face-off and rotating board play, survey rounds only / no Fast Money, question bank from local Friendly-Feud clone). Assistant implemented shared contracts/logic, imported EN face-off question bank, server engine + WebSocket wiring, lobby/GameScreen UI with team setup, tests, and prompt log updates.
+116. User asked to address testing feedback in `family_fued_feedback.md`: next teammate after showdown winner starts board play; keep Family Feud points separate from Friday Fusion scores (+1 FF per round win, +2 FF per game win); host Continue after round reveal (no auto-advance); richer end screen with round-by-round recap.
+
+## 2026-09-04
+
+117. User reported Friendly Feud face-off bug: first player's on-board (non-#1) answer did not appear until the second showdown player answered. Assistant fixed immediate reveal on first face-off hit and updated tests.
+118. User asked to beef up "close enough" judging beyond fuzzy/partial match (e.g. cops → police) by adding acceptable alternate answers. Assistant added optional `alts` to matching, auto slash/& part expansion, curated synonym groups in `friendlyFeudQuestions.ts`, and tests.
+119. User asked to go through `friendlyFeudQuestions.json` and fill obvious synonyms. Assistant mined frequent bank answers and greatly expanded `FRIENDLY_FEUD_SYNONYM_GROUPS` (applied at load; JSON left unchanged) with occupation/family/home/food/animal/action coverage, plus tests.
+120. User asked for face-off anti-mash: 3s delay before Buzz appears, and a visible 7s answer timer after buzz (timeout = miss). Assistant added buzzOpensAt/answerEndsAt, server deadline scheduling, UI countdowns, and tests.

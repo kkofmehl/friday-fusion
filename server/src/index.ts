@@ -1551,6 +1551,25 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.nobleId
           );
+        } else if (event.type === "friendlyFeud:setTeams") {
+          await sessionService.friendlyFeudSetTeams(
+            context.sessionId,
+            context.participantId,
+            event.payload.teamAIds,
+            event.payload.teamBIds
+          );
+        } else if (event.type === "friendlyFeud:beginPlay") {
+          await sessionService.friendlyFeudBeginPlay(context.sessionId, context.participantId);
+        } else if (event.type === "friendlyFeud:buzz") {
+          await sessionService.friendlyFeudBuzz(context.sessionId, context.participantId);
+        } else if (event.type === "friendlyFeud:submitGuess") {
+          await sessionService.friendlyFeudSubmitGuess(
+            context.sessionId,
+            context.participantId,
+            event.payload.guess
+          );
+        } else if (event.type === "friendlyFeud:continue") {
+          await sessionService.friendlyFeudContinue(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

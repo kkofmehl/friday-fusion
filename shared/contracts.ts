@@ -22,7 +22,8 @@ export const gameTypeSchema = z.enum([
   "memory",
   "wordle",
   "monopolyDeal",
-  "splendor"
+  "splendor",
+  "friendlyFeud"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -566,6 +567,113 @@ export type PictionaryTeamId = z.infer<typeof pictionaryTeamIdSchema>;
 
 export const catchPhraseTeamIdSchema = z.enum(["A", "B"]);
 export type CatchPhraseTeamId = z.infer<typeof catchPhraseTeamIdSchema>;
+
+export const friendlyFeudTeamIdSchema = z.enum(["A", "B"]);
+export type FriendlyFeudTeamId = z.infer<typeof friendlyFeudTeamIdSchema>;
+
+export const FRIENDLY_FEUD_MIN_PLAYERS = 6;
+export const FRIENDLY_FEUD_ROUNDS_PER_GAME = 3;
+export const FRIENDLY_FEUD_MAX_STRIKES = 3;
+/** Delay after face-off starts before Buzz is available (anti button-mash). */
+export const FRIENDLY_FEUD_BUZZ_DELAY_MS = 3_000;
+/** Time to answer after buzzing in (or after being prompted for the second face-off answer). */
+export const FRIENDLY_FEUD_ANSWER_MS = 7_000;
+/** Friday Fusion session points awarded to each member of a round-winning team. */
+export const FRIENDLY_FEUD_ROUND_WIN_FF_POINTS = 1;
+/** Friday Fusion session points awarded to each member of the game-winning team. */
+export const FRIENDLY_FEUD_GAME_WIN_FF_POINTS = 2;
+
+export const friendlyFeudBoardSlotSchema = z.discriminatedUnion("revealed", [
+  z.object({ revealed: z.literal(false) }),
+  z.object({
+    revealed: z.literal(true),
+    ans: z.string(),
+    pnt: z.number().int().nonnegative()
+  })
+]);
+export type FriendlyFeudBoardSlot = z.infer<typeof friendlyFeudBoardSlotSchema>;
+
+const friendlyFeudTeamScoresSchema = z.object({
+  A: z.number().int().nonnegative(),
+  B: z.number().int().nonnegative()
+});
+
+export const friendlyFeudRoundResultSchema = z.object({
+  roundIndex: z.number().int().min(0).max(FRIENDLY_FEUD_ROUNDS_PER_GAME - 1),
+  question: z.string(),
+  awardedTeam: friendlyFeudTeamIdSchema,
+  awardedPoints: z.number().int().nonnegative()
+});
+export type FriendlyFeudRoundResult = z.infer<typeof friendlyFeudRoundResultSchema>;
+
+const friendlyFeudCommonPlayFields = {
+  teamAIds: z.array(z.string()),
+  teamBIds: z.array(z.string()),
+  teamScores: friendlyFeudTeamScoresSchema,
+  roundIndex: z.number().int().min(0).max(FRIENDLY_FEUD_ROUNDS_PER_GAME - 1),
+  multiply: z.number().int().positive(),
+  question: z.string(),
+  board: z.array(friendlyFeudBoardSlotSchema).min(1),
+  pot: z.number().int().nonnegative(),
+  strikes: z.number().int().min(0).max(FRIENDLY_FEUD_MAX_STRIKES),
+  lastGuess: z
+    .object({
+      participantId: z.string(),
+      text: z.string(),
+      correct: z.boolean()
+    })
+    .nullable()
+};
+
+export const friendlyFeudStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("teamSetup"),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("faceOff"),
+    ...friendlyFeudCommonPlayFields,
+    faceOffPlayerAId: z.string(),
+    faceOffPlayerBId: z.string(),
+    buzzedParticipantId: z.string().nullable(),
+    answeringParticipantId: z.string().nullable(),
+    awaitingSecondAnswer: z.boolean(),
+    /** Epoch ms when Buzz unlocks; clients hide the button until then. */
+    buzzOpensAt: z.number().int(),
+    /** Epoch ms when the current answerer's window ends; null while waiting to buzz. */
+    answerEndsAt: z.number().int().nullable()
+  }),
+  z.object({
+    status: z.literal("playBoard"),
+    ...friendlyFeudCommonPlayFields,
+    controllingTeam: friendlyFeudTeamIdSchema,
+    currentGuesserId: z.string()
+  }),
+  z.object({
+    status: z.literal("steal"),
+    ...friendlyFeudCommonPlayFields,
+    controllingTeam: friendlyFeudTeamIdSchema,
+    stealingTeam: friendlyFeudTeamIdSchema,
+    currentGuesserId: z.string()
+  }),
+  z.object({
+    status: z.literal("roundReveal"),
+    ...friendlyFeudCommonPlayFields,
+    awardedTeam: friendlyFeudTeamIdSchema,
+    awardedPoints: z.number().int().nonnegative()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    teamAIds: z.array(z.string()),
+    teamBIds: z.array(z.string()),
+    teamScores: friendlyFeudTeamScoresSchema,
+    winnerTeams: z.array(friendlyFeudTeamIdSchema).min(1),
+    roundResults: z.array(friendlyFeudRoundResultSchema)
+  })
+]);
+export type FriendlyFeudState = z.infer<typeof friendlyFeudStateSchema>;
+
 /** Phase 1: slow beeps — random length (ms). */
 export const CATCH_PHRASE_PHASE1_MIN_MS = 25_000;
 export const CATCH_PHRASE_PHASE1_MAX_MS = 30_000;
@@ -1616,6 +1724,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("splendor"),
     state: splendorStateSchema
+  }),
+  z.object({
+    type: z.literal("friendlyFeud"),
+    state: friendlyFeudStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -2289,7 +2401,21 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("splendor:chooseNoble"),
     payload: z.object({ nobleId: z.string().min(1) })
-  })
+  }),
+  z.object({
+    type: z.literal("friendlyFeud:setTeams"),
+    payload: z.object({
+      teamAIds: z.array(z.string()),
+      teamBIds: z.array(z.string())
+    })
+  }),
+  z.object({ type: z.literal("friendlyFeud:beginPlay"), payload: z.object({}) }),
+  z.object({ type: z.literal("friendlyFeud:buzz"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("friendlyFeud:submitGuess"),
+    payload: z.object({ guess: z.string().min(1).max(120) })
+  }),
+  z.object({ type: z.literal("friendlyFeud:continue"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

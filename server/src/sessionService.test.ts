@@ -2131,6 +2131,147 @@ describe("SessionService", () => {
     );
   });
 
+  it("Friendly Feud: requires six players and hides unrevealed answers", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    await setup.service.joinSession(host.joinCode, "G1");
+    await setup.service.joinSession(host.joinCode, "G2");
+    await expect(setup.service.startGame(host.sessionId, "friendlyFeud")).rejects.toThrow(
+      "Friendly Feud needs at least six active players."
+    );
+
+    await setup.service.joinSession(host.joinCode, "G3");
+    await setup.service.joinSession(host.joinCode, "G4");
+    await setup.service.joinSession(host.joinCode, "G5");
+    const stateBefore = setup.service.getState(host.sessionId);
+    expect(stateBefore.participants).toHaveLength(6);
+
+    await setup.service.startGame(host.sessionId, "friendlyFeud");
+    const ids = stateBefore.participants.map((p) => p.id);
+    await setup.service.friendlyFeudSetTeams(
+      host.sessionId,
+      host.participantId,
+      ids.slice(0, 3),
+      ids.slice(3, 6)
+    );
+    await setup.service.friendlyFeudBeginPlay(host.sessionId, host.participantId);
+
+    const publicState = setup.service.getState(host.sessionId, host.participantId);
+    if (publicState.gameState?.type !== "friendlyFeud" || publicState.gameState.state.status !== "faceOff") {
+      throw new Error("expected faceOff");
+    }
+    expect(publicState.gameState.state.board.every((slot) => slot.revealed === false)).toBe(true);
+    expect(publicState.gameState.state.board.some((slot) => "ans" in slot)).toBe(false);
+    expect(publicState.gameState.state.buzzOpensAt).toBeGreaterThan(Date.now() - 50);
+
+    const faceA = publicState.gameState.state.faceOffPlayerAId;
+    const internal = (
+      setup.service as unknown as {
+        sessions: Map<string, { games: Array<{ type: string; buzzOpensAt: number | null }> }>;
+      }
+    ).sessions.get(host.sessionId)!.games[0]!;
+    internal.buzzOpensAt = Date.now() - 1;
+    await setup.service.friendlyFeudBuzz(host.sessionId, faceA);
+    await setup.service.friendlyFeudSubmitGuess(host.sessionId, faceA, "zzzz-not-an-answer");
+    const afterMiss = setup.service.getState(host.sessionId);
+    if (afterMiss.gameState?.type !== "friendlyFeud" || afterMiss.gameState.state.status !== "faceOff") {
+      throw new Error("expected still faceOff after miss");
+    }
+    expect(afterMiss.gameState.state.awaitingSecondAnswer).toBe(true);
+    expect(afterMiss.gameState.state.answerEndsAt).toBeTypeOf("number");
+  });
+
+  it("Friendly Feud: awards FF points separately and advances only on host continue", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const guests = [];
+    for (let i = 1; i <= 5; i++) {
+      guests.push(await setup.service.joinSession(host.joinCode, `G${i}`));
+    }
+    await setup.service.startGame(host.sessionId, "friendlyFeud");
+    const ids = [host.participantId, ...guests.map((g) => g.participantId)];
+    await setup.service.friendlyFeudSetTeams(
+      host.sessionId,
+      host.participantId,
+      ids.slice(0, 3),
+      ids.slice(3, 6)
+    );
+    await setup.service.friendlyFeudBeginPlay(host.sessionId, host.participantId);
+
+    type FeudInternal = {
+      type: "friendlyFeud";
+      status: string;
+      currentGuesserId: string | null;
+      faceOffPlayerAId: string | null;
+      revealed: boolean[];
+      rounds: Array<{ answers: Array<{ ans: string }> }>;
+      roundIndex: number;
+      buzzOpensAt: number | null;
+    };
+    const getGame = (): FeudInternal => {
+      const session = (
+        setup.service as unknown as {
+          sessions: Map<string, { games: FeudInternal[] }>;
+        }
+      ).sessions.get(host.sessionId);
+      const game = session?.games[0];
+      if (!game || game.type !== "friendlyFeud") {
+        throw new Error("missing friendlyFeud game");
+      }
+      return game;
+    };
+
+    const game = getGame();
+    const faceA = game.faceOffPlayerAId!;
+    const answers = game.rounds[0]!.answers.map((a) => a.ans);
+    game.buzzOpensAt = Date.now() - 1;
+
+    await setup.service.friendlyFeudBuzz(host.sessionId, faceA);
+    await setup.service.friendlyFeudSubmitGuess(host.sessionId, faceA, answers[0]!);
+
+    while (getGame().status === "playBoard") {
+      const live = getGame();
+      const guesser = live.currentGuesserId!;
+      const nextIdx = live.revealed.findIndex((v) => !v);
+      await setup.service.friendlyFeudSubmitGuess(host.sessionId, guesser, answers[nextIdx]!);
+    }
+
+    const afterRound = setup.service.getState(host.sessionId);
+    if (afterRound.gameState?.type !== "friendlyFeud" || afterRound.gameState.state.status !== "roundReveal") {
+      throw new Error("expected roundReveal");
+    }
+    expect(afterRound.gameState.state.status).toBe("roundReveal");
+
+    const winningTeamIds =
+      afterRound.gameState.state.awardedTeam === "A"
+        ? afterRound.gameState.state.teamAIds
+        : afterRound.gameState.state.teamBIds;
+    for (const pid of winningTeamIds) {
+      expect(afterRound.participants.find((x) => x.id === pid)?.score).toBe(1);
+    }
+    const losingTeamIds =
+      afterRound.gameState.state.awardedTeam === "A"
+        ? afterRound.gameState.state.teamBIds
+        : afterRound.gameState.state.teamAIds;
+    for (const pid of losingTeamIds) {
+      expect(afterRound.participants.find((x) => x.id === pid)?.score).toBe(0);
+    }
+    expect(afterRound.gameState.state.teamScores.A + afterRound.gameState.state.teamScores.B).toBeGreaterThan(1);
+
+    await expect(
+      setup.service.friendlyFeudContinue(host.sessionId, guests[0]!.participantId)
+    ).rejects.toThrow(/host/i);
+
+    await setup.service.friendlyFeudContinue(host.sessionId, host.participantId);
+    const afterContinue = setup.service.getState(host.sessionId);
+    if (afterContinue.gameState?.type !== "friendlyFeud") {
+      throw new Error("expected friendlyFeud");
+    }
+    expect(afterContinue.gameState.state.status).toBe("faceOff");
+  });
+
   it("Catch Phrase: only holder can start/pass and only holder sees phrase", async () => {
     const setup = await createService();
     tempDir = setup.tempDir;

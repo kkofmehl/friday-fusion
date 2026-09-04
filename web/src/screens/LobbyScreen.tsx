@@ -124,6 +124,14 @@ const GAMES: GameOption[] = [
     beta: true
   },
   {
+    id: "friendlyFeud",
+    title: "Friendly Feud",
+    description:
+      "Two teams face off on survey questions—buzz, type answers, play the board, and steal. Needs at least six players.",
+    iconSrc: "/game_icons/friendly_feud.png",
+    beta: true
+  },
+  {
     id: "madlibs",
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",

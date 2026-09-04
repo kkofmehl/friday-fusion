@@ -10,6 +10,9 @@ import {
   CATCH_PHRASE_PHASE3_MAX_MS,
   CATCH_PHRASE_PHASE3_MIN_MS,
   CATCH_PHRASE_WIN_SCORE,
+  FRIENDLY_FEUD_GAME_WIN_FF_POINTS,
+  FRIENDLY_FEUD_MIN_PLAYERS,
+  FRIENDLY_FEUD_ROUND_WIN_FF_POINTS,
   UNO_HAND_SIZE,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
@@ -122,6 +125,18 @@ import {
   splendorTakeSameGems,
   type SplendorGameInternal
 } from "./splendorGame";
+import {
+  advanceFriendlyFeudAfterReveal,
+  beginFriendlyFeudPlay,
+  createFriendlyFeudGame,
+  friendlyFeudBuzz,
+  friendlyFeudFaceOffTimeout,
+  friendlyFeudSubmitGuess,
+  hydrateFriendlyFeudGame,
+  toPublicFriendlyFeudState,
+  type FriendlyFeudGameInternal
+} from "./friendlyFeudGame";
+import { pickFriendlyFeudWinners } from "../../shared/friendlyFeudLogic";
 import {
   SPLENDOR_MAX_PLAYERS,
   SPLENDOR_MIN_PLAYERS,
@@ -651,7 +666,8 @@ type GameInternal =
   | MemoryGameInternal
   | WordleGameInternal
   | MonopolyDealGameInternal
-  | SplendorGameInternal;
+  | SplendorGameInternal
+  | FriendlyFeudGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1467,6 +1483,9 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       scoresApplied: g.scoresApplied === true
     };
   }
+  if (game.type === "friendlyFeud") {
+    return hydrateFriendlyFeudGame(game as FriendlyFeudGameInternal);
+  }
   return { ...game, id: game.id ?? nanoid(6) };
 };
 
@@ -1718,6 +1737,34 @@ const validateCatchPhraseTeamRoster = (
   }
 };
 
+const validateFriendlyFeudTeamRoster = (
+  session: SessionInternal,
+  teamAIds: string[],
+  teamBIds: string[]
+): void => {
+  const activeIds = new Set(activeParticipants(session).map((p) => p.id));
+  const a = new Set(teamAIds);
+  const b = new Set(teamBIds);
+  if (activeIds.size < FRIENDLY_FEUD_MIN_PLAYERS) {
+    throw new Error("Friendly Feud needs at least six active players.");
+  }
+  if (teamAIds.length < 2 || teamBIds.length < 2) {
+    throw new Error("Friendly Feud needs at least two players on each team.");
+  }
+  for (const id of teamAIds) {
+    if (b.has(id)) {
+      throw new Error("A player cannot be on both teams.");
+    }
+  }
+  if (a.size !== teamAIds.length || b.size !== teamBIds.length) {
+    throw new Error("Duplicate players on a team are not allowed.");
+  }
+  const union = new Set([...teamAIds, ...teamBIds]);
+  if (union.size !== activeIds.size || ![...activeIds].every((id) => union.has(id))) {
+    throw new Error("Each active player must be assigned to exactly one team.");
+  }
+};
+
 const catchPhraseTeamForParticipant = (game: CatchPhraseGameInternal, participantId: string): "A" | "B" | null => {
   if (game.teamAIds.includes(participantId)) {
     return "A";
@@ -1841,6 +1888,7 @@ export class SessionService {
   private readonly scattergoriesResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly memoryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly wordleResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly friendlyFeudResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -2192,6 +2240,9 @@ export class SessionService {
     }
     if (previousGame?.type === "wordle") {
       this.clearWordleTimer(sessionId);
+    }
+    if (previousGame?.type === "friendlyFeud") {
+      this.clearFriendlyFeudTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -2570,6 +2621,13 @@ export class SessionService {
         throw new Error("Splendor supports at most six active players.");
       }
       next = createSplendorGame(actives.map((p) => p.id));
+    } else if (game === "friendlyFeud") {
+      const actives = activeParticipants(session);
+      if (actives.length < FRIENDLY_FEUD_MIN_PLAYERS) {
+        throw new Error("Friendly Feud needs at least six active players.");
+      }
+      this.clearFriendlyFeudTimer(sessionId);
+      next = createFriendlyFeudGame();
     } else if (game === "madlibs") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -2800,6 +2858,9 @@ export class SessionService {
     if (active?.type === "wordle") {
       this.clearWordleTimer(sessionId);
     }
+    if (active?.type === "friendlyFeud") {
+      this.clearFriendlyFeudTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -2899,6 +2960,7 @@ export class SessionService {
     this.clearScattergoriesTimer(sessionId);
     this.clearMemoryTimer(sessionId);
     this.clearWordleTimer(sessionId);
+    this.clearFriendlyFeudTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -2918,6 +2980,7 @@ export class SessionService {
     this.clearScattergoriesTimer(sessionId);
     this.clearMemoryTimer(sessionId);
     this.clearWordleTimer(sessionId);
+    this.clearFriendlyFeudTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -3121,6 +3184,7 @@ export class SessionService {
       this.clearScattergoriesTimer(sessionId);
       this.clearMemoryTimer(sessionId);
       this.clearWordleTimer(sessionId);
+      this.clearFriendlyFeudTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -8996,6 +9060,18 @@ export class SessionService {
       };
     }
 
+    if (game.type === "friendlyFeud") {
+      this.applyFriendlyFeudRoundScores(session, game);
+      return {
+        ...base,
+        activeGame: "friendlyFeud",
+        gameState: {
+          type: "friendlyFeud",
+          state: toPublicFriendlyFeudState(game)
+        }
+      };
+    }
+
     const _never: never = game;
     throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
   }
@@ -9345,6 +9421,182 @@ export class SessionService {
     const game = this.getSplendorGame(session);
     splendorChooseNoble(game, participantId, nobleId);
     await this.splendorPersist(session);
+  }
+
+  private clearFriendlyFeudTimer(sessionId: string): void {
+    const existing = this.friendlyFeudResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.friendlyFeudResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleFriendlyFeudAnswerDeadline(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (
+      game?.type !== "friendlyFeud"
+      || game.status !== "faceOff"
+      || !game.answeringParticipantId
+      || typeof game.answerEndsAt !== "number"
+    ) {
+      return;
+    }
+    this.clearFriendlyFeudTimer(sessionId);
+    const delay = Math.max(0, game.answerEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.friendlyFeudAnswerTimedOut(sessionId).catch(() => {});
+    }, delay);
+    this.friendlyFeudResolveTimers.set(sessionId, timer);
+  }
+
+  private syncFriendlyFeudTimers(session: SessionInternal): void {
+    const game = session.games[0];
+    this.clearFriendlyFeudTimer(session.sessionId);
+    if (
+      game?.type === "friendlyFeud"
+      && game.status === "faceOff"
+      && game.answeringParticipantId
+      && typeof game.answerEndsAt === "number"
+    ) {
+      this.scheduleFriendlyFeudAnswerDeadline(session.sessionId);
+    }
+  }
+
+  private async friendlyFeudAnswerTimedOut(sessionId: string): Promise<void> {
+    let session: SessionInternal;
+    try {
+      session = this.getSessionOrThrow(sessionId);
+    } catch {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud" || game.status !== "faceOff" || !game.answeringParticipantId) {
+      return;
+    }
+    if (typeof game.answerEndsAt === "number" && Date.now() + 25 < game.answerEndsAt) {
+      this.scheduleFriendlyFeudAnswerDeadline(sessionId);
+      return;
+    }
+    friendlyFeudFaceOffTimeout(game);
+    await this.friendlyFeudPersist(session);
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  /** Friday Fusion points: +1 each to the round-winning team (Family Feud board points stay on teamScores). */
+  private applyFriendlyFeudRoundScores(session: SessionInternal, game: FriendlyFeudGameInternal): void {
+    if (game.status !== "roundReveal" || game.roundScoresApplied || !game.awardedTeam) {
+      return;
+    }
+    const teamIds = game.awardedTeam === "A" ? game.teamAIds : game.teamBIds;
+    for (const pid of teamIds) {
+      const participant = session.participants.find((p) => p.id === pid);
+      if (participant) {
+        participant.score += FRIENDLY_FEUD_ROUND_WIN_FF_POINTS;
+      }
+    }
+    game.roundScoresApplied = true;
+  }
+
+  /** Friday Fusion points: +2 each to members of the game-winning team(s). */
+  private applyFriendlyFeudGameScores(session: SessionInternal, game: FriendlyFeudGameInternal): void {
+    if (game.status !== "finished" || game.gameScoresApplied) {
+      return;
+    }
+    const winners = game.winnerTeams && game.winnerTeams.length > 0
+      ? game.winnerTeams
+      : pickFriendlyFeudWinners(game.teamScores);
+    for (const team of winners) {
+      const teamIds = team === "A" ? game.teamAIds : game.teamBIds;
+      for (const pid of teamIds) {
+        const participant = session.participants.find((p) => p.id === pid);
+        if (participant) {
+          participant.score += FRIENDLY_FEUD_GAME_WIN_FF_POINTS;
+        }
+      }
+    }
+    game.gameScoresApplied = true;
+  }
+
+  private async friendlyFeudPersist(session: SessionInternal): Promise<void> {
+    const game = session.games[0];
+    if (game?.type === "friendlyFeud") {
+      this.applyFriendlyFeudRoundScores(session, game);
+      this.applyFriendlyFeudGameScores(session, game);
+      this.syncFriendlyFeudTimers(session);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async friendlyFeudSetTeams(
+    sessionId: string,
+    participantId: string,
+    teamAIds: string[],
+    teamBIds: string[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud" || game.status !== "teamSetup") {
+      throw new Error("Teams can only be set during Friendly Feud setup.");
+    }
+    validateFriendlyFeudTeamRoster(session, teamAIds, teamBIds);
+    game.teamAIds = [...teamAIds];
+    game.teamBIds = [...teamBIds];
+    await this.friendlyFeudPersist(session);
+  }
+
+  public async friendlyFeudBeginPlay(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud" || game.status !== "teamSetup") {
+      throw new Error("Friendly Feud can only begin from team setup.");
+    }
+    validateFriendlyFeudTeamRoster(session, game.teamAIds, game.teamBIds);
+    beginFriendlyFeudPlay(game);
+    await this.friendlyFeudPersist(session);
+  }
+
+  public async friendlyFeudBuzz(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud") {
+      throw new Error("Friendly Feud is not active.");
+    }
+    friendlyFeudBuzz(game, participantId);
+    await this.friendlyFeudPersist(session);
+  }
+
+  public async friendlyFeudSubmitGuess(
+    sessionId: string,
+    participantId: string,
+    guess: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud") {
+      throw new Error("Friendly Feud is not active.");
+    }
+    friendlyFeudSubmitGuess(game, participantId, guess);
+    await this.friendlyFeudPersist(session);
+  }
+
+  public async friendlyFeudContinue(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "friendlyFeud" || game.status !== "roundReveal") {
+      throw new Error("Continue is only available after a Friendly Feud round ends.");
+    }
+    advanceFriendlyFeudAfterReveal(game);
+    await this.friendlyFeudPersist(session);
   }
 }
 
