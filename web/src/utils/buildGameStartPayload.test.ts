@@ -13,6 +13,7 @@ const baseOptions = {
   yahtzeeMode: "turns" as const,
   wouldYouRatherQuestions: 10,
   wouldYouRatherAllowSubmissions: true,
+  badAdviceRounds: 5,
   storyBuilderMode: "stock" as const,
   storyBuilderFirstTurnId: "p1",
   memoryBoardSize: "36" as const
@@ -30,6 +31,13 @@ describe("buildGameStartPayload", () => {
     expect(buildGameStartPayload("memory", baseOptions)).toEqual({
       game: "memory",
       options: { memoryBoardSize: "36" }
+    });
+  });
+
+  it("builds Bad Advice start payload from lobby options", () => {
+    expect(buildGameStartPayload("badAdvice", baseOptions)).toEqual({
+      game: "badAdvice",
+      options: { badAdviceTotalRounds: 5 }
     });
   });
 });

@@ -23,7 +23,8 @@ export const gameTypeSchema = z.enum([
   "wordle",
   "monopolyDeal",
   "splendor",
-  "friendlyFeud"
+  "friendlyFeud",
+  "badAdvice"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -534,6 +535,70 @@ export const captionThisStateSchema = z.discriminatedUnion("status", [
   })
 ]);
 export type CaptionThisState = z.infer<typeof captionThisStateSchema>;
+
+export const BAD_ADVICE_MAX_CHARS = 500;
+export const BAD_ADVICE_DEFAULT_ROUNDS = 5;
+export const BAD_ADVICE_MAX_ROUNDS = 50;
+
+export const badAdvicePromptSchema = z.object({
+  id: z.string(),
+  text: z.string()
+});
+export type BadAdvicePrompt = z.infer<typeof badAdvicePromptSchema>;
+
+export const badAdviceVoteTallySchema = z.object({
+  entryId: z.string(),
+  authorId: z.string(),
+  text: z.string(),
+  voteCount: z.number().int().nonnegative()
+});
+export type BadAdviceVoteTally = z.infer<typeof badAdviceVoteTallySchema>;
+
+export const badAdviceStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("collecting"),
+    roundNumber: z.number().int().positive(),
+    totalRounds: z.number().int().positive(),
+    prompt: badAdvicePromptSchema,
+    submittedParticipantIds: z.array(z.string()),
+    allAdviceIn: z.boolean(),
+    /** Viewer's submitted advice text, if any. */
+    myAdvice: z.string().nullable()
+  }),
+  z.object({
+    status: z.literal("voting"),
+    roundNumber: z.number().int().positive(),
+    totalRounds: z.number().int().positive(),
+    prompt: badAdvicePromptSchema,
+    displayEntries: z.array(
+      z.object({
+        entryId: z.string(),
+        text: z.string()
+      })
+    ),
+    myEntryId: z.string().nullable(),
+    votedParticipantIds: z.array(z.string()),
+    hasVoted: z.boolean(),
+    allVotesIn: z.boolean()
+  }),
+  z.object({
+    status: z.literal("results"),
+    roundNumber: z.number().int().positive(),
+    totalRounds: z.number().int().positive(),
+    prompt: badAdvicePromptSchema,
+    tallies: z.array(badAdviceVoteTallySchema),
+    winnerEntryIds: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("finished"),
+    totalRounds: z.number().int().positive(),
+    /** Last round's results for a closing summary. */
+    lastPrompt: badAdvicePromptSchema.nullable(),
+    tallies: z.array(badAdviceVoteTallySchema),
+    winnerEntryIds: z.array(z.string())
+  })
+]);
+export type BadAdviceState = z.infer<typeof badAdviceStateSchema>;
 
 /** Per-draw timer bounds (ms) for Pictionary; server clamps `game:start` options to this range. */
 export const PICTORY_ROUND_DURATION_MIN_MS = 30_000;
@@ -1728,6 +1793,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("friendlyFeud"),
     state: friendlyFeudStateSchema
+  }),
+  z.object({
+    type: z.literal("badAdvice"),
+    state: badAdviceStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1759,7 +1828,9 @@ export const gameStartOptionsSchema = z.object({
   /** Story Builder: who writes the first player sentence (stock: after starter; scratch: opening line). */
   storyBuilderFirstTurnParticipantId: z.string().optional(),
   /** Memory: 30 cards (15 pairs, 6×5) or 36 cards (18 pairs, 6×6). */
-  memoryBoardSize: memoryBoardSizeSchema.optional()
+  memoryBoardSize: memoryBoardSizeSchema.optional(),
+  /** Bad Advice: number of rounds / prompts (default 5, clamped server-side to 1–50). */
+  badAdviceTotalRounds: z.number().int().positive().optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -2415,7 +2486,17 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("friendlyFeud:submitGuess"),
     payload: z.object({ guess: z.string().min(1).max(120) })
   }),
-  z.object({ type: z.literal("friendlyFeud:continue"), payload: z.object({}) })
+  z.object({ type: z.literal("friendlyFeud:continue"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("badAdvice:submitAdvice"),
+    payload: z.object({ text: z.string().min(1).max(BAD_ADVICE_MAX_CHARS) })
+  }),
+  z.object({ type: z.literal("badAdvice:beginVoting"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("badAdvice:vote"),
+    payload: z.object({ entryId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("badAdvice:beginNextRound"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

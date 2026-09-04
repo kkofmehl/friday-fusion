@@ -3457,4 +3457,133 @@ describe("SessionService", () => {
       await expect(setup.service.startGame(host.sessionId, "monopolyDeal")).rejects.toThrow(/two/i);
     });
   });
+
+  describe("Bad Advice", () => {
+    it("rejects start with fewer than two players", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await expect(setup.service.startGame(host.sessionId, "badAdvice")).rejects.toThrow(
+        "Bad Advice needs at least two active players."
+      );
+    });
+
+    it("runs a round through voting, awards FF to the winner, and finishes after N rounds", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      const third = await setup.service.joinSession(host.joinCode, "Third");
+      await setup.service.startGame(host.sessionId, "badAdvice", { badAdviceTotalRounds: 1 });
+
+      let state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "badAdvice" || state.gameState.state.status !== "collecting") {
+        throw new Error("expected collecting");
+      }
+      expect(state.gameState.state.totalRounds).toBe(1);
+      expect(state.gameState.state.prompt.text.length).toBeGreaterThan(0);
+
+      await setup.service.badAdviceSubmitAdvice(host.sessionId, host.participantId, "Never look at the price.");
+      await setup.service.badAdviceSubmitAdvice(
+        host.sessionId,
+        guest.participantId,
+        "Buy the first car you see with cash from a stranger."
+      );
+      await setup.service.badAdviceSubmitAdvice(host.sessionId, third.participantId, "Lease seventeen cars.");
+
+      const votingHost = setup.service.getState(host.sessionId, host.participantId);
+      if (votingHost.gameState?.type !== "badAdvice" || votingHost.gameState.state.status !== "voting") {
+        throw new Error("expected auto voting after all submit");
+      }
+      const hostEntry = votingHost.gameState.state.myEntryId;
+      const votingGuest = setup.service.getState(host.sessionId, guest.participantId);
+      if (votingGuest.gameState?.type !== "badAdvice" || votingGuest.gameState.state.status !== "voting") {
+        throw new Error("expected guest voting");
+      }
+      const guestEntry = votingGuest.gameState.state.myEntryId;
+      if (!hostEntry || !guestEntry) {
+        throw new Error("expected entry ids");
+      }
+
+      await expect(
+        setup.service.badAdviceVote(host.sessionId, host.participantId, hostEntry)
+      ).rejects.toThrow("You cannot vote for your own advice.");
+
+      // Host + third vote for guest → sole winner
+      await setup.service.badAdviceVote(host.sessionId, host.participantId, guestEntry);
+      await setup.service.badAdviceVote(host.sessionId, guest.participantId, hostEntry);
+      await setup.service.badAdviceVote(host.sessionId, third.participantId, guestEntry);
+
+      const results = setup.service.getState(host.sessionId);
+      if (results.gameState?.type !== "badAdvice" || results.gameState.state.status !== "results") {
+        throw new Error("expected results");
+      }
+      expect(results.gameState.state.winnerEntryIds).toEqual([guestEntry]);
+      const guestScore = results.participants.find((p) => p.id === guest.participantId)?.score ?? 0;
+      const hostScore = results.participants.find((p) => p.id === host.participantId)?.score ?? 0;
+      expect(guestScore).toBe(1);
+      expect(hostScore).toBe(0);
+
+      await setup.service.badAdviceBeginNextRound(host.sessionId, host.participantId);
+      const finished = setup.service.getState(host.sessionId);
+      if (finished.gameState?.type !== "badAdvice" || finished.gameState.state.status !== "finished") {
+        throw new Error("expected finished");
+      }
+      expect(finished.participants.find((p) => p.id === guest.participantId)?.score).toBe(1);
+    });
+
+    it("awards both winners on a tie and avoids previously used prompts on restart", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "badAdvice", { badAdviceTotalRounds: 2 });
+
+      const first = setup.service.getState(host.sessionId);
+      if (first.gameState?.type !== "badAdvice" || first.gameState.state.status !== "collecting") {
+        throw new Error("expected collecting");
+      }
+      const firstPromptId = first.gameState.state.prompt.id;
+
+      await setup.service.badAdviceSubmitAdvice(host.sessionId, host.participantId, "Advice A");
+      await setup.service.badAdviceSubmitAdvice(host.sessionId, guest.participantId, "Advice B");
+      const voting = setup.service.getState(host.sessionId, host.participantId);
+      if (voting.gameState?.type !== "badAdvice" || voting.gameState.state.status !== "voting") {
+        throw new Error("expected voting");
+      }
+      const hostEntry = voting.gameState.state.myEntryId!;
+      const guestView = setup.service.getState(host.sessionId, guest.participantId);
+      if (guestView.gameState?.type !== "badAdvice" || guestView.gameState.state.status !== "voting") {
+        throw new Error("expected guest voting");
+      }
+      const guestEntry = guestView.gameState.state.myEntryId!;
+      await setup.service.badAdviceVote(host.sessionId, host.participantId, guestEntry);
+      await setup.service.badAdviceVote(host.sessionId, guest.participantId, hostEntry);
+
+      const tied = setup.service.getState(host.sessionId);
+      if (tied.gameState?.type !== "badAdvice" || tied.gameState.state.status !== "results") {
+        throw new Error("expected results");
+      }
+      expect(tied.gameState.state.winnerEntryIds.sort()).toEqual([hostEntry, guestEntry].sort());
+      expect(tied.participants.find((p) => p.id === host.participantId)?.score).toBe(1);
+      expect(tied.participants.find((p) => p.id === guest.participantId)?.score).toBe(1);
+
+      await setup.service.badAdviceBeginNextRound(host.sessionId, host.participantId);
+      const round2 = setup.service.getState(host.sessionId);
+      if (round2.gameState?.type !== "badAdvice" || round2.gameState.state.status !== "collecting") {
+        throw new Error("expected round 2 collecting");
+      }
+      expect(round2.gameState.state.prompt.id).not.toBe(firstPromptId);
+      expect(round2.gameState.state.roundNumber).toBe(2);
+
+      // Restart without ending — carry used prompt ids from the active game.
+      await setup.service.startGame(host.sessionId, "badAdvice", { badAdviceTotalRounds: 1 });
+      const restarted = setup.service.getState(host.sessionId);
+      if (restarted.gameState?.type !== "badAdvice" || restarted.gameState.state.status !== "collecting") {
+        throw new Error("expected restarted collecting");
+      }
+      expect(restarted.gameState.state.prompt.id).not.toBe(firstPromptId);
+      expect(restarted.gameState.state.prompt.id).not.toBe(round2.gameState.state.prompt.id);
+    });
+  });
 });

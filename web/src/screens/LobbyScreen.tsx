@@ -83,6 +83,13 @@ const GAMES: GameOption[] = [
     iconSrc: "/game_icons/caption_this.png"
   },
   {
+    id: "badAdvice",
+    title: "Bad Advice",
+    description:
+      "Everyone gets the same advice-seeking prompt, submits their worst advice, then votes for a favorite—winner earns a Friday Fusion point.",
+    iconSrc: "/game_icons/bad_advice.png"
+  },
+  {
     id: "pictionary",
     title: "Pictionary",
     description: "Two teams take turns drawing clues on a shared canvas—guess aloud with your team.",
@@ -223,6 +230,7 @@ export function LobbyScreen({
   const [yahtzeeMode, setYahtzeeMode] = useState<YahtzeeMode>("turns");
   const [wouldYouRatherQuestions, setWouldYouRatherQuestions] = useState(10);
   const [wouldYouRatherAllowSubmissions, setWouldYouRatherAllowSubmissions] = useState(true);
+  const [badAdviceRounds, setBadAdviceRounds] = useState(5);
   const [storyBuilderMode, setStoryBuilderMode] = useState<"stock" | "scratch">("stock");
   const [storyBuilderFirstTurnId, setStoryBuilderFirstTurnId] = useState(() => {
     const host = session.participants.find((p) => p.isHost);
@@ -290,6 +298,7 @@ export function LobbyScreen({
     yahtzeeMode,
     wouldYouRatherQuestions,
     wouldYouRatherAllowSubmissions,
+    badAdviceRounds,
     storyBuilderMode,
     storyBuilderFirstTurnId,
     memoryBoardSize
@@ -525,6 +534,23 @@ export function LobbyScreen({
                     <span className="mode-option-title">Allow player-submitted prompts during the round</span>
                     <span className="mode-option-hint">Host can approve or reject submissions before running them.</span>
                   </label>
+                </fieldset>
+              )}
+              {game.id === "badAdvice" && (
+                <fieldset className="mode-picker">
+                  <legend className="mode-picker-label">Round setup</legend>
+                  <label className="mode-picker-label" htmlFor="bad-advice-rounds">
+                    How many rounds?
+                  </label>
+                  <input
+                    id="bad-advice-rounds"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={badAdviceRounds}
+                    onChange={(event) => setBadAdviceRounds(Number(event.target.value))}
+                  />
+                  <p className="mode-option-hint">1–50 rounds (default 5). Needs at least two players.</p>
                 </fieldset>
               )}
               {game.id === "captionThis" && (

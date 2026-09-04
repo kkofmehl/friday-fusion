@@ -24,6 +24,7 @@ export type LobbyGameOptions = {
   yahtzeeMode: YahtzeeMode;
   wouldYouRatherQuestions: number;
   wouldYouRatherAllowSubmissions: boolean;
+  badAdviceRounds: number;
   storyBuilderMode: StoryBuilderMode;
   storyBuilderFirstTurnId: string;
   memoryBoardSize: MemoryBoardSize;
@@ -80,6 +81,13 @@ export function buildGameStartPayload(
       }
     };
   }
+  if (game === "badAdvice") {
+    const totalRounds = Math.max(1, Math.min(50, Math.floor(options.badAdviceRounds) || 5));
+    return {
+      game,
+      options: { badAdviceTotalRounds: totalRounds }
+    };
+  }
   if (game === "storyBuilder") {
     return {
       game,
@@ -119,6 +127,9 @@ export function describeQueuedGameOptions(
   }
   if (game === "wouldYouRather" && options.wouldYouRatherTotalQuestions) {
     return `${options.wouldYouRatherTotalQuestions} questions`;
+  }
+  if (game === "badAdvice" && options.badAdviceTotalRounds) {
+    return `${options.badAdviceTotalRounds} rounds`;
   }
   if (game === "twentyQuestions" && options.twentyQuestionsMaxQuestions) {
     return `${options.twentyQuestionsMaxQuestions} questions max`;

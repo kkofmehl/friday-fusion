@@ -1570,6 +1570,22 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "friendlyFeud:continue") {
           await sessionService.friendlyFeudContinue(context.sessionId, context.participantId);
+        } else if (event.type === "badAdvice:submitAdvice") {
+          await sessionService.badAdviceSubmitAdvice(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "badAdvice:beginVoting") {
+          await sessionService.badAdviceBeginVoting(context.sessionId, context.participantId);
+        } else if (event.type === "badAdvice:vote") {
+          await sessionService.badAdviceVote(
+            context.sessionId,
+            context.participantId,
+            event.payload.entryId
+          );
+        } else if (event.type === "badAdvice:beginNextRound") {
+          await sessionService.badAdviceBeginNextRound(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

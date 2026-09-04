@@ -29,6 +29,7 @@ import { MonopolyDealGame } from "../games/MonopolyDealGame";
 import { MonopolyDealActionFeed } from "../games/monopolyDeal/ActionFeed";
 import { SplendorGame } from "../games/SplendorGame";
 import { FriendlyFeudGame } from "../games/FriendlyFeudGame";
+import { BadAdviceGame } from "../games/BadAdviceGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -40,6 +41,7 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   guessTheImage: "/game_icons/guess_the_image.png",
   twentyQuestions: "/game_icons/20_questions.png",
   captionThis: "/game_icons/caption_this.png",
+  badAdvice: "/game_icons/bad_advice.png",
   pictionary: "/game_icons/pictionary.png",
   applesToApples: "/game_icons/apples_to_apples.png",
   uno: "/game_icons/uno.png",
@@ -66,6 +68,7 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   guessTheImage: "Guess the image",
   twentyQuestions: "20 Questions",
   captionThis: "Caption This",
+  badAdvice: "Bad Advice",
   pictionary: "Pictionary",
   applesToApples: "Apples to Apples",
   uno: "UNO",
@@ -440,6 +443,16 @@ export function GameScreen({
     if (session.gameState?.type === "friendlyFeud") {
       return (
         <FriendlyFeudGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "badAdvice") {
+      return (
+        <BadAdviceGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

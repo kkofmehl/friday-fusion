@@ -80,6 +80,15 @@ const resolveTurnTag = (session: SessionState, participantId: string): TurnTag |
       return { label: "Voting", tone: "voter" };
     }
   }
+  if (session.gameState.type === "badAdvice") {
+    const st = session.gameState.state;
+    if (st.status === "collecting" && !st.submittedParticipantIds.includes(participantId)) {
+      return { label: "Writing advice", tone: "submitting" };
+    }
+    if (st.status === "voting" && !st.votedParticipantIds.includes(participantId)) {
+      return { label: "Voting", tone: "voter" };
+    }
+  }
   if (session.gameState.type === "applesToApples") {
     const st = session.gameState.state;
     if (st.status === "collecting" && !st.isJudge && !st.submittedNonJudgeIds.includes(participantId)) {

@@ -14,6 +14,9 @@ import {
   FRIENDLY_FEUD_MIN_PLAYERS,
   FRIENDLY_FEUD_ROUND_WIN_FF_POINTS,
   UNO_HAND_SIZE,
+  BAD_ADVICE_DEFAULT_ROUNDS,
+  BAD_ADVICE_MAX_CHARS,
+  BAD_ADVICE_MAX_ROUNDS,
   CAPTION_THIS_MAX_CHARS,
   ICEBREAKER_PROMPT_MAX_CHARS,
   WOULD_YOU_RATHER_OPTION_MAX_CHARS,
@@ -69,6 +72,7 @@ import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
 import { pickGuessWhoSaidItQuestions } from "./guessWhoSaidItQuestionLoader";
 import { pickWouldYouRatherPrompts } from "./wouldYouRatherPromptLoader";
+import { pickBadAdvicePrompts } from "./badAdvicePromptLoader";
 import { purgeAllIcebreakerSessionUploads, purgeIcebreakerQuestionUploads } from "./icebreakerUploads";
 import {
   purgeAllGuessWhoSaidItSessionUploads,
@@ -415,6 +419,32 @@ type CaptionThisGameInternal = {
   votes: Record<string, string>;
 };
 
+type BadAdvicePromptInternal = {
+  id: string;
+  text: string;
+};
+
+type BadAdviceEntryInternal = {
+  id: string;
+  authorId: string;
+  text: string;
+};
+
+type BadAdviceGameInternal = {
+  id: string;
+  type: "badAdvice";
+  status: "collecting" | "voting" | "results" | "finished";
+  prompts: BadAdvicePromptInternal[];
+  roundIndex: number;
+  totalRounds: number;
+  advice: Record<string, string>;
+  entries: BadAdviceEntryInternal[];
+  displayOrder: string[];
+  votes: Record<string, string>;
+  usedPromptIds: string[];
+  roundScoreApplied: boolean;
+};
+
 type PictionaryStrokeInternal = {
   id: string;
   tool: "pen" | "eraser";
@@ -667,7 +697,8 @@ type GameInternal =
   | WordleGameInternal
   | MonopolyDealGameInternal
   | SplendorGameInternal
-  | FriendlyFeudGameInternal;
+  | FriendlyFeudGameInternal
+  | BadAdviceGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1485,6 +1516,40 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
   }
   if (game.type === "friendlyFeud") {
     return hydrateFriendlyFeudGame(game as FriendlyFeudGameInternal);
+  }
+  if (game.type === "badAdvice") {
+    const g = game as BadAdviceGameInternal;
+    const prompts = Array.isArray(g.prompts)
+      ? g.prompts
+          .filter((p) => p && typeof p.id === "string" && typeof p.text === "string")
+          .map((p) => ({ id: p.id, text: p.text }))
+      : [];
+    const totalRounds = Math.max(1, Number(g.totalRounds) || prompts.length || 1);
+    const roundIndex = Math.min(
+      Math.max(0, Number(g.roundIndex) || 0),
+      Math.max(0, prompts.length - 1)
+    );
+    const status =
+      g.status === "collecting" ||
+      g.status === "voting" ||
+      g.status === "results" ||
+      g.status === "finished"
+        ? g.status
+        : "collecting";
+    return {
+      id: g.id ?? nanoid(6),
+      type: "badAdvice",
+      status,
+      prompts,
+      roundIndex,
+      totalRounds,
+      advice: g.advice && typeof g.advice === "object" ? g.advice : {},
+      entries: Array.isArray(g.entries) ? g.entries : [],
+      displayOrder: Array.isArray(g.displayOrder) ? g.displayOrder : [],
+      votes: g.votes && typeof g.votes === "object" ? g.votes : {},
+      usedPromptIds: Array.isArray(g.usedPromptIds) ? g.usedPromptIds : [],
+      roundScoreApplied: g.roundScoreApplied === true
+    };
   }
   return { ...game, id: game.id ?? nanoid(6) };
 };
@@ -2628,6 +2693,44 @@ export class SessionService {
       }
       this.clearFriendlyFeudTimer(sessionId);
       next = createFriendlyFeudGame();
+    } else if (game === "badAdvice") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Bad Advice needs at least two active players.");
+      }
+      const previousBadAdvice = session.games.find(
+        (entry): entry is BadAdviceGameInternal => entry.type === "badAdvice"
+      );
+      const count = Math.max(
+        1,
+        Math.min(
+          BAD_ADVICE_MAX_ROUNDS,
+          Math.floor(options.badAdviceTotalRounds ?? BAD_ADVICE_DEFAULT_ROUNDS)
+        )
+      );
+      const usedPromptIds = new Set(previousBadAdvice?.usedPromptIds ?? []);
+      const picked = pickBadAdvicePrompts(usedPromptIds, count).map((prompt) => ({
+        id: prompt.id,
+        text: prompt.text
+      }));
+      if (picked.length === 0) {
+        throw new Error("No Bad Advice prompts available.");
+      }
+      picked.forEach((prompt) => usedPromptIds.add(prompt.id));
+      next = {
+        id: nanoid(6),
+        type: "badAdvice",
+        status: "collecting",
+        prompts: picked,
+        roundIndex: 0,
+        totalRounds: picked.length,
+        advice: {},
+        entries: [],
+        displayOrder: [],
+        votes: {},
+        usedPromptIds: [...usedPromptIds],
+        roundScoreApplied: false
+      };
     } else if (game === "madlibs") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -5370,6 +5473,178 @@ export class SessionService {
     game.displayOrder = [];
     game.votes = {};
     game.roundNumber += 1;
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  private badAdviceEnterVoting(session: SessionInternal, game: BadAdviceGameInternal): void {
+    const submitters = activeParticipants(session).filter((p) => {
+      const text = game.advice[p.id];
+      return typeof text === "string" && text.trim().length > 0;
+    });
+    if (submitters.length < 2) {
+      throw new Error("Need at least two pieces of advice before voting.");
+    }
+    const entries: BadAdviceEntryInternal[] = submitters.map((p) => ({
+      id: nanoid(10),
+      authorId: p.id,
+      text: game.advice[p.id]!.trim()
+    }));
+    game.entries = entries;
+    game.displayOrder = shuffleEntryIds(entries.map((e) => e.id));
+    game.votes = {};
+    game.status = "voting";
+  }
+
+  private applyBadAdviceRoundScores(session: SessionInternal, game: BadAdviceGameInternal): void {
+    if (game.status !== "results" || game.roundScoreApplied) {
+      return;
+    }
+    const tallyMap = new Map<string, number>();
+    for (const e of game.entries) {
+      tallyMap.set(e.id, 0);
+    }
+    for (const eid of Object.values(game.votes)) {
+      tallyMap.set(eid, (tallyMap.get(eid) ?? 0) + 1);
+    }
+    const tallies = game.entries.map((e) => ({
+      entryId: e.id,
+      authorId: e.authorId,
+      voteCount: tallyMap.get(e.id) ?? 0
+    }));
+    if (tallies.length === 0) {
+      game.roundScoreApplied = true;
+      return;
+    }
+    const maxVotes = Math.max(...tallies.map((t) => t.voteCount));
+    const winners = tallies.filter((t) => t.voteCount === maxVotes);
+    for (const winner of winners) {
+      const participant = session.participants.find((p) => p.id === winner.authorId);
+      if (participant) {
+        participant.score += 1;
+      }
+    }
+    game.roundScoreApplied = true;
+  }
+
+  private badAdviceComputeTallies(game: BadAdviceGameInternal): {
+    tallies: { entryId: string; authorId: string; text: string; voteCount: number }[];
+    winnerEntryIds: string[];
+  } {
+    const tallyMap = new Map<string, number>();
+    for (const e of game.entries) {
+      tallyMap.set(e.id, 0);
+    }
+    for (const eid of Object.values(game.votes)) {
+      tallyMap.set(eid, (tallyMap.get(eid) ?? 0) + 1);
+    }
+    const tallies = game.entries.map((e) => ({
+      entryId: e.id,
+      authorId: e.authorId,
+      text: e.text,
+      voteCount: tallyMap.get(e.id) ?? 0
+    }));
+    const maxVotes = tallies.length === 0 ? 0 : Math.max(...tallies.map((t) => t.voteCount));
+    const winnerEntryIds = tallies.filter((t) => t.voteCount === maxVotes).map((t) => t.entryId);
+    return { tallies, winnerEntryIds };
+  }
+
+  public async badAdviceSubmitAdvice(sessionId: string, participantId: string, text: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "badAdvice" || game.status !== "collecting") {
+      throw new Error("Cannot submit advice right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.length > BAD_ADVICE_MAX_CHARS) {
+      throw new Error("Invalid advice.");
+    }
+    game.advice[participantId] = trimmed;
+    session.updatedAt = Date.now();
+    const allIn = activeParticipants(session).every((p) => {
+      const advice = game.advice[p.id];
+      return typeof advice === "string" && advice.trim().length > 0;
+    });
+    if (allIn) {
+      this.badAdviceEnterVoting(session, game);
+    }
+    await this.persist();
+  }
+
+  public async badAdviceBeginVoting(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can start voting.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "badAdvice" || game.status !== "collecting") {
+      throw new Error("Cannot start voting right now.");
+    }
+    this.badAdviceEnterVoting(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async badAdviceVote(sessionId: string, participantId: string, entryId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "badAdvice" || game.status !== "voting") {
+      throw new Error("Cannot vote right now.");
+    }
+    if (!session.participants.some((p) => p.id === participantId)) {
+      throw new Error("Participant is not in this session.");
+    }
+    const entry = game.entries.find((e) => e.id === entryId);
+    if (!entry) {
+      throw new Error("Invalid advice choice.");
+    }
+    if (entry.authorId === participantId) {
+      throw new Error("You cannot vote for your own advice.");
+    }
+    game.votes[participantId] = entryId;
+    session.updatedAt = Date.now();
+    const eligibleVoters = activeParticipants(session).filter((p) =>
+      game.entries.some((e) => e.authorId !== p.id)
+    );
+    const allVoted =
+      eligibleVoters.length > 0 && eligibleVoters.every((p) => game.votes[p.id] !== undefined);
+    if (allVoted) {
+      game.status = "results";
+      this.applyBadAdviceRoundScores(session, game);
+    }
+    await this.persist();
+  }
+
+  public async badAdviceBeginNextRound(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!this.isHost(sessionId, participantId)) {
+      throw new Error("Only the host can start the next round.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "badAdvice" || game.status !== "results") {
+      throw new Error("Cannot start the next round right now.");
+    }
+    this.applyBadAdviceRoundScores(session, game);
+    if (game.roundIndex + 1 >= game.prompts.length) {
+      game.status = "finished";
+      session.updatedAt = Date.now();
+      await this.persist();
+      return;
+    }
+    game.roundIndex += 1;
+    game.advice = {};
+    game.entries = [];
+    game.displayOrder = [];
+    game.votes = {};
+    game.roundScoreApplied = false;
+    game.status = "collecting";
     session.updatedAt = Date.now();
     await this.persist();
   }
@@ -9068,6 +9343,125 @@ export class SessionService {
         gameState: {
           type: "friendlyFeud",
           state: toPublicFriendlyFeudState(game)
+        }
+      };
+    }
+
+    if (game.type === "badAdvice") {
+      this.applyBadAdviceRoundScores(session, game);
+      const prompt = game.prompts[game.roundIndex] ?? game.prompts[game.prompts.length - 1] ?? null;
+      const roundNumber = Math.min(game.roundIndex + 1, game.totalRounds);
+
+      if (game.status === "collecting") {
+        if (!prompt) {
+          throw new Error("Bad Advice prompt is missing.");
+        }
+        const submittedParticipantIds = activeParticipants(session)
+          .filter((p) => {
+            const advice = game.advice[p.id];
+            return typeof advice === "string" && advice.trim().length > 0;
+          })
+          .map((p) => p.id);
+        const allAdviceIn = activeParticipants(session).every((p) => {
+          const advice = game.advice[p.id];
+          return typeof advice === "string" && advice.trim().length > 0;
+        });
+        const myAdvice =
+          viewerParticipantId && typeof game.advice[viewerParticipantId] === "string"
+            ? game.advice[viewerParticipantId]!
+            : null;
+        return {
+          ...base,
+          activeGame: "badAdvice",
+          gameState: {
+            type: "badAdvice",
+            state: {
+              status: "collecting",
+              roundNumber,
+              totalRounds: game.totalRounds,
+              prompt,
+              submittedParticipantIds,
+              allAdviceIn,
+              myAdvice
+            }
+          }
+        };
+      }
+
+      if (game.status === "voting") {
+        if (!prompt) {
+          throw new Error("Bad Advice prompt is missing.");
+        }
+        const byId = new Map(game.entries.map((e) => [e.id, e] as const));
+        const displayEntries = game.displayOrder
+          .map((id) => byId.get(id))
+          .filter((e): e is BadAdviceEntryInternal => Boolean(e))
+          .map((e) => ({ entryId: e.id, text: e.text }));
+        const myEntry =
+          viewerParticipantId && session.participants.some((p) => p.id === viewerParticipantId)
+            ? game.entries.find((e) => e.authorId === viewerParticipantId)?.id ?? null
+            : null;
+        const votedParticipantIds = Object.keys(game.votes);
+        const hasVoted = Boolean(viewerParticipantId && game.votes[viewerParticipantId] !== undefined);
+        const eligibleVoters = activeParticipants(session).filter((p) =>
+          game.entries.some((e) => e.authorId !== p.id)
+        );
+        const allVotesIn =
+          eligibleVoters.length > 0 && eligibleVoters.every((p) => game.votes[p.id] !== undefined);
+        return {
+          ...base,
+          activeGame: "badAdvice",
+          gameState: {
+            type: "badAdvice",
+            state: {
+              status: "voting",
+              roundNumber,
+              totalRounds: game.totalRounds,
+              prompt,
+              displayEntries,
+              myEntryId: myEntry,
+              votedParticipantIds,
+              hasVoted,
+              allVotesIn
+            }
+          }
+        };
+      }
+
+      const { tallies, winnerEntryIds } = this.badAdviceComputeTallies(game);
+      if (game.status === "finished") {
+        return {
+          ...base,
+          activeGame: "badAdvice",
+          gameState: {
+            type: "badAdvice",
+            state: {
+              status: "finished",
+              totalRounds: game.totalRounds,
+              lastPrompt: prompt,
+              tallies,
+              winnerEntryIds
+            }
+          }
+        };
+      }
+
+      if (!prompt) {
+        throw new Error("Bad Advice prompt is missing.");
+      }
+      return {
+        ...base,
+        activeGame: "badAdvice",
+        gameState: {
+          type: "badAdvice",
+          state: {
+            status: "results",
+            roundNumber,
+            totalRounds: game.totalRounds,
+            prompt,
+            tallies,
+            winnerEntryIds
+          }
         }
       };
     }
