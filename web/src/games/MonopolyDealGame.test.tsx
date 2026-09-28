@@ -879,4 +879,64 @@ describe("MonopolyDealGame", () => {
     expect(screen.getByRole("button", { name: /^Just Say No$/i })).toBeTruthy();
     expect(screen.getByText(/30s remaining to counter/i)).toBeTruthy();
   });
+
+  it("asks the host to confirm before ending the current turn", () => {
+    const send = vi.fn();
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: makePlayingState({
+              currentPlayerId: "b",
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                },
+                {
+                  participantId: "b",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 5
+                }
+              ]
+            })
+          }
+        })}
+        currentParticipantId="a"
+        isHost
+        canPlay
+        send={send}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /End current turn/i }));
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText(/Are you sure/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^End turn$/i }));
+    expect(send).toHaveBeenCalledWith({ type: "monopolyDeal:forceEndTurn", payload: {} });
+  });
+
+  it("hides end current turn from a non-host", () => {
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: makePlayingState({ currentPlayerId: "b" })
+          }
+        })}
+        currentParticipantId="a"
+        isHost={false}
+        canPlay
+        send={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /End current turn/i })).toBeNull();
+  });
 });

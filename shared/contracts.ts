@@ -2438,6 +2438,7 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({ cardIds: z.array(z.string().min(1)).min(1) })
   }),
   z.object({ type: z.literal("monopolyDeal:endTurn"), payload: z.object({}) }),
+  z.object({ type: z.literal("monopolyDeal:forceEndTurn"), payload: z.object({}) }),
   z.object({
     type: z.literal("splendor:takeDifferentGems"),
     payload: z.object({

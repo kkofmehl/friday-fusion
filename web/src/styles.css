@@ -6618,6 +6618,10 @@ label {
 
 .md-turn-info {
   flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.9rem;
 }
 
@@ -6649,6 +6653,22 @@ label {
   background: transparent;
   border: 1px solid #94a3b8;
   color: #334155;
+}
+
+.md-btn.md-btn--quiet {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.md-btn.md-btn--quiet:hover {
+  border-color: #94a3b8;
+  color: #334155;
+  background: #f8fafc;
 }
 
 .md-play-layout {
@@ -6920,6 +6940,22 @@ button.md-mini-chip-btn {
 
 .md-end-turn-wrap {
   margin-bottom: 0.5rem;
+}
+
+.md-force-end-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.md-force-end-wrap .md-modal--inline {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: min(360px, 70vw);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .md-set-bonus-icons {

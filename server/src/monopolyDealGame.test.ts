@@ -7,6 +7,8 @@ import {
   monopolyDealBankCard,
   monopolyDealCancelResolution,
   monopolyDealEndTurn,
+  monopolyDealForceEndTurn,
+  monopolyDealRemovePlayer,
   monopolyDealFlipWild,
   monopolyDealLayProperty,
   monopolyDealMoveWild,
@@ -1392,5 +1394,136 @@ describe("monopolyDealGame win checks", () => {
     monopolyDealSelectTarget(game, "p1", { propertyColor: "darkBlue" });
     expect(game.status).toBe("finished");
     expect(game.winnerParticipantId).toBe("p1");
+  });
+});
+
+const card = (id: string): { id: string; defId: string } => ({ id, defId: "money-1m-0" });
+
+const startPlayingGame = (playerIds: string[]) => {
+  const game = createMonopolyDealGame(playerIds);
+  game.status = "playing";
+  game.drawPile = Array.from({ length: 10 }, (_, index) => card(`draw-${index}`));
+  game.pot = playerIds.length;
+  for (const id of playerIds) {
+    game.wagers[id] = 1;
+    game.hands[id] = [card(`hand-${id}`)];
+  }
+  return game;
+};
+
+describe("monopolyDealRemovePlayer", () => {
+  it("drops a wagering player and clears the table when fewer than two remain", () => {
+    const stillPlaying = createMonopolyDealGame(["p1", "p2", "p3"]);
+    monopolyDealSetWager(stillPlaying, "p1", 1, 10);
+    monopolyDealSetWager(stillPlaying, "p2", 2, 10);
+    monopolyDealSetWager(stillPlaying, "p3", 3, 10);
+    expect(monopolyDealRemovePlayer(stillPlaying, "p3").clearGame).toBe(false);
+    expect(stillPlaying.playerOrder).toEqual(["p1", "p2"]);
+    expect(stillPlaying.pot).toBe(3);
+    expect(() => monopolyDealStartAfterWagers(stillPlaying)).not.toThrow();
+
+    const oneLeft = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(oneLeft, "p1", 1, 10);
+    monopolyDealSetWager(oneLeft, "p2", 2, 10);
+    expect(monopolyDealRemovePlayer(oneLeft, "p2").clearGame).toBe(true);
+    expect(oneLeft.playerOrder).toEqual(["p1"]);
+    expect(oneLeft.pot).toBe(1);
+  });
+
+  it("returns the leaving player's cards to the draw pile and advances when it is their turn", () => {
+    const game = startPlayingGame(["p1", "p2", "p3"]);
+    game.currentPlayerIndex = 0;
+    game.hands.p1 = [card("h1")];
+    game.boards.p1!.bank = [card("b1")];
+    game.boards.p1!.propertySets = {
+      brown: {
+        cards: [{ instanceId: "prop1", defId: "money-1m-0", activeColor: "brown" }],
+        house: true,
+        hotel: false
+      }
+    };
+    game.pendingResolution = { kind: "selectTarget", actorId: "p1", actionType: "debtCollector" };
+    const nextHandBefore = game.hands.p2!.length;
+
+    const result = monopolyDealRemovePlayer(game, "p1");
+
+    expect(result.clearGame).toBe(false);
+    expect(game.status).toBe("playing");
+    expect(game.playerOrder).toEqual(["p2", "p3"]);
+    expect(game.playerOrder[game.currentPlayerIndex]).toBe("p2");
+    expect(game.hands.p2).toHaveLength(nextHandBefore + 2);
+    expect(game.pendingResolution).toBeNull();
+    expect(game.boards.p1).toBeUndefined();
+    expect(game.playsRemaining).toBe(3);
+    const liveIds = [
+      ...game.drawPile.map((entry) => entry.id),
+      ...game.hands.p2!.map((entry) => entry.id),
+      ...game.hands.p3!.map((entry) => entry.id)
+    ];
+    expect(liveIds.filter((id) => id === "h1")).toHaveLength(1);
+    expect(liveIds.filter((id) => id === "b1")).toHaveLength(1);
+    expect(liveIds.filter((id) => id === "prop1")).toHaveLength(1);
+  });
+
+  it("keeps the current player and does not draw when someone else leaves", () => {
+    const game = startPlayingGame(["p1", "p2", "p3"]);
+    game.currentPlayerIndex = 0;
+    const handBefore = game.hands.p1!.length;
+    const drawBefore = game.drawPile.length;
+    game.pendingResolution = {
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      amountDue: 2,
+      reason: "It's My Birthday",
+      queueRemaining: ["p3"]
+    };
+
+    monopolyDealRemovePlayer(game, "p3");
+
+    expect(game.playerOrder).toEqual(["p1", "p2"]);
+    expect(game.playerOrder[game.currentPlayerIndex]).toBe("p1");
+    expect(game.hands.p1).toHaveLength(handBefore);
+    expect(game.drawPile).toHaveLength(drawBefore + 1);
+    expect(game.pendingResolution).toMatchObject({
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      queueRemaining: []
+    });
+  });
+
+  it("finishes the game and keeps the pot when only one player remains", () => {
+    const game = startPlayingGame(["p1", "p2"]);
+    game.currentPlayerIndex = 1;
+    game.pot = 4;
+    const winnerHand = game.hands.p1!.length;
+
+    monopolyDealRemovePlayer(game, "p2");
+
+    expect(game.status).toBe("finished");
+    expect(game.winnerParticipantId).toBe("p1");
+    expect(game.pot).toBe(4);
+    expect(game.hands.p1).toHaveLength(winnerHand);
+    expect(game.winnerHand).toHaveLength(winnerHand);
+  });
+});
+
+describe("monopolyDealForceEndTurn", () => {
+  it("skips a pending action and starts the next player's turn", () => {
+    const game = startPlayingGame(["p1", "p2"]);
+    game.currentPlayerIndex = 0;
+    game.hands.p1 = Array.from({ length: 8 }, (_, index) => card(`extra-${index}`));
+    game.pendingResolution = { kind: "selectTarget", actorId: "p1", actionType: "slyDeal" };
+    const nextHandBefore = game.hands.p2!.length;
+
+    monopolyDealForceEndTurn(game);
+
+    expect(game.pendingResolution).toBeNull();
+    expect(game.playerOrder[game.currentPlayerIndex]).toBe("p2");
+    expect(game.phase).toBe("playing");
+    expect(game.playsRemaining).toBe(3);
+    expect(game.hands.p1).toHaveLength(8);
+    expect(game.hands.p2).toHaveLength(nextHandBefore + 2);
   });
 });

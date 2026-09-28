@@ -3456,6 +3456,65 @@ describe("SessionService", () => {
       const host = await setup.service.createSession("Host");
       await expect(setup.service.startGame(host.sessionId, "monopolyDeal")).rejects.toThrow(/two/i);
     });
+
+    it("returns a departing player's cards to the draw pile and drops them from the turn order", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      const third = await setup.service.joinSession(host.joinCode, "Third");
+      await setup.service.startGame(host.sessionId, "monopolyDeal");
+      await setup.service.monopolyDealSetWager(host.sessionId, host.participantId, 1);
+      await setup.service.monopolyDealSetWager(host.sessionId, guest.participantId, 1);
+      await setup.service.monopolyDealSetWager(host.sessionId, third.participantId, 1);
+      await setup.service.monopolyDealStartAfterWagers(host.sessionId, host.participantId);
+
+      const before = setup.service.getState(host.sessionId, host.participantId);
+      if (before.gameState?.type !== "monopolyDeal" || before.gameState.state.status !== "playing") {
+        throw new Error("expected playing");
+      }
+      const drawBefore = before.gameState.state.drawPileCount;
+
+      await setup.service.removeParticipant(host.sessionId, third.participantId);
+
+      const state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "monopolyDeal" || state.gameState.state.status !== "playing") {
+        throw new Error("expected playing");
+      }
+      expect(state.gameState.state.boards.map((board) => board.participantId)).toEqual([
+        host.participantId,
+        guest.participantId
+      ]);
+      expect(state.gameState.state.currentPlayerId).toBe(host.participantId);
+      expect(state.gameState.state.myHand).toHaveLength(7);
+      expect(state.gameState.state.drawPileCount).toBe(drawBefore + 5);
+      expect(state.participants.map((participant) => participant.id)).not.toContain(third.participantId);
+    });
+
+    it("lets only the host end the current turn", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "monopolyDeal");
+      await setup.service.monopolyDealSetWager(host.sessionId, host.participantId, 1);
+      await setup.service.monopolyDealSetWager(host.sessionId, guest.participantId, 1);
+      await setup.service.monopolyDealStartAfterWagers(host.sessionId, host.participantId);
+
+      await expect(setup.service.monopolyDealForceEndTurn(host.sessionId, guest.participantId)).rejects.toThrow(
+        /only the host/i
+      );
+
+      await setup.service.monopolyDealForceEndTurn(host.sessionId, host.participantId);
+      const state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "monopolyDeal" || state.gameState.state.status !== "playing") {
+        throw new Error("expected playing");
+      }
+      expect(state.gameState.state.currentPlayerId).toBe(guest.participantId);
+      expect(state.gameState.state.boards.find((board) => board.participantId === guest.participantId)?.handCount).toBe(
+        7
+      );
+    });
   });
 
   describe("Bad Advice", () => {

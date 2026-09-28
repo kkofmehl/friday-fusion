@@ -41,6 +41,18 @@ export const refillDrawPileFromDiscard = (
   }
 };
 
+/** Mix returned cards into the draw pile so they are not sitting in a known order. */
+export const shuffleCardsIntoDrawPile = (
+  drawPile: MonopolyDealCardInstance[],
+  cards: MonopolyDealCardInstance[]
+): void => {
+  if (cards.length === 0) {
+    return;
+  }
+  drawPile.push(...cards);
+  shuffleInPlace(drawPile);
+};
+
 export const drawCards = (
   drawPile: MonopolyDealCardInstance[],
   discardPile: MonopolyDealCardInstance[],

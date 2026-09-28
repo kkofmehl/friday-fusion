@@ -1510,6 +1510,8 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "monopolyDeal:endTurn") {
           await sessionService.monopolyDealEndTurn(context.sessionId, context.participantId);
+        } else if (event.type === "monopolyDeal:forceEndTurn") {
+          await sessionService.monopolyDealForceEndTurn(context.sessionId, context.participantId);
         } else if (event.type === "splendor:takeDifferentGems") {
           await sessionService.splendorTakeDifferentGems(
             context.sessionId,

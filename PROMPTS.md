@@ -126,3 +126,15 @@ Return: files changed, brief summary of behavior, test commands run and results,
 **2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: discard house/hotel from incomplete sets at end of turn, fix Deal Breaker leaving the action card (and extra property) in hand, end the game as soon as any player has three complete sets.
 
 **2026-08-31:** Address Monopoly Deal feedback in monopoly_feedback.md: keep counter-Just Say No playable after the 5s timer until the next play or end turn, and merge incomplete same-color property groups when none are complete.
+
+---
+
+**2026-09-28:** Add a subroutine so a player leaving Monopoly Deal mid-game has their hand, money, and properties reshuffled into the draw pile, their status removed, and they are dropped from the turn order (advance to the next player if it was their turn). Add a host-only action, gated by an "Are you sure" prompt, that immediately ends the current turn and moves to the next player.
+
+---
+
+**2026-09-28:** The host "End current turn" button is not showing. Make it visible in the game the host is actually running.
+
+---
+
+**2026-09-28:** Make the host "End current turn" button more subtle, and place it just to the right of the draw pile card count.

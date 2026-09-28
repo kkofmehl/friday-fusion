@@ -100,12 +100,14 @@ import {
   monopolyDealCancelResolution,
   monopolyDealDiscard,
   monopolyDealEndTurn,
+  monopolyDealForceEndTurn,
   monopolyDealFlipWild,
   monopolyDealForcedDealPickMine,
   monopolyDealLayProperty,
   monopolyDealLayPropertyWithResolution,
   monopolyDealMoveWild,
   monopolyDealPlayAction,
+  monopolyDealRemovePlayer,
   monopolyDealRespondJustSayNo,
   monopolyDealExtendJustSayNo,
   monopolyDealExpireJustSayNo,
@@ -3255,6 +3257,16 @@ export class SessionService {
     if (activeCatchPhrase?.type === "catchPhrase") {
       this.clearCatchPhraseTimer(sessionId);
       session.games = [];
+    }
+
+    const activeMonopolyDeal = session.games[0];
+    if (activeMonopolyDeal?.type === "monopolyDeal") {
+      const result = monopolyDealRemovePlayer(activeMonopolyDeal, participantId);
+      if (result.clearGame) {
+        session.games = [];
+      } else {
+        this.monopolyDealMaybeApplyScores(session, activeMonopolyDeal);
+      }
     }
   }
 
@@ -9709,6 +9721,17 @@ export class SessionService {
     assertParticipantActiveForGameplay(session, participantId);
     const game = this.getMonopolyDealGame(session);
     monopolyDealEndTurn(game, participantId);
+    await this.monopolyDealPersist(session);
+  }
+
+  public async monopolyDealForceEndTurn(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const participant = session.participants.find((p) => p.id === participantId);
+    if (!participant?.isHost) {
+      throw new Error("Only the host can end the current turn.");
+    }
+    const game = this.getMonopolyDealGame(session);
+    monopolyDealForceEndTurn(game);
     await this.monopolyDealPersist(session);
   }
 

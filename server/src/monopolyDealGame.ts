@@ -54,7 +54,7 @@ import type {
   MonopolyDealRecentEvent,
   MonopolyDealState
 } from "../../shared/contracts";
-import { drawCards, shuffledMonopolyDealDeck } from "./monopolyDealDeck";
+import { drawCards, shuffleCardsIntoDrawPile, shuffledMonopolyDealDeck } from "./monopolyDealDeck";
 
 export type MonopolyDealBoardInternal = {
   bank: MonopolyDealCardInstance[];
@@ -1762,9 +1762,207 @@ export const monopolyDealEndTurn = (game: MonopolyDealGameInternal, participantI
   }
   clearUndoableBank(game);
   logAction(game, participantId, "ended their turn");
+  advanceToNextTurn(game);
+};
+
+const advanceToNextTurn = (game: MonopolyDealGameInternal): void => {
   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.playerOrder.length;
   game.drawnThisTurn = false;
   beginTurnDraw(game);
+};
+
+const finishMonopolyDeal = (game: MonopolyDealGameInternal, winnerId: string): void => {
+  game.status = "finished";
+  game.pendingResolution = null;
+  clearJustSayNoLateWindow(game);
+  clearPendingActionRestore(game);
+  clearUndoableBank(game);
+  game.winnerParticipantId = winnerId;
+  game.winnerHand = [...getHand(game, winnerId)];
+  game.winnerBoard = boardToPlayerBoard(winnerId, getBoard(game, winnerId), getHand(game, winnerId).length);
+};
+
+const collectPlayerCards = (game: MonopolyDealGameInternal, participantId: string): MonopolyDealCardInstance[] => {
+  const cards: MonopolyDealCardInstance[] = [...getHand(game, participantId)];
+  const board = game.boards[participantId];
+  if (!board) {
+    return cards;
+  }
+  cards.push(...board.bank);
+  for (const color of PROPERTY_COLORS) {
+    for (const set of normalizeColorSets(board.propertySets[color])) {
+      for (const placed of set.cards) {
+        cards.push({ id: placed.instanceId, defId: placed.defId });
+      }
+    }
+  }
+  return cards;
+};
+
+const actionNamesPlayer = (action: MonopolyDealPendingAction, participantId: string): boolean =>
+  action.actorId === participantId ||
+  action.targetId === participantId ||
+  (action.queueRemaining ?? []).includes(participantId);
+
+const dropPlayerFromJustSayNoLate = (game: MonopolyDealGameInternal, participantId: string): void => {
+  const late = game.justSayNoLate;
+  if (!late) {
+    return;
+  }
+  const involved =
+    actionNamesPlayer(late.action, participantId) ||
+    late.primaryTargetId === participantId ||
+    (late.affectedPlayerIds ?? []).includes(participantId) ||
+    Boolean(game.justSayNoUndoBoards && participantId in game.justSayNoUndoBoards);
+  if (involved) {
+    clearJustSayNoLateWindow(game);
+    return;
+  }
+  late.eligiblePlayerIds = late.eligiblePlayerIds.filter((id) => id !== participantId);
+  if (late.eligiblePlayerIds.length === 0) {
+    clearJustSayNoLateWindow(game);
+  }
+};
+
+/** Clear in-progress actions that depend on a player who is leaving, without applying or undoing them. */
+const releaseLeavingPlayer = (game: MonopolyDealGameInternal, participantId: string, wasCurrent: boolean): void => {
+  if (game.pendingActionRestore?.actorId === participantId || wasCurrent) {
+    clearPendingActionRestore(game);
+  }
+  if (game.undoableBank?.participantId === participantId || wasCurrent) {
+    clearUndoableBank(game);
+  }
+
+  const pending = game.pendingResolution;
+  if (wasCurrent) {
+    game.pendingResolution = null;
+    clearJustSayNoLateWindow(game);
+    return;
+  }
+  if (!pending) {
+    dropPlayerFromJustSayNoLate(game, participantId);
+    return;
+  }
+
+  if (pending.kind === "collectPayment") {
+    const queue = pending.queueRemaining.filter((id) => id !== participantId);
+    if (pending.payeeId === participantId) {
+      game.pendingResolution = null;
+    } else if (pending.payerId === participantId) {
+      const nextPayer = queue[0];
+      game.pendingResolution = nextPayer
+        ? { ...pending, payerId: nextPayer, queueRemaining: queue.slice(1) }
+        : null;
+    } else {
+      game.pendingResolution = { ...pending, queueRemaining: queue };
+    }
+  } else if (pending.kind === "justSayNo") {
+    const involved =
+      pending.action.actorId === participantId ||
+      pending.action.targetId === participantId ||
+      pending.primaryTargetId === participantId;
+    if (involved) {
+      game.pendingResolution = null;
+    } else {
+      const eligiblePlayerIds = pending.eligiblePlayerIds.filter((id) => id !== participantId);
+      const affectedPlayerIds = pending.affectedPlayerIds?.filter((id) => id !== participantId);
+      if (eligiblePlayerIds.length === 0) {
+        game.pendingResolution = null;
+      } else {
+        game.pendingResolution = {
+          ...pending,
+          eligiblePlayerIds,
+          affectedPlayerIds,
+          action: {
+            ...pending.action,
+            queueRemaining: pending.action.queueRemaining?.filter((id) => id !== participantId)
+          }
+        };
+      }
+    }
+  } else if (
+    ("actorId" in pending && pending.actorId === participantId) ||
+    ("targetId" in pending && pending.targetId === participantId)
+  ) {
+    game.pendingResolution = null;
+  }
+
+  dropPlayerFromJustSayNoLate(game, participantId);
+};
+
+export const monopolyDealRemovePlayer = (
+  game: MonopolyDealGameInternal,
+  participantId: string
+): { clearGame: boolean } => {
+  const removedIdx = game.playerOrder.indexOf(participantId);
+  if (removedIdx < 0 || game.status === "finished") {
+    return { clearGame: false };
+  }
+
+  if (game.status === "wagering") {
+    game.playerOrder = game.playerOrder.filter((id) => id !== participantId);
+    delete game.hands[participantId];
+    delete game.boards[participantId];
+    delete game.wagers[participantId];
+    game.submittedWagerIds = game.submittedWagerIds.filter((id) => id !== participantId);
+    game.pot = monopolyDealPot(game);
+    return { clearGame: game.playerOrder.length < 2 };
+  }
+
+  const wasCurrent = removedIdx === game.currentPlayerIndex;
+  releaseLeavingPlayer(game, participantId, wasCurrent);
+  const returned = collectPlayerCards(game, participantId);
+  shuffleCardsIntoDrawPile(game.drawPile, returned);
+  delete game.hands[participantId];
+  delete game.boards[participantId];
+  game.playerOrder = game.playerOrder.filter((id) => id !== participantId);
+  logAction(game, participantId, "left the game");
+
+  if (removedIdx < game.currentPlayerIndex) {
+    game.currentPlayerIndex -= 1;
+  }
+  if (game.playerOrder.length === 0) {
+    return { clearGame: true };
+  }
+  if (game.currentPlayerIndex >= game.playerOrder.length) {
+    game.currentPlayerIndex = 0;
+  }
+  if (game.playerOrder.length < 2) {
+    finishMonopolyDeal(game, game.playerOrder[0]!);
+    return { clearGame: false };
+  }
+  if (wasCurrent) {
+    game.drawnThisTurn = false;
+    game.phase = "playing";
+    beginTurnDraw(game);
+  }
+  return { clearGame: false };
+};
+
+/** Host override: abandon the current turn and start the next player's turn. */
+export const monopolyDealForceEndTurn = (game: MonopolyDealGameInternal): void => {
+  if (game.status !== "playing") {
+    throw new Error("Game is not in play.");
+  }
+  if (game.playerOrder.length === 0) {
+    return;
+  }
+  const participantId = currentPlayerId(game);
+  game.pendingResolution = null;
+  clearJustSayNoLateWindow(game);
+  clearPendingActionRestore(game);
+  clearUndoableBank(game);
+  const stripped = stripBuildingsFromIncompleteSets(playerBoard(game, participantId));
+  for (const item of stripped) {
+    const parts = [item.house ? "House" : null, item.hotel ? "Hotel" : null].filter(Boolean).join(" and ");
+    logAction(game, participantId, `discarded ${parts} from incomplete ${colorLabel(item.color)} set`);
+  }
+  checkWins(game);
+  if (game.status !== "playing") {
+    return;
+  }
+  logAction(game, participantId, "had their turn ended");
+  advanceToNextTurn(game);
 };
 
 export const projectMonopolyDealState = (game: MonopolyDealGameInternal, viewerId: string): MonopolyDealState => {

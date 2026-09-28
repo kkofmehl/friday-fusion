@@ -99,6 +99,7 @@ export function MonopolyDealGame({
       game={game}
       session={session}
       currentParticipantId={currentParticipantId}
+      isHost={isHost}
       canPlay={canPlay}
       send={send}
       roster={roster}
@@ -128,6 +129,7 @@ function MonopolyDealPlayingView({
   game,
   session,
   currentParticipantId,
+  isHost,
   canPlay,
   send,
   roster,
@@ -136,6 +138,7 @@ function MonopolyDealPlayingView({
   game: Extract<MonopolyDealState, { status: "playing" }>;
   session: SessionState;
   currentParticipantId: string;
+  isHost: boolean;
   canPlay: boolean;
   send: (event: ClientEvent) => void;
   roster: SessionState["participants"];
@@ -148,6 +151,7 @@ function MonopolyDealPlayingView({
   } | null>(null);
   const [paymentSelection, setPaymentSelection] = useState<MonopolyDealPaymentRef[]>([]);
   const [showEndTurnConfirm, setShowEndTurnConfirm] = useState(false);
+  const [showForceEndConfirm, setShowForceEndConfirm] = useState(false);
   const autoEndTimerRef = useRef<number | null>(null);
 
   const isMyTurn = game.currentPlayerId === currentParticipantId;
@@ -418,7 +422,37 @@ function MonopolyDealPlayingView({
       <div className="md-top-bar">
         <div className="md-pot-badge">Pot: {game.pot} pts</div>
         <div className="md-turn-info">
-          Turn: {nameNode(game.currentPlayerId)} · Draw pile: {game.drawPileCount}
+          <span>
+            Turn: {nameNode(game.currentPlayerId)} · Draw pile: {game.drawPileCount}
+          </span>
+          {isHost ? (
+            <span className="md-force-end-wrap">
+              <button type="button" className="md-btn md-btn--quiet" onClick={() => setShowForceEndConfirm(true)}>
+                End current turn
+              </button>
+              {showForceEndConfirm ? (
+                <div className="md-modal md-modal--confirm md-modal--inline" role="dialog" aria-modal="true">
+                  <h3>Are you sure?</h3>
+                  <p>This ends {nameNode(game.currentPlayerId)}&apos;s turn immediately.</p>
+                  <div className="md-confirm-actions">
+                    <button type="button" className="md-btn" onClick={() => setShowForceEndConfirm(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="md-btn md-btn--danger"
+                      onClick={() => {
+                        setShowForceEndConfirm(false);
+                        send({ type: "monopolyDeal:forceEndTurn", payload: {} });
+                      }}
+                    >
+                      End turn
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </span>
+          ) : null}
         </div>
       </div>
 
