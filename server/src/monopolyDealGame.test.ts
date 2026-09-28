@@ -38,6 +38,10 @@ describe("monopolyDealCardHelp", () => {
   it("describes two-color rent as charging all other players", () => {
     expect(getCardHelpText(getCardDef("rent-red-yellow-0"))).toMatch(/all other players/i);
   });
+
+  it("says two-color wilds cannot be banked", () => {
+    expect(getCardHelpText(getCardDef("wild-red-yellow-0"))).toMatch(/cannot be banked/i);
+  });
 });
 
 describe("monopolyDealGame plays remaining", () => {
@@ -442,6 +446,23 @@ describe("monopolyDealGame cancel resolution", () => {
     expect(game.pendingResolution).toBeNull();
     expect(game.playsRemaining).toBe(3);
     expect(game.hands.p1!.some((c) => c.defId === "action-debtCollector-0")).toBe(true);
+  });
+});
+
+describe("monopolyDealGame bank card", () => {
+  it("rejects banking a two-color property wild", () => {
+    const game = createMonopolyDealGame(["p1", "p2"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealStartAfterWagers(game);
+    game.hands.p1 = [{ id: "wild-1", defId: "wild-red-yellow-0" }];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    expect(() => monopolyDealBankCard(game, "p1", "wild-1")).toThrow(/cannot be banked/i);
+    expect(game.boards.p1!.bank).toHaveLength(0);
+    expect(game.hands.p1!.some((c) => c.id === "wild-1")).toBe(true);
+    expect(game.playsRemaining).toBe(3);
   });
 });
 
@@ -1063,21 +1084,21 @@ describe("monopolyDealGame two-color rent", () => {
       payeeId: "p1",
       amountDue: 3,
       reason: expect.stringMatching(/rent/i),
-      queueRemaining: ["p3"]
+      openPayerIds: ["p2", "p3"]
     });
 
-    game.boards.p2!.bank = [{ id: "m2", defId: "money-5m-0" }];
-    monopolyDealSubmitPayment(game, "p2", [{ zone: "bank", instanceId: "m2" }]);
+    game.boards.p3!.bank = [{ id: "m3", defId: "money-5m-0" }];
+    monopolyDealSubmitPayment(game, "p3", [{ zone: "bank", instanceId: "m3" }]);
     expect(game.pendingResolution).toMatchObject({
       kind: "collectPayment",
-      payerId: "p3",
+      payerId: "p2",
       payeeId: "p1",
       amountDue: 3,
-      reason: expect.stringMatching(/rent/i)
+      openPayerIds: ["p2"]
     });
     expect(game.recentEvent).toMatchObject({
       type: "payment",
-      payerId: "p2",
+      payerId: "p3",
       reason: expect.stringMatching(/rent/i)
     });
   });
@@ -1161,6 +1182,70 @@ describe("monopolyDealGame deal breaker", () => {
       ["b1", "b2"]
     );
     expect(game.boards.p2!.propertySets.brown).toBeUndefined();
+  });
+});
+
+describe("monopolyDealGame birthday payments", () => {
+  it("lets every other player pay at the same time", () => {
+    const game = createMonopolyDealGame(["p1", "p2", "p3"]);
+    monopolyDealSetWager(game, "p1", 1, 10);
+    monopolyDealSetWager(game, "p2", 1, 10);
+    monopolyDealSetWager(game, "p3", 1, 10);
+    monopolyDealStartAfterWagers(game);
+    game.hands.p1 = [{ id: "bday", defId: "action-itsMyBirthday-0" }];
+    game.hands.p2 = [];
+    game.hands.p3 = [];
+    game.currentPlayerIndex = 0;
+    game.playsRemaining = 3;
+
+    monopolyDealPlayAction(game, "p1", "bday");
+    expect(game.pendingResolution).toMatchObject({
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      amountDue: 2,
+      reason: "It's My Birthday",
+      openPayerIds: ["p2", "p3"]
+    });
+
+    game.boards.p3!.bank = [{ id: "m3", defId: "money-2m-0" }];
+    monopolyDealSubmitPayment(game, "p3", [{ zone: "bank", instanceId: "m3" }]);
+    expect(game.pendingResolution).toMatchObject({
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      openPayerIds: ["p2"]
+    });
+    expect(game.boards.p1!.bank.map((card) => card.id)).toEqual(["m3"]);
+
+    expect(() => monopolyDealSubmitPayment(game, "p1", [])).toThrow(/not your payment/i);
+    expect(() => monopolyDealSubmitPayment(game, "p3", [])).toThrow(/not your payment/i);
+
+    game.boards.p2!.bank = [{ id: "m2", defId: "money-2m-0" }];
+    monopolyDealSubmitPayment(game, "p2", [{ zone: "bank", instanceId: "m2" }]);
+    expect(game.pendingResolution).toBeNull();
+    expect(game.boards.p1!.bank.map((card) => card.id)).toEqual(["m3", "m2"]);
+  });
+
+  it("drops a leaving player from an open birthday payment", () => {
+    const game = startPlayingGame(["p1", "p2", "p3"]);
+    game.pendingResolution = {
+      kind: "collectPayment",
+      payerId: "p2",
+      payeeId: "p1",
+      amountDue: 2,
+      reason: "It's My Birthday",
+      queueRemaining: [],
+      openPayerIds: ["p2", "p3"]
+    };
+
+    monopolyDealRemovePlayer(game, "p3");
+
+    expect(game.pendingResolution).toMatchObject({
+      kind: "collectPayment",
+      payerId: "p2",
+      openPayerIds: ["p2"]
+    });
   });
 });
 

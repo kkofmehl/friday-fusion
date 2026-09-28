@@ -6920,6 +6920,23 @@ button.md-mini-chip-btn {
   padding: 0.5rem;
 }
 
+.md-pay-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  overflow: auto;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.md-pay-overlay .md-modal--paying {
+  width: min(760px, 100%);
+  margin-top: 4vh;
+}
+
 .md-modal--paying {
   background: #fef2f2;
   border: 3px solid #ef4444;
@@ -7147,6 +7164,10 @@ button.md-mini-chip-btn {
   font-size: 0.85rem;
   color: #b45309;
   margin: 0 0 0.5rem;
+}
+
+.md-payment-waiting {
+  margin: 0.75rem 0 0;
 }
 
 .md-finished-hand h3 {

@@ -292,6 +292,93 @@ describe("MonopolyDealGame", () => {
     });
   });
 
+  it("lets a later birthday payer pay while others still owe", () => {
+    const send = vi.fn();
+    const pendingResolution = {
+      kind: "collectPayment" as const,
+      payerId: "a",
+      payeeId: "host",
+      amountDue: 2,
+      reason: "It's My Birthday",
+      queueRemaining: [] as string[],
+      openPayerIds: ["a", "b"]
+    };
+    const birthdaySession = baseSession({
+      participants: [
+        { id: "host", displayName: "Host", score: 0, isHost: true, isActive: true },
+        { id: "a", displayName: "Ann", score: 0, isHost: false, isActive: true },
+        { id: "b", displayName: "Bob", score: 0, isHost: false, isActive: true }
+      ],
+      gameState: {
+        type: "monopolyDeal",
+        state: makePlayingState({
+          currentPlayerId: "host",
+          boards: [
+            {
+              participantId: "b",
+              bank: [{ id: "m1", defId: "money-2m-0" }],
+              propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+              handCount: 0
+            }
+          ],
+          myHand: [],
+          pendingResolution
+        })
+      }
+    });
+
+    const { rerender } = render(
+      <MonopolyDealGame
+        session={birthdaySession}
+        currentParticipantId="b"
+        isHost={false}
+        canPlay
+        send={send}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Pay selected/i })).toBeTruthy();
+    expect(screen.getByText(/pay at the same time/i)).toBeTruthy();
+    fireEvent.click(within(document.querySelector(".md-payment-picker") as HTMLElement).getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Pay selected/i }));
+    expect(send).toHaveBeenCalledWith({
+      type: "monopolyDeal:submitPayment",
+      payload: { cards: [{ zone: "bank", instanceId: "m1" }] }
+    });
+
+    rerender(
+      <MonopolyDealGame
+        session={baseSession({
+          participants: birthdaySession.participants,
+          gameState: {
+            type: "monopolyDeal",
+            state: makePlayingState({
+              currentPlayerId: "host",
+              boards: [
+                {
+                  participantId: "b",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 0
+                }
+              ],
+              myHand: [],
+              pendingResolution: { ...pendingResolution, openPayerIds: ["a"] }
+            })
+          }
+        })}
+        currentParticipantId="b"
+        isHost={false}
+        canPlay
+        send={send}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /Pay selected/i })).toBeNull();
+    expect(screen.getByText(/Waiting for/i)).toBeTruthy();
+    expect(screen.getByText(/Ann/i)).toBeTruthy();
+  });
+
   it("shows rent action buttons when a rent card is selected and double rent is in hand", () => {
     const send = vi.fn();
     render(
@@ -751,6 +838,43 @@ describe("MonopolyDealGame", () => {
       type: "monopolyDeal:layProperty",
       payload: { cardId: "brown-1", color: "brown" }
     });
+  });
+
+  it("does not bank a two-color wild on double-click", () => {
+    const send = vi.fn();
+    render(
+      <MonopolyDealGame
+        session={baseSession({
+          gameState: {
+            type: "monopolyDeal",
+            state: makePlayingState({
+              myHand: [{ id: "wild-1", defId: "wild-red-yellow-0" }],
+              boards: [
+                {
+                  participantId: "a",
+                  bank: [],
+                  propertySets: {} as MonopolyDealPlayerBoard["propertySets"],
+                  handCount: 1
+                }
+              ]
+            })
+          }
+        })}
+        currentParticipantId="a"
+        isHost
+        canPlay
+        send={send}
+      />
+    );
+
+    const handRow = document.querySelector(".md-hand-row");
+    fireEvent.doubleClick(within(handRow as HTMLElement).getByRole("button"));
+    expect(send).not.toHaveBeenCalled();
+
+    fireEvent.click(within(handRow as HTMLElement).getByRole("button"));
+    expect(screen.queryByRole("button", { name: /^Bank$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Lay Red/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Lay Yellow/i })).toBeTruthy();
   });
 
   it("offers move-to-color buttons for a selected rainbow wild", () => {

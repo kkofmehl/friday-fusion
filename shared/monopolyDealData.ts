@@ -117,7 +117,7 @@ export type MonopolyDealCardDef = {
   defId: string;
   kind: CardKind;
   name: string;
-  /** Monetary value when banked (0 = not bankable as money for multi-wild). */
+  /** Face value in millions. Properties and wilds cannot be banked as cash. */
   value: number;
   color?: PropertyColor;
   colors?: readonly PropertyColor[];
@@ -281,7 +281,7 @@ export function getCardDef(defId: string): MonopolyDealCardDef {
 }
 
 export function canBankCard(def: MonopolyDealCardDef): boolean {
-  if (def.kind === "property" || def.kind === "propertyWildMulti") {
+  if (def.kind === "property" || def.kind === "propertyWildDual" || def.kind === "propertyWildMulti") {
     return false;
   }
   return def.value > 0;

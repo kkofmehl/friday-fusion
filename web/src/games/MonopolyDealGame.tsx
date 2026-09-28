@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 import type {
   ClientEvent,
   MonopolyDealCardInstance,
@@ -106,6 +107,16 @@ export function MonopolyDealGame({
       nameNode={nameNode}
     />
   );
+}
+
+function playerOwesPayment(
+  pending: Extract<MonopolyDealState, { status: "playing" }>["pendingResolution"],
+  participantId: string
+): boolean {
+  if (!pending || pending.kind !== "collectPayment") {
+    return false;
+  }
+  return pending.openPayerIds ? pending.openPayerIds.includes(participantId) : pending.payerId === participantId;
 }
 
 function layColorsForCard(card: MonopolyDealCardInstance | undefined): MonopolyDealPropertyColor[] {
@@ -403,11 +414,13 @@ function MonopolyDealPlayingView({
     send({ type: "monopolyDeal:submitPayment", payload: { cards: [] } });
   };
 
+  const owesPayment = playerOwesPayment(pending, currentParticipantId);
+
   useEffect(() => {
-    if (pending?.kind !== "collectPayment" || pending.payerId !== currentParticipantId) {
+    if (!owesPayment) {
       setPaymentSelection([]);
     }
-  }, [pending, currentParticipantId]);
+  }, [owesPayment]);
 
   const opponentBoards = game.boards.filter((board) => board.participantId !== currentParticipantId);
   const propertyPickTargetId =
@@ -456,40 +469,60 @@ function MonopolyDealPlayingView({
         </div>
       </div>
 
-      {pending?.kind === "collectPayment" && pending.payerId === currentParticipantId ? (
-        <div className="md-modal md-modal--paying">
-          <h3>
-            Pay {pending.amountDue}M to <PlayerName participantId={pending.payeeId} participants={session.participants} size="sm" inline />
-          </h3>
-          <p>{pending.reason}</p>
-          <PaymentPicker
-            board={myBoard}
-            selection={paymentSelection}
-            amountDue={pending.amountDue}
-            onToggle={(ref) => {
-              setPaymentSelection((prev) => {
-                const key = `${ref.zone}:${ref.propertyColor ?? ""}:${ref.instanceId}`;
-                const exists = prev.some(
-                  (r) => `${r.zone}:${r.propertyColor ?? ""}:${r.instanceId}` === key
-                );
-                if (exists) {
-                  return prev.filter((r) => `${r.zone}:${r.propertyColor ?? ""}:${r.instanceId}` !== key);
-                }
-                return [...prev, ref];
-              });
-            }}
-          />
-          <div className="md-payment-actions">
-            <button type="button" className="md-btn" disabled={!canSubmitPayment} onClick={submitPayment}>
-              Pay selected
-            </button>
-            {!mustPaySomething ? (
-              <button type="button" className="md-btn md-btn--ghost" onClick={skipPayment}>
-                Pay nothing
-              </button>
-            ) : null}
-          </div>
-        </div>
+      {pending?.kind === "collectPayment" && owesPayment
+        ? createPortal(
+            <div className="md-pay-overlay" role="dialog" aria-modal="true" aria-label={pending.reason}>
+              <div className="md-modal md-modal--paying">
+                <h3>
+                  Pay {pending.amountDue}M to{" "}
+                  <PlayerName participantId={pending.payeeId} participants={session.participants} size="sm" inline />
+                </h3>
+                <p>{pending.reason}</p>
+                {pending.openPayerIds && pending.openPayerIds.length > 1 ? (
+                  <p className="md-payment-hint">Everyone who owes can pay at the same time.</p>
+                ) : null}
+                <PaymentPicker
+                  board={myBoard}
+                  selection={paymentSelection}
+                  amountDue={pending.amountDue}
+                  onToggle={(ref) => {
+                    setPaymentSelection((prev) => {
+                      const key = `${ref.zone}:${ref.propertyColor ?? ""}:${ref.instanceId}`;
+                      const exists = prev.some(
+                        (r) => `${r.zone}:${r.propertyColor ?? ""}:${r.instanceId}` === key
+                      );
+                      if (exists) {
+                        return prev.filter((r) => `${r.zone}:${r.propertyColor ?? ""}:${r.instanceId}` !== key);
+                      }
+                      return [...prev, ref];
+                    });
+                  }}
+                />
+                <div className="md-payment-actions">
+                  <button type="button" className="md-btn" disabled={!canSubmitPayment} onClick={submitPayment}>
+                    Pay selected
+                  </button>
+                  {!mustPaySomething ? (
+                    <button type="button" className="md-btn md-btn--ghost" onClick={skipPayment}>
+                      Pay nothing
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : pending?.kind === "collectPayment" && pending.openPayerIds && pending.openPayerIds.length > 0 ? (
+        <p className="md-payment-hint md-payment-waiting">
+          Waiting for{" "}
+          {pending.openPayerIds.map((id, index) => (
+            <span key={id}>
+              {index > 0 ? ", " : null}
+              <PlayerName participantId={id} participants={session.participants} size="sm" inline />
+            </span>
+          ))}{" "}
+          to pay {pending.amountDue}M ({pending.reason}).
+        </p>
       ) : null}
 
       {justSayNoPending || game.justSayNoLate ? (

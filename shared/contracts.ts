@@ -1113,7 +1113,9 @@ export const monopolyDealPendingResolutionSchema = z.discriminatedUnion("kind", 
     payeeId: z.string(),
     amountDue: z.number().int().nonnegative(),
     reason: z.string(),
-    queueRemaining: z.array(z.string())
+    queueRemaining: z.array(z.string()),
+    /** When set, these players may pay at the same time. Absent for one-at-a-time charges. */
+    openPayerIds: z.array(z.string()).optional()
   }),
   z.object({
     kind: z.literal("selectTarget"),

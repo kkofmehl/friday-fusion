@@ -512,19 +512,16 @@ const executePendingAction = (game: MonopolyDealGameInternal, action: MonopolyDe
         const reason = action.chargeAll
           ? `Rent (${action.rentColor}) — all players`
           : `Rent (${action.rentColor})`;
-        startPayment(game, action.targetId, action.actorId, amount, reason, action.queueRemaining ?? []);
+        if (action.chargeAll) {
+          startChargeAllPayment(game, action, amount, reason);
+        } else {
+          startPayment(game, action.targetId, action.actorId, amount, reason);
+        }
       }
       break;
     }
     case "itsMyBirthday":
-      startPayment(
-        game,
-        action.targetId!,
-        action.actorId,
-        BIRTHDAY_PAYMENT,
-        "It's My Birthday",
-        action.queueRemaining ?? []
-      );
+      startChargeAllPayment(game, action, BIRTHDAY_PAYMENT, "It's My Birthday");
       break;
     default:
       break;
@@ -859,17 +856,48 @@ export const monopolyDealMoveWild = (
   logAction(game, participantId, `moved a Property Wild Card to ${colorLabel(toColor)}`);
 };
 
+const startChargeAllPayment = (
+  game: MonopolyDealGameInternal,
+  action: MonopolyDealPendingAction,
+  amountDue: number,
+  reason: string
+): void => {
+  const payers = [action.targetId, ...(action.queueRemaining ?? [])].filter((id): id is string => Boolean(id));
+  const firstPayer = payers[0];
+  if (!firstPayer) {
+    return;
+  }
+  startPayment(game, firstPayer, action.actorId, amountDue, reason, [], payers);
+};
+
 const startPayment = (
   game: MonopolyDealGameInternal,
   payerId: string,
   payeeId: string,
   amountDue: number,
   reason: string,
-  queueRemaining: string[] = []
+  queueRemaining: string[] = [],
+  openPayerIds?: string[]
 ): void => {
   clearPendingActionRestore(game);
-  game.pendingResolution = { kind: "collectPayment", payerId, payeeId, amountDue, reason, queueRemaining };
+  game.pendingResolution = {
+    kind: "collectPayment",
+    payerId,
+    payeeId,
+    amountDue,
+    reason,
+    queueRemaining,
+    ...(openPayerIds ? { openPayerIds } : {})
+  };
 };
+
+const payerOwes = (
+  resolution: Extract<MonopolyDealPendingResolution, { kind: "collectPayment" }>,
+  participantId: string
+): boolean =>
+  resolution.openPayerIds
+    ? resolution.openPayerIds.includes(participantId)
+    : resolution.payerId === participantId;
 
 const transferPayment = (
   game: MonopolyDealGameInternal,
@@ -923,12 +951,22 @@ export const monopolyDealSubmitPayment = (
   if (!resolution || resolution.kind !== "collectPayment") {
     throw new Error("No payment due.");
   }
-  if (resolution.payerId !== participantId) {
+  if (!payerOwes(resolution, participantId)) {
     throw new Error("Not your payment.");
   }
+  const finishPayer = (): void => {
+    if (!resolution.openPayerIds) {
+      game.pendingResolution = null;
+      advancePaymentQueue(game, resolution.payeeId, resolution.queueRemaining, resolution.amountDue, resolution.reason);
+      return;
+    }
+    const remaining = resolution.openPayerIds.filter((id) => id !== participantId);
+    const nextPayer = remaining[0];
+    game.pendingResolution =
+      nextPayer ? { ...resolution, payerId: nextPayer, openPayerIds: remaining } : null;
+  };
   if (resolution.amountDue <= 0) {
-    game.pendingResolution = null;
-    advancePaymentQueue(game, resolution.payeeId, resolution.queueRemaining, resolution.amountDue, resolution.reason);
+    finishPayer();
     return;
   }
   if (refs.length === 0) {
@@ -939,8 +977,7 @@ export const monopolyDealSubmitPayment = (
       amount: 0,
       reason: resolution.reason
     });
-    game.pendingResolution = null;
-    advancePaymentQueue(game, resolution.payeeId, resolution.queueRemaining, resolution.amountDue, resolution.reason);
+    finishPayer();
     return;
   }
   const payerBoard = getBoard(game, participantId);
@@ -959,12 +996,12 @@ export const monopolyDealSubmitPayment = (
     amount: validated.total,
     reason: resolution.reason
   });
-  game.pendingResolution = null;
   checkWins(game);
   if (game.status !== "playing") {
+    game.pendingResolution = null;
     return;
   }
-  advancePaymentQueue(game, resolution.payeeId, resolution.queueRemaining, resolution.amountDue, resolution.reason);
+  finishPayer();
 };
 
 const stealProperty = (
@@ -1845,16 +1882,22 @@ const releaseLeavingPlayer = (game: MonopolyDealGameInternal, participantId: str
   }
 
   if (pending.kind === "collectPayment") {
-    const queue = pending.queueRemaining.filter((id) => id !== participantId);
     if (pending.payeeId === participantId) {
       game.pendingResolution = null;
-    } else if (pending.payerId === participantId) {
-      const nextPayer = queue[0];
-      game.pendingResolution = nextPayer
-        ? { ...pending, payerId: nextPayer, queueRemaining: queue.slice(1) }
-        : null;
+    } else if (pending.openPayerIds) {
+      const open = pending.openPayerIds.filter((id) => id !== participantId);
+      const nextPayer = open[0];
+      game.pendingResolution = nextPayer ? { ...pending, payerId: nextPayer, openPayerIds: open } : null;
     } else {
-      game.pendingResolution = { ...pending, queueRemaining: queue };
+      const queue = pending.queueRemaining.filter((id) => id !== participantId);
+      if (pending.payerId === participantId) {
+        const nextPayer = queue[0];
+        game.pendingResolution = nextPayer
+          ? { ...pending, payerId: nextPayer, queueRemaining: queue.slice(1) }
+          : null;
+      } else {
+        game.pendingResolution = { ...pending, queueRemaining: queue };
+      }
     }
   } else if (pending.kind === "justSayNo") {
     const involved =

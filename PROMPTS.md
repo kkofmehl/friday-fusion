@@ -138,3 +138,19 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-09-28:** Make the host "End current turn" button more subtle, and place it just to the right of the draw pile card count.
+
+---
+
+**2026-09-28:** Double-clicking a two-color wild card puts it in the cash pile. Property cards, including wilds, should not be able to be banked as cash.
+
+---
+
+**2026-09-28:** When It's My Birthday is played, players currently take turns paying. All players should be able to pay at the same time.
+
+---
+
+**2026-09-28:** It's My Birthday still only showed a pay action to one player in a 3-player game. After that player paid, the other never got a prompt and the game stuck.
+
+---
+
+**2026-09-28:** It's My Birthday simultaneous payment works. Extend it to rent cards that charge all players; those payments are still collected one player at a time.

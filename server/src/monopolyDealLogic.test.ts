@@ -19,7 +19,7 @@ import {
   type PlayerBoard,
   type PlacedPropertyCard
 } from "../../shared/monopolyDealLogic";
-import { getCardDef } from "../../shared/monopolyDealData";
+import { canBankCard, getCardDef } from "../../shared/monopolyDealData";
 
 const boardWithSet = (
   color: "brown" | "darkBlue",
@@ -34,6 +34,20 @@ const boardWithSet = (
       hotel: extras?.hotel ?? false
     }
   }
+});
+
+describe("canBankCard", () => {
+  it("allows money, action, and rent cards", () => {
+    expect(canBankCard(getCardDef("money-1m-0"))).toBe(true);
+    expect(canBankCard(getCardDef("action-passGo-0"))).toBe(true);
+    expect(canBankCard(getCardDef("rent-red-yellow-0"))).toBe(true);
+  });
+
+  it("rejects properties and wilds, including two-color wilds", () => {
+    expect(canBankCard(getCardDef("prop-brown-mediterranean"))).toBe(false);
+    expect(canBankCard(getCardDef("wild-red-yellow-0"))).toBe(false);
+    expect(canBankCard(getCardDef("wild-multi-0"))).toBe(false);
+  });
 });
 
 describe("monopolyDealLogic", () => {

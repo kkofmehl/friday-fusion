@@ -15,7 +15,7 @@ export function getCardHelpText(def: MonopolyDealCardDef): string {
     return `Lay in your property area as ${PROPERTY_COLOR_LABELS[def.color]}. Charge rent based on how many you own in that color.`;
   }
   if (def.kind === "propertyWildDual" && def.colors) {
-    return `Wild property — use as ${colorList(def.colors)}. Flip or move it during your turn (costs 1 play).`;
+    return `Wild property — use as ${colorList(def.colors)}. Flip or move it during your turn (costs 1 play). Cannot be banked.`;
   }
   if (def.kind === "propertyWildMulti") {
     return "Wild property — use as any color. Moving it between sets costs 1 play. Cannot be banked.";
