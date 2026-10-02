@@ -140,6 +140,26 @@ describe("SplendorGame", () => {
       />
     );
     expect(screen.getByText(/Winner!/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Play again/i })).toBeTruthy();
+  });
+
+  it("tells non-hosts that the host restarts the game", () => {
+    render(
+      <SplendorGame
+        session={baseSession({
+          status: "finished",
+          winnerParticipantIds: ["b"],
+          players: playingState().players,
+          prestigeByParticipant: { a: 10, b: 16 }
+        })}
+        currentParticipantId="a"
+        isHost={false}
+        canPlay
+        send={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/host can start another game/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Play again/i })).toBeNull();
   });
 
   it("shows compact opponent strip and a full board for the current player", () => {

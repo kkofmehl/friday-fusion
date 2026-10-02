@@ -237,3 +237,9 @@
 
 121. User asked to search the repo for prompt banks / used flags, voting UI + tallying, round/lobby config, FF points awarding, and activities with submit→reveal→vote→score (closest to "Bad Advice").
 122. User requested adding a new **Bad Advice** activity: shared advice-seeking prompt per round, everyone submits worst advice, peer vote for favorite, winner(s) get +1 FF; host sets round count before start; 50 prompts with usage flags to prefer unused before repeating. Assistant implemented contracts/attributes, prompt bank + loader, sessionService lifecycle + WS handlers, lobby round picker, BadAdviceGame UI, tests, and prompt log update.
+
+## 2026-10-01
+
+123. User requested a visual and interaction overhaul of the existing Splendor game: premium tabletop presentation, gemstone design tokens, redesigned cards, tokens, and nobles, micro-animations, a presentation layer separated from game rules, in-game notices, a polished results screen, responsive layout, and reduced-motion support, without changing gameplay or replacing the React app.
+124. User reported the Splendor UI looked unchanged; the running app on port 3000 was serving a stale `web/dist` bundle. Rebuilt the web app.
+125. User reported development-card cost icons bleeding past the card edge. Kept the cost row inside the card by letting the gem art shrink and giving the cost footer a fixed place in the card height.
