@@ -245,3 +245,8 @@
 125. User reported development-card cost icons bleeding past the card edge. Kept the cost row inside the card by letting the gem art shrink and giving the cost footer a fixed place in the card height.
 126. User asked to apply the Splendor visual treatment, in general, to the prompt-and-button games: Two Truths, Trivia, Would You Rather, Icebreaker, Guess Who Said It, 20 Questions, Caption This, Bad Advice, Madlibs, Story Builder, and Wordle. Added a scoped warm play stage without changing game rules, then rebuilt the web bundle.
 127. User reported play-stage text (`#f4efe6`) was too light to read. Switched play-stage body/heading text to dark ink on a cream surface and rebuilt the web bundle.
+
+## 2026-10-07
+
+128. User requested allowing non-host players to select up to 3 different games they want to play (previously limited to one). Assistant changed `lobbyGamePreferences` to `Record<participantId, GameType[]>`, made `lobby:setGamePreference` toggle with a max of 3, updated LobbyScreen guest/host UI, migrated legacy string prefs on load, and updated tests.
+129. User reported "Invalid websocket event received" on Play this!, concatenated host preference text, and missing selection highlights. Cause was stale `web/dist` on :3000 still expecting a single game string; rebuilt the web bundle and hardened LobbyScreen preference list formatting.

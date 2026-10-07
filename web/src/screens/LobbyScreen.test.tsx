@@ -78,7 +78,7 @@ describe("LobbyScreen", () => {
     render(
       <LobbyScreen
         session={buildSession({
-          lobbyGamePreferences: { p2: "trivia" }
+          lobbyGamePreferences: { p2: ["trivia", "hangman", "wordle"] }
         })}
         currentParticipantId="p1"
         isHost
@@ -87,7 +87,7 @@ describe("LobbyScreen", () => {
     );
 
     const list = screen.getByRole("list", { name: /what guests want to play next/i });
-    expect(list.textContent).toContain("Bob wants to play Trivia");
+    expect(list.textContent).toContain("Bob wants to play Trivia, Hangman, and Wordle Race");
   });
 
   it("sends Would You Rather setup including submission toggle", () => {
@@ -141,6 +141,30 @@ describe("LobbyScreen", () => {
       type: "lobby:setGamePreference",
       payload: { game: "captionThis" }
     });
+  });
+
+  it("highlights selected guest preferences and disables unselected games at the limit", () => {
+    render(
+      <LobbyScreen
+        session={buildSession({
+          lobbyGamePreferences: { p2: ["trivia", "hangman", "wordle"] }
+        })}
+        currentParticipantId="p2"
+        isHost={false}
+        send={vi.fn()}
+      />
+    );
+
+    const triviaTile = screen.getByRole("heading", { name: "Trivia" }).closest("article");
+    const captionTile = screen.getByRole("heading", { name: /Caption This/ }).closest("article");
+    if (!triviaTile || !captionTile) throw new Error("expected guest tiles");
+
+    expect(within(triviaTile).getByRole("button", { name: "Play this!" }).className).toContain(
+      "is-selected"
+    );
+    const captionButton = within(captionTile).getByRole("button", { name: "Play this!" });
+    expect(captionButton).toHaveProperty("disabled", true);
+    expect(captionButton.getAttribute("title")).toContain("up to 3 games");
   });
 
   it("renders compact guest tiles without attribute legend or mode pickers", () => {

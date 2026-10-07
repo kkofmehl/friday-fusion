@@ -28,6 +28,9 @@ export const gameTypeSchema = z.enum([
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
+/** Max games a non-host guest can mark as wanting to play in the lobby. */
+export const MAX_LOBBY_GAME_PREFERENCES = 3;
+
 export const participantSchema = z.object({
   id: z.string(),
   displayName: z.string().min(1),
@@ -1850,8 +1853,8 @@ export const sessionStateSchema = z.object({
   participants: z.array(participantSchema),
   activeGame: gameTypeSchema.nullable(),
   gameState: gameStateSchema.nullable(),
-  /** Non-host lobby votes for which game to play next (participantId -> game); absent or empty when unavailable. */
-  lobbyGamePreferences: z.record(z.string(), gameTypeSchema).optional(),
+  /** Non-host lobby votes for which games to play next (participantId -> up to 3 games); absent or empty when unavailable. */
+  lobbyGamePreferences: z.record(z.string(), z.array(gameTypeSchema).max(MAX_LOBBY_GAME_PREFERENCES)).optional(),
   /** Host-planned upcoming games for the session; absent when empty. */
   sessionGameQueue: z.array(queuedGameSchema).optional(),
   /** When set, the host is editing this participant's score (broadcast to all clients). */

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   type ApplesToApplesMode,
+  MAX_LOBBY_GAME_PREFERENCES,
   PICTORY_ROUND_DURATION_DEFAULT_MS,
   PICTORY_ROUND_DURATION_MAX_MS,
   PICTORY_ROUND_DURATION_MIN_MS,
@@ -313,9 +314,21 @@ export function LobbyScreen({
   };
 
   const lobbyPrefs = session.lobbyGamePreferences ?? {};
+  const prefsFor = (participantId: string): GameType[] => {
+    const value = lobbyPrefs[participantId];
+    return Array.isArray(value) ? value : [];
+  };
+  const myPrefs = prefsFor(currentParticipantId);
   const preferenceRows = [...session.participants]
-    .filter((p) => lobbyPrefs[p.id])
+    .filter((p) => prefsFor(p.id).length > 0)
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  const formatPreferredGameTitles = (gameIds: GameType[]): string => {
+    const titles = gameIds.map((gid) => GAMES.find((g) => g.id === gid)?.title ?? gid);
+    if (titles.length <= 1) return titles[0] ?? "";
+    if (titles.length === 2) return `${titles[0]} and ${titles[1]}`;
+    return `${titles.slice(0, -1).join(", ")}, and ${titles[titles.length - 1]}`;
+  };
 
   return (
     <div className="lobby-grid">
@@ -336,11 +349,10 @@ export function LobbyScreen({
           {isHost && preferenceRows.length > 0 && (
             <ul className="lobby-next-game-votes" aria-label="What guests want to play next">
               {preferenceRows.map((p) => {
-                const gid = lobbyPrefs[p.id]!;
-                const title = GAMES.find((g) => g.id === gid)?.title ?? gid;
+                const games = prefsFor(p.id);
                 return (
                   <li key={p.id}>
-                    <strong>{p.displayName}</strong> wants to play {title}
+                    <strong>{p.displayName}</strong> wants to play {formatPreferredGameTitles(games)}
                   </li>
                 );
               })}
@@ -741,43 +753,53 @@ export function LobbyScreen({
             </>
           ) : (
             <div className="game-grid-compact">
-              {GAMES.map((game) => (
-                <article key={game.id} className="game-tile-compact">
-                  <LobbyGameInfoTooltip
-                    gameTitle={game.title}
-                    description={game.description}
-                    attributes={getGameAttributes(game.id)}
-                    beta={game.beta}
-                  />
-                  <div className="game-tile-compact-body">
-                    <div className="game-tile-compact-icon" aria-hidden="true">
-                      <img className="game-tile-compact-icon-img" src={game.iconSrc} alt="" loading="lazy" />
+              {GAMES.map((game) => {
+                const isSelected = myPrefs.includes(game.id);
+                const atPreferenceLimit = !isSelected && myPrefs.length >= MAX_LOBBY_GAME_PREFERENCES;
+                const preferenceDisabled = !canInteractAsGuest || atPreferenceLimit;
+                const preferenceTitle = !canInteractAsGuest
+                  ? "You are benched and cannot vote from the lobby."
+                  : atPreferenceLimit
+                    ? `You can pick up to ${MAX_LOBBY_GAME_PREFERENCES} games.`
+                    : undefined;
+                return (
+                  <article key={game.id} className="game-tile-compact">
+                    <LobbyGameInfoTooltip
+                      gameTitle={game.title}
+                      description={game.description}
+                      attributes={getGameAttributes(game.id)}
+                      beta={game.beta}
+                    />
+                    <div className="game-tile-compact-body">
+                      <div className="game-tile-compact-icon" aria-hidden="true">
+                        <img className="game-tile-compact-icon-img" src={game.iconSrc} alt="" loading="lazy" />
+                      </div>
+                      <div className="game-tile-compact-main">
+                        <h3 className="game-tile-compact-title">
+                          {game.title}
+                          {game.beta ? (
+                            <>
+                              {" "}
+                              <GameBetaBadge />
+                            </>
+                          ) : null}
+                        </h3>
+                        <button
+                          type="button"
+                          className={`btn btn-secondary btn-sm lobby-want-game${
+                            isSelected ? " is-selected" : ""
+                          }`}
+                          disabled={preferenceDisabled}
+                          title={preferenceTitle}
+                          onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
+                        >
+                          Play this!
+                        </button>
+                      </div>
                     </div>
-                    <div className="game-tile-compact-main">
-                      <h3 className="game-tile-compact-title">
-                        {game.title}
-                        {game.beta ? (
-                          <>
-                            {" "}
-                            <GameBetaBadge />
-                          </>
-                        ) : null}
-                      </h3>
-                      <button
-                        type="button"
-                        className={`btn btn-secondary btn-sm lobby-want-game${
-                          lobbyPrefs[currentParticipantId] === game.id ? " is-selected" : ""
-                        }`}
-                        disabled={!canInteractAsGuest}
-                        title={!canInteractAsGuest ? "You are benched and cannot vote from the lobby." : undefined}
-                        onClick={() => send({ type: "lobby:setGamePreference", payload: { game: game.id } })}
-                      >
-                        Play this!
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

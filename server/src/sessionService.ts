@@ -32,6 +32,7 @@ import {
   WORDLE_MAX_GUESSES,
   WORDLE_WORD_LENGTH,
   gameTypeSchema,
+  MAX_LOBBY_GAME_PREFERENCES,
   type GameStartOptions,
   type GameType,
   type HangmanActivity,
@@ -712,22 +713,37 @@ type SessionInternal = {
   participants: ParticipantInternal[];
   games: GameInternal[];
   updatedAt: number;
-  lobbyGamePreferences: Record<string, GameType>;
+  lobbyGamePreferences: Record<string, GameType[]>;
   sessionGameQueue: QueuedGame[];
   /** Ephemeral: host score edit in progress; not persisted to disk. */
   scoreEditingParticipantId?: string;
 };
 
+const normalizeLobbyGamePreferenceList = (value: unknown): GameType[] => {
+  const asList = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const out: GameType[] = [];
+  for (const entry of asList) {
+    const parsed = gameTypeSchema.safeParse(entry);
+    if (parsed.success && !out.includes(parsed.data)) {
+      out.push(parsed.data);
+      if (out.length >= MAX_LOBBY_GAME_PREFERENCES) break;
+    }
+  }
+  return out;
+};
+
 const pruneLobbyGamePreferences = (
   session: SessionInternal,
-  prefs: Record<string, GameType> | undefined
-): Record<string, GameType> => {
+  prefs: Record<string, GameType[] | GameType> | undefined
+): Record<string, GameType[]> => {
   const raw = prefs ?? {};
-  const out: Record<string, GameType> = {};
-  for (const [participantId, game] of Object.entries(raw)) {
+  const out: Record<string, GameType[]> = {};
+  for (const [participantId, value] of Object.entries(raw)) {
     const p = session.participants.find((x) => x.id === participantId);
-    if (p && !p.isHost && participantIsActive(p) && gameTypeSchema.safeParse(game).success) {
-      out[participantId] = game as GameType;
+    if (!p || p.isHost || !participantIsActive(p)) continue;
+    const games = normalizeLobbyGamePreferenceList(value);
+    if (games.length > 0) {
+      out[participantId] = games;
     }
   }
   return out;
@@ -2074,8 +2090,17 @@ export class SessionService {
             ? [ensureGameShape(legacy.game as GameInternal)]
             : [];
         const legacyPrefs = legacy as SessionInternal & {
-          lobbyGamePreferences?: Record<string, GameType>;
+          lobbyGamePreferences?: Record<string, GameType[] | GameType>;
         };
+        const migratedPrefs: Record<string, GameType[]> = {};
+        if (legacyPrefs.lobbyGamePreferences && typeof legacyPrefs.lobbyGamePreferences === "object") {
+          for (const [participantId, value] of Object.entries(legacyPrefs.lobbyGamePreferences)) {
+            const games = normalizeLobbyGamePreferenceList(value);
+            if (games.length > 0) {
+              migratedPrefs[participantId] = games;
+            }
+          }
+        }
         const migrated: SessionInternal = {
           sessionId: session.sessionId,
           sessionName:
@@ -2088,10 +2113,7 @@ export class SessionService {
           participants: session.participants ?? [],
           games,
           updatedAt: session.updatedAt ?? Date.now(),
-          lobbyGamePreferences:
-            legacyPrefs.lobbyGamePreferences && typeof legacyPrefs.lobbyGamePreferences === "object"
-              ? { ...legacyPrefs.lobbyGamePreferences }
-              : {},
+          lobbyGamePreferences: migratedPrefs,
           sessionGameQueue: Array.isArray((legacy as SessionInternal).sessionGameQueue)
             ? [...(legacy as SessionInternal).sessionGameQueue]
             : []
@@ -2273,7 +2295,20 @@ export class SessionService {
     if (session.participants.some((p) => p.id === participantId && p.isHost)) {
       throw new Error("Host cannot set a game preference.");
     }
-    session.lobbyGamePreferences[participantId] = game;
+    const current = [...(session.lobbyGamePreferences[participantId] ?? [])];
+    const existingIndex = current.indexOf(game);
+    if (existingIndex >= 0) {
+      current.splice(existingIndex, 1);
+    } else if (current.length >= MAX_LOBBY_GAME_PREFERENCES) {
+      throw new Error(`You can select up to ${MAX_LOBBY_GAME_PREFERENCES} games.`);
+    } else {
+      current.push(game);
+    }
+    if (current.length === 0) {
+      delete session.lobbyGamePreferences[participantId];
+    } else {
+      session.lobbyGamePreferences[participantId] = current;
+    }
     session.updatedAt = Date.now();
     await this.persist();
   }
