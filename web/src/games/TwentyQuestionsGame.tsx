@@ -77,7 +77,7 @@ export function TwentyQuestionsGame({
     };
 
     return (
-      <div className="twenty-questions card">
+      <div className="twenty-questions card play-stage">
         <header className="card-head">
           <h2>20 Questions</h2>
           <p className="mode-option-hint">
@@ -110,7 +110,7 @@ export function TwentyQuestionsGame({
   if (state.status === "finished") {
     const teamWon = state.outcome === "team";
     return (
-      <div className="twenty-questions card">
+      <div className="twenty-questions card play-stage">
         <header className="card-head">
           <h2>Round over</h2>
         </header>
@@ -148,7 +148,7 @@ export function TwentyQuestionsGame({
   };
 
   return (
-    <div className="twenty-questions card">
+    <div className="twenty-questions card play-stage">
       <header className="card-head">
         <h2>20 Questions</h2>
         <p className="mode-option-hint">

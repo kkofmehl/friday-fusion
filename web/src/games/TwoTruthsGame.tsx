@@ -104,7 +104,7 @@ export function TwoTruthsGame({
   const submittedActiveCount = Object.keys(truthState.submissions).filter((id) => activeRosterIds.has(id)).length;
 
   return (
-    <section className="card game-card-truths">
+    <section className="card game-card-truths play-stage">
       <header className="card-head">
         <h2>Two Truths and a Lie</h2>
         <span className={`pill pill-status pill-status-${truthState.status}`}>{statusLabel}</span>

@@ -126,7 +126,7 @@ export function TriviaGame({
 
   if (state.status === "idle" && !question) {
     return (
-      <section className="card game-card-trivia">
+      <section className="card game-card-trivia play-stage">
         <header className="card-head">
           <h2>Trivia</h2>
           <span className="pill pill-status pill-status-idle">Not started</span>
@@ -190,7 +190,7 @@ export function TriviaGame({
     const completedCalls = Math.min(state.loading?.completedCalls ?? 0, totalCalls);
     const percent = Math.round((completedCalls / totalCalls) * 100);
     return (
-      <section className="card game-card-trivia">
+      <section className="card game-card-trivia play-stage">
         <header className="card-head">
           <h2>Trivia</h2>
           <span className="pill pill-status pill-status-idle">Building round</span>
@@ -208,7 +208,7 @@ export function TriviaGame({
 
   if (state.status === "finished") {
     return (
-      <section className="card game-card-trivia">
+      <section className="card game-card-trivia play-stage">
         <header className="card-head">
           <h2>Trivia</h2>
           <span className="pill pill-status pill-status-finished">Finished</span>
@@ -228,7 +228,7 @@ export function TriviaGame({
   }
 
   return (
-    <section className="card game-card-trivia">
+    <section className="card game-card-trivia play-stage">
       <header className="card-head">
         <h2>Trivia</h2>
         <span className={`pill pill-status pill-status-${state.status}`}>{statusLabel}</span>

@@ -168,7 +168,7 @@ export function WordleGame({
 
   if (state.status === "idle") {
     return (
-      <section className="card wordle-game">
+      <section className="card wordle-game play-stage">
         <header className="card-head">
           <h2>Wordle Race</h2>
           <span className="pill pill-status">Idle</span>
@@ -197,7 +197,7 @@ export function WordleGame({
     const seconds = Math.min(3, Math.ceil(msLeft / 1000) || 1);
     const display = msLeft <= 0 ? "Go!" : String(seconds);
     return (
-      <section className="card wordle-game wordle-game--countdown">
+      <section className="card wordle-game play-stage wordle-game--countdown">
         <header className="card-head">
           <h2>Wordle Race</h2>
           <span className="pill pill-status">Countdown</span>
@@ -212,7 +212,7 @@ export function WordleGame({
 
   if (state.status === "roundComplete") {
     return (
-      <section className="card wordle-game">
+      <section className="card wordle-game play-stage">
         <header className="card-head">
           <h2>Wordle Race</h2>
           <span className="pill pill-status">Round complete</span>
@@ -294,7 +294,7 @@ export function WordleGame({
   });
 
   return (
-    <section className="card wordle-game">
+    <section className="card wordle-game play-stage">
       <header className="card-head">
         <h2>Wordle Race</h2>
         <span className="pill pill-status">Racing · {formatElapsed(elapsedMs)}</span>

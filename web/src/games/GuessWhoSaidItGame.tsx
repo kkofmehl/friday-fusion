@@ -178,7 +178,7 @@ export function GuessWhoSaidItGame({
 
   if (state.status === "idle") {
     return (
-      <section className="card game-card-guess-who">
+      <section className="card game-card-guess-who play-stage">
         <header className="card-head">
           <h2>Guess Who Said It?</h2>
           <span className="pill pill-status pill-status-idle">{statusLabel}</span>
@@ -207,7 +207,7 @@ export function GuessWhoSaidItGame({
 
   if (state.status === "roundSummary") {
     return (
-      <section className="card game-card-guess-who">
+      <section className="card game-card-guess-who play-stage">
         <header className="card-head">
           <h2>Guess Who Said It?</h2>
           <span className="pill pill-status pill-status-finished">{statusLabel}</span>
@@ -248,7 +248,7 @@ export function GuessWhoSaidItGame({
     const mine = reveal.byVoter.find((v) => v.voterId === currentParticipantId);
     const isLastPrompt = state.currentQuestionIndex + 1 >= state.totalQuestions;
     return (
-      <section className="card game-card-guess-who">
+      <section className="card game-card-guess-who play-stage">
         <header className="card-head">
           <h2>Guess Who Said It?</h2>
           <span className="pill pill-status pill-status-revealing">{statusLabel}</span>
@@ -339,7 +339,7 @@ export function GuessWhoSaidItGame({
 
   if (state.status === "votingReady") {
     return (
-      <section className="card game-card-guess-who">
+      <section className="card game-card-guess-who play-stage">
         <header className="card-head">
           <h2>Guess Who Said It?</h2>
           <span className="pill pill-status pill-status-collecting">{statusLabel}</span>
@@ -363,7 +363,7 @@ export function GuessWhoSaidItGame({
 
   if (state.status === "voting") {
     return (
-      <section className="card game-card-guess-who">
+      <section className="card game-card-guess-who play-stage">
         <header className="card-head">
           <h2>Guess Who Said It?</h2>
           <span className="pill pill-status pill-status-voting">{statusLabel}</span>
@@ -429,7 +429,7 @@ export function GuessWhoSaidItGame({
   }
 
   return (
-    <section className="card game-card-guess-who">
+    <section className="card game-card-guess-who play-stage">
       <header className="card-head">
         <h2>Guess Who Said It?</h2>
         <span className={`pill pill-status pill-status-${state.status}`}>{statusLabel}</span>

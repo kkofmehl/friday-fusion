@@ -40,7 +40,7 @@ export function StoryBuilderGame({
 
   if (game.status === "complete") {
     return (
-      <div className="story-builder card">
+      <div className="story-builder card play-stage">
         <header className="card-head">
           <h2>Story Builder</h2>
           <p className="mode-option-hint">The full story</p>
@@ -90,7 +90,7 @@ export function StoryBuilderGame({
     && (game.mode === "stock" || game.sentenceCount > 0);
 
   return (
-    <div className="story-builder card">
+    <div className="story-builder card play-stage">
       <header className="card-head">
         <h2>Story Builder</h2>
         <p className="mode-option-hint">

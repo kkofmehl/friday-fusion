@@ -120,7 +120,7 @@ export function CaptionThisGame({
   if (state.status === "waitingForImage") {
     const isProvider = currentParticipantId === state.imageProviderId;
     return (
-      <section className="card card-game-inner" onPaste={handlePasteImage}>
+      <section className="card card-game-inner play-stage" onPaste={handlePasteImage}>
         <header className="card-head">
           <h2>Caption This</h2>
           <span className="pill pill-muted">Round {state.roundNumber}</span>
@@ -195,7 +195,7 @@ export function CaptionThisGame({
   if (state.status === "collectingCaptions") {
     const mineSubmitted = state.submittedCaptionParticipantIds.includes(currentParticipantId);
     return (
-      <section className="card card-game-inner">
+      <section className="card card-game-inner play-stage">
         <header className="card-head">
           <h2>Caption This</h2>
           <span className="pill pill-muted">Round {state.roundNumber}</span>
@@ -251,7 +251,7 @@ export function CaptionThisGame({
 
   if (state.status === "voting") {
     return (
-      <section className="card card-game-inner">
+      <section className="card card-game-inner play-stage">
         <header className="card-head">
           <h2>Vote</h2>
           <span className="pill pill-muted">Round {state.roundNumber}</span>
@@ -300,7 +300,7 @@ export function CaptionThisGame({
   // results
   const sorted = [...state.tallies].sort((a, b) => b.voteCount - a.voteCount);
   return (
-    <section className="card card-game-inner">
+    <section className="card card-game-inner play-stage">
       <header className="card-head">
         <h2>Results</h2>
         <span className="pill pill-muted">Round {state.roundNumber}</span>

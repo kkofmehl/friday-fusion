@@ -1,0 +1,271 @@
+.play-stage {
+  --felt: #1b1815;
+  --felt-raised: #26221d;
+  --surface: #f6f1e7;
+  --ink: #241e18;
+  --muted: #5c5348;
+  --muted-on-felt: #6b6258;
+  --line: rgba(36, 30, 24, 0.14);
+  --line-strong: rgba(36, 30, 24, 0.28);
+  --gold: #c6a15b;
+  --gold-deep: #8c6a32;
+  --shadow: 0 10px 24px rgba(20, 14, 8, 0.22);
+  --shadow-soft: 0 4px 10px rgba(20, 14, 8, 0.16);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-display: Palatino, "Palatino Linotype", "Iowan Old Style", Georgia, serif;
+
+  color: var(--ink);
+  background:
+    radial-gradient(90% 70% at 50% 0%, rgba(255, 244, 220, 0.55), transparent 55%),
+    linear-gradient(180deg, #fffaf3, var(--surface));
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+}
+
+.play-stage > * {
+  animation: play-stage-enter 420ms var(--ease-out);
+}
+
+.play-stage .card-head h2,
+.play-stage .card-head h3,
+.play-stage h2,
+.play-stage h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.play-stage .card-head h2,
+.play-stage h2 {
+  font-size: 1.7rem;
+}
+
+.play-stage .mode-option-hint,
+.play-stage .wordle-sub,
+.play-stage .trivia-setup-note,
+.play-stage .guess-who-voting-hint,
+.play-stage .guess-who-voting-ready-msg,
+.play-stage .twenty-questions-hint,
+.play-stage .twenty-questions-muted,
+.play-stage .madlibs-waiting,
+.play-stage .icebreaker-paste-hint,
+.play-stage .icebreaker-finished-note,
+.play-stage .truths-hint {
+  color: var(--muted);
+}
+
+.play-stage .card-head h2,
+.play-stage .card-head h3,
+.play-stage h2,
+.play-stage h3,
+.play-stage label {
+  color: var(--ink);
+}
+
+.play-stage .pill,
+.play-stage .pill-status {
+  background: rgba(36, 30, 24, 0.06);
+  color: var(--gold-deep);
+  border: 1px solid rgba(140, 106, 50, 0.45);
+}
+
+.play-stage input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="range"]),
+.play-stage textarea,
+.play-stage select {
+  width: 100%;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.7rem;
+  box-shadow: inset 0 1px 2px rgba(20, 14, 8, 0.08);
+}
+
+.play-stage input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="range"]):focus,
+.play-stage textarea:focus,
+.play-stage select:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+.play-stage .btn {
+  border-radius: 999px;
+  min-height: 2.4rem;
+  transition:
+    transform 140ms var(--ease-out),
+    background 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
+}
+
+.play-stage .btn-primary {
+  color: #2a2112;
+  background: linear-gradient(180deg, #f0d7a2, var(--gold));
+  border-color: transparent;
+  box-shadow: var(--shadow-soft);
+}
+
+.play-stage .btn-ghost,
+.play-stage .btn-secondary {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line-strong);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.play-stage .btn-primary:hover:not(:disabled),
+.play-stage .btn-ghost:hover:not(:disabled),
+.play-stage .btn-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.play-stage .btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.play-stage .btn:disabled {
+  opacity: 0.4;
+}
+
+.play-stage .btn:focus-visible,
+.play-stage .trivia-option:focus-visible,
+.play-stage .wyr-main-option:focus-visible,
+.play-stage .truths-option:focus-visible,
+.play-stage .wordle-key:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.play-stage .trivia-option,
+.play-stage .wyr-main-option,
+.play-stage .truths-option,
+.play-stage .guess-who-slot-card,
+.play-stage .icebreaker-reveal-card,
+.play-stage .guess-who-reveal-card {
+  color: var(--ink);
+  background: linear-gradient(180deg, #fffaf3, var(--surface));
+  border: 1px solid var(--line-strong);
+  border-radius: 0.85rem;
+  box-shadow: var(--shadow-soft);
+  transition: transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+}
+
+.play-stage .trivia-option:hover:not(:disabled),
+.play-stage .wyr-main-option:hover:not(:disabled),
+.play-stage .truths-option:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 22px rgba(12, 8, 4, 0.22);
+}
+
+.play-stage .trivia-option:active:not(:disabled),
+.play-stage .wyr-main-option:active:not(:disabled),
+.play-stage .truths-option:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.play-stage .trivia-option.is-picked,
+.play-stage .wyr-main-option.is-picked,
+.play-stage .truths-option.is-selected {
+  box-shadow: 0 0 0 2px var(--gold), var(--shadow-soft);
+}
+
+.play-stage .trivia-option.is-correct,
+.play-stage .guess-who-your-row.is-correct,
+.play-stage .truths-reveal-list li.is-truth {
+  background: #e7f6ee;
+  border-color: #1f7a52;
+  color: var(--ink);
+}
+
+.play-stage .trivia-option.is-wrong,
+.play-stage .truths-reveal-list li.is-lie,
+.play-stage .truths-recap li.is-lie {
+  background: #f8e8e4;
+  border-color: #a33b3b;
+  color: var(--ink);
+}
+
+.play-stage .truths-recap li,
+.play-stage .wordle-standing-row,
+.play-stage .madlibs-submissions li,
+.play-stage .story-builder-byline li,
+.play-stage .guess-who-your-row,
+.play-stage .twenty-questions-log-list li {
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.play-stage .story-builder-reveal,
+.play-stage .story-builder-reveal p,
+.play-stage .madlibs-story,
+.play-stage .madlibs-story p,
+.play-stage .wordle-answer,
+.play-stage .icebreaker-question,
+.play-stage .trivia-prompt,
+.play-stage .guess-who-section-title,
+.play-stage .trivia-option,
+.play-stage .wyr-main-option,
+.play-stage .truths-option,
+.play-stage .guess-who-slot-card,
+.play-stage .icebreaker-reveal-card,
+.play-stage .guess-who-reveal-card,
+.play-stage .truths-recap li,
+.play-stage .wordle-standing-row,
+.play-stage .madlibs-submissions li,
+.play-stage .story-builder-byline li,
+.play-stage .guess-who-your-row,
+.play-stage .twenty-questions-log-list li {
+  color: var(--ink);
+}
+
+.play-stage .story-builder-reveal,
+.play-stage .madlibs-story,
+.play-stage .wordle-answer,
+.play-stage .icebreaker-question,
+.play-stage .trivia-prompt,
+.play-stage .guess-who-section-title {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.play-stage .wordle-countdown {
+  color: var(--gold-deep);
+  font-family: var(--font-display);
+}
+
+.play-stage .wordle-key:not(.is-correct):not(.is-present):not(.is-absent) {
+  color: var(--ink);
+  background: #fff;
+  border-color: transparent;
+  box-shadow: var(--shadow-soft);
+}
+
+.play-stage .wordle-key:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.play-stage .card-footer {
+  border-top-color: var(--line);
+}
+
+@keyframes play-stage-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-stage,
+  .play-stage * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

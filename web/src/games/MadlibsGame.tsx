@@ -39,7 +39,7 @@ export function MadlibsGame({
     };
 
     return (
-      <div className="madlibs card">
+      <div className="madlibs card play-stage">
         <header className="card-head">
           <h2>Madlibs</h2>
           <p className="mode-option-hint">
@@ -82,7 +82,7 @@ export function MadlibsGame({
   const isReader = currentParticipantId === game.readerParticipantId;
 
   return (
-    <div className="madlibs card">
+    <div className="madlibs card play-stage">
       <header className="card-head">
         <h2>Madlibs reveal</h2>
         <p className="mode-option-hint">Story: {game.templateTitle}</p>

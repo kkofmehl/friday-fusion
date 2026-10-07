@@ -107,7 +107,7 @@ export function WouldYouRatherGame({
     .map((participant) => participant.id);
 
   return (
-    <section className="card game-card-icebreaker">
+    <section className="card game-card-icebreaker play-stage">
       <header className="card-head">
         <h2>Would You Rather</h2>
         <span className={`pill pill-status pill-status-${state.status}`}>{statusLabel}</span>

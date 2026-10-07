@@ -28,6 +28,7 @@ import { WordleGame } from "../games/WordleGame";
 import { MonopolyDealGame } from "../games/MonopolyDealGame";
 import { MonopolyDealActionFeed } from "../games/monopolyDeal/ActionFeed";
 import { SplendorGame } from "../games/SplendorGame";
+import "../games/playStage.css";
 import { FriendlyFeudGame } from "../games/FriendlyFeudGame";
 import { BadAdviceGame } from "../games/BadAdviceGame";
 

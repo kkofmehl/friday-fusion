@@ -35,7 +35,7 @@ export function BadAdviceGame({
   if (state.status === "collecting") {
     const mineSubmitted = state.submittedParticipantIds.includes(currentParticipantId);
     return (
-      <section className="card card-game-inner">
+      <section className="card card-game-inner play-stage">
         <header className="card-head">
           <h2>Bad Advice</h2>
           <span className="pill pill-muted">
@@ -95,7 +95,7 @@ export function BadAdviceGame({
 
   if (state.status === "voting") {
     return (
-      <section className="card card-game-inner">
+      <section className="card card-game-inner play-stage">
         <header className="card-head">
           <h2>Vote</h2>
           <span className="pill pill-muted">
@@ -142,7 +142,7 @@ export function BadAdviceGame({
   if (state.status === "finished") {
     const sorted = [...state.tallies].sort((a, b) => b.voteCount - a.voteCount);
     return (
-      <section className="card card-game-inner">
+      <section className="card card-game-inner play-stage">
         <header className="card-head">
           <h2>Bad Advice complete</h2>
           <span className="pill pill-muted">{state.totalRounds} rounds</span>
@@ -178,7 +178,7 @@ export function BadAdviceGame({
   const sorted = [...state.tallies].sort((a, b) => b.voteCount - a.voteCount);
   const isLastRound = state.roundNumber >= state.totalRounds;
   return (
-    <section className="card card-game-inner">
+    <section className="card card-game-inner play-stage">
       <header className="card-head">
         <h2>Results</h2>
         <span className="pill pill-muted">

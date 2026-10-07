@@ -188,7 +188,7 @@ export function IcebreakerGame({
 
   if (state.status === "idle") {
     return (
-      <section className="card game-card-icebreaker">
+      <section className="card game-card-icebreaker play-stage">
         <header className="card-head">
           <h2>Icebreaker Questions</h2>
           <span className="pill pill-status pill-status-idle">{statusLabel}</span>
@@ -282,7 +282,7 @@ export function IcebreakerGame({
       );
 
     return (
-      <section className="card game-card-icebreaker">
+      <section className="card game-card-icebreaker play-stage">
         <header className="card-head">
           <h2>Icebreaker Questions</h2>
           <span className="pill pill-status pill-status-idle">{statusLabel}</span>
@@ -337,7 +337,7 @@ export function IcebreakerGame({
 
   if (state.status === "finished") {
     return (
-      <section className="card game-card-icebreaker">
+      <section className="card game-card-icebreaker play-stage">
         <header className="card-head">
           <h2>Icebreaker Questions</h2>
           <span className="pill pill-status pill-status-finished">{statusLabel}</span>
@@ -376,7 +376,7 @@ export function IcebreakerGame({
   }
 
   return (
-    <section className="card game-card-icebreaker">
+    <section className="card game-card-icebreaker play-stage">
       <header className="card-head">
         <h2>Icebreaker Questions</h2>
         <span className={`pill pill-status pill-status-${state.status}`}>{statusLabel}</span>
