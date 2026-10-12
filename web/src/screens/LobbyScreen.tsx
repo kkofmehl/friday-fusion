@@ -8,6 +8,7 @@ import {
   type ClientEvent,
   type GameType,
   type HangmanMode,
+  type WheelOfFortunePuzzleSource,
   type YahtzeeMode,
   type SessionState
 } from "../../../shared/contracts";
@@ -140,6 +141,14 @@ const GAMES: GameOption[] = [
     beta: true
   },
   {
+    id: "wheelOfFortune",
+    title: "Wheel of Fortune",
+    description:
+      "Spin the wheel, buy vowels, and solve four puzzles—then the money leader plays a bonus round. 2+ players.",
+    iconSrc: "/game_icons/wheel_of_fortune.svg",
+    beta: true
+  },
+  {
     id: "madlibs",
     title: "Madlibs",
     description: "Take turns filling prompts, then reveal a ridiculous story for a random reader.",
@@ -232,6 +241,8 @@ export function LobbyScreen({
   const [wouldYouRatherQuestions, setWouldYouRatherQuestions] = useState(10);
   const [wouldYouRatherAllowSubmissions, setWouldYouRatherAllowSubmissions] = useState(true);
   const [badAdviceRounds, setBadAdviceRounds] = useState(5);
+  const [wheelOfFortunePuzzleSource, setWheelOfFortunePuzzleSource] =
+    useState<WheelOfFortunePuzzleSource>("bank");
   const [storyBuilderMode, setStoryBuilderMode] = useState<"stock" | "scratch">("stock");
   const [storyBuilderFirstTurnId, setStoryBuilderFirstTurnId] = useState(() => {
     const host = session.participants.find((p) => p.isHost);
@@ -300,6 +311,7 @@ export function LobbyScreen({
     wouldYouRatherQuestions,
     wouldYouRatherAllowSubmissions,
     badAdviceRounds,
+    wheelOfFortunePuzzleSource,
     storyBuilderMode,
     storyBuilderFirstTurnId,
     memoryBoardSize
@@ -563,6 +575,31 @@ export function LobbyScreen({
                     onChange={(event) => setBadAdviceRounds(Number(event.target.value))}
                   />
                   <p className="mode-option-hint">1–50 rounds (default 5). Needs at least two players.</p>
+                </fieldset>
+              )}
+              {game.id === "wheelOfFortune" && (
+                <fieldset className="mode-picker">
+                  <legend className="mode-picker-label">Puzzle source</legend>
+                  <label className={`mode-option${wheelOfFortunePuzzleSource === "bank" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="wof-puzzle-source"
+                      checked={wheelOfFortunePuzzleSource === "bank"}
+                      onChange={() => setWheelOfFortunePuzzleSource("bank")}
+                    />
+                    <span className="mode-option-title">Puzzle bank</span>
+                    <span className="mode-option-hint">Auto-pick four rounds + a bonus from the curated bank.</span>
+                  </label>
+                  <label className={`mode-option${wheelOfFortunePuzzleSource === "custom" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="wof-puzzle-source"
+                      checked={wheelOfFortunePuzzleSource === "custom"}
+                      onChange={() => setWheelOfFortunePuzzleSource("custom")}
+                    />
+                    <span className="mode-option-title">Custom puzzles</span>
+                    <span className="mode-option-hint">Host enters four round puzzles and one bonus after start.</span>
+                  </label>
                 </fieldset>
               )}
               {game.id === "captionThis" && (

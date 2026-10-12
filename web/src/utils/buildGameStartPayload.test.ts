@@ -14,6 +14,7 @@ const baseOptions = {
   wouldYouRatherQuestions: 10,
   wouldYouRatherAllowSubmissions: true,
   badAdviceRounds: 5,
+  wheelOfFortunePuzzleSource: "bank" as const,
   storyBuilderMode: "stock" as const,
   storyBuilderFirstTurnId: "p1",
   memoryBoardSize: "36" as const
@@ -38,6 +39,22 @@ describe("buildGameStartPayload", () => {
     expect(buildGameStartPayload("badAdvice", baseOptions)).toEqual({
       game: "badAdvice",
       options: { badAdviceTotalRounds: 5 }
+    });
+  });
+
+  it("builds Wheel of Fortune start payload from lobby options", () => {
+    expect(buildGameStartPayload("wheelOfFortune", baseOptions)).toEqual({
+      game: "wheelOfFortune",
+      options: { wheelOfFortunePuzzleSource: "bank" }
+    });
+    expect(
+      buildGameStartPayload("wheelOfFortune", {
+        ...baseOptions,
+        wheelOfFortunePuzzleSource: "custom"
+      })
+    ).toEqual({
+      game: "wheelOfFortune",
+      options: { wheelOfFortunePuzzleSource: "custom" }
     });
   });
 });

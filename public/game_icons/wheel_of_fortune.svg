@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Wheel of Fortune">
+  <circle cx="64" cy="64" r="58" fill="#1565c0" stroke="#0d47a1" stroke-width="4"/>
+  <g transform="translate(64 64)">
+    <path d="M0 0 L0 -52 A52 52 0 0 1 45.03 -26 Z" fill="#c62828"/>
+    <path d="M0 0 L45.03 -26 A52 52 0 0 1 45.03 26 Z" fill="#fdd835"/>
+    <path d="M0 0 L45.03 26 A52 52 0 0 1 0 52 Z" fill="#00897b"/>
+    <path d="M0 0 L0 52 A52 52 0 0 1 -45.03 26 Z" fill="#6a1b9a"/>
+    <path d="M0 0 L-45.03 26 A52 52 0 0 1 -45.03 -26 Z" fill="#ef6c00"/>
+    <path d="M0 0 L-45.03 -26 A52 52 0 0 1 0 -52 Z" fill="#212121"/>
+  </g>
+  <circle cx="64" cy="64" r="18" fill="#1565c0" stroke="#fffde7" stroke-width="3"/>
+  <polygon points="64,6 70,18 58,18" fill="#ffd54f"/>
+</svg>

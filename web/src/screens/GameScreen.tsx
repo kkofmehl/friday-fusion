@@ -31,6 +31,7 @@ import { SplendorGame } from "../games/SplendorGame";
 import "../games/playStage.css";
 import { FriendlyFeudGame } from "../games/FriendlyFeudGame";
 import { BadAdviceGame } from "../games/BadAdviceGame";
+import { WheelOfFortuneGame } from "../games/WheelOfFortuneGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -56,7 +57,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   wordle: "/game_icons/wordle.png",
   monopolyDeal: "/game_icons/monopoly_deal.png",
   splendor: "/game_icons/splendor.png",
-  friendlyFeud: "/game_icons/friendly_feud.png"
+  friendlyFeud: "/game_icons/friendly_feud.png",
+  wheelOfFortune: "/game_icons/wheel_of_fortune.svg"
 };
 
 const GAME_TITLES_BY_ID: Record<GameType, string> = {
@@ -83,7 +85,8 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   wordle: "Wordle Race",
   monopolyDeal: "Monopoly Deal",
   splendor: "Splendor",
-  friendlyFeud: "Friendly Feud"
+  friendlyFeud: "Friendly Feud",
+  wheelOfFortune: "Wheel of Fortune"
 };
 
 export function GameScreen({
@@ -209,6 +212,19 @@ export function GameScreen({
         payload: {
           game: "memory",
           options: { memoryBoardSize: session.gameState.state.boardSize }
+        }
+      }
+    : session.gameState?.type === "wheelOfFortune"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "wheelOfFortune",
+          options: {
+            wheelOfFortunePuzzleSource:
+              session.gameState.state.status === "setup"
+                ? session.gameState.state.puzzleSource
+                : "bank"
+          }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -454,6 +470,16 @@ export function GameScreen({
     if (session.gameState?.type === "badAdvice") {
       return (
         <BadAdviceGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "wheelOfFortune") {
+      return (
+        <WheelOfFortuneGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

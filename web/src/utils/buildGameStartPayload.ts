@@ -7,6 +7,7 @@ import {
   type HangmanMode,
   type MemoryBoardSize,
   type StoryBuilderMode,
+  type WheelOfFortunePuzzleSource,
   type YahtzeeMode
 } from "../../../shared/contracts";
 
@@ -25,6 +26,7 @@ export type LobbyGameOptions = {
   wouldYouRatherQuestions: number;
   wouldYouRatherAllowSubmissions: boolean;
   badAdviceRounds: number;
+  wheelOfFortunePuzzleSource: WheelOfFortunePuzzleSource;
   storyBuilderMode: StoryBuilderMode;
   storyBuilderFirstTurnId: string;
   memoryBoardSize: MemoryBoardSize;
@@ -88,6 +90,14 @@ export function buildGameStartPayload(
       options: { badAdviceTotalRounds: totalRounds }
     };
   }
+  if (game === "wheelOfFortune") {
+    return {
+      game,
+      options: {
+        wheelOfFortunePuzzleSource: options.wheelOfFortunePuzzleSource === "custom" ? "custom" : "bank"
+      }
+    };
+  }
   if (game === "storyBuilder") {
     return {
       game,
@@ -130,6 +140,9 @@ export function describeQueuedGameOptions(
   }
   if (game === "badAdvice" && options.badAdviceTotalRounds) {
     return `${options.badAdviceTotalRounds} rounds`;
+  }
+  if (game === "wheelOfFortune" && options.wheelOfFortunePuzzleSource) {
+    return options.wheelOfFortunePuzzleSource === "custom" ? "Custom puzzles" : "Puzzle bank";
   }
   if (game === "twentyQuestions" && options.twentyQuestionsMaxQuestions) {
     return `${options.twentyQuestionsMaxQuestions} questions max`;

@@ -1588,6 +1588,53 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "badAdvice:beginNextRound") {
           await sessionService.badAdviceBeginNextRound(context.sessionId, context.participantId);
+        } else if (event.type === "wheelOfFortune:setPuzzles") {
+          await sessionService.wheelOfFortuneSetPuzzles(
+            context.sessionId,
+            context.participantId,
+            event.payload.puzzles
+          );
+        } else if (event.type === "wheelOfFortune:spin") {
+          await sessionService.wheelOfFortuneSpin(context.sessionId, context.participantId);
+        } else if (event.type === "wheelOfFortune:callConsonant") {
+          await sessionService.wheelOfFortuneCallConsonant(
+            context.sessionId,
+            context.participantId,
+            event.payload.letter
+          );
+        } else if (event.type === "wheelOfFortune:buyVowel") {
+          await sessionService.wheelOfFortuneBuyVowel(
+            context.sessionId,
+            context.participantId,
+            event.payload.letter
+          );
+        } else if (event.type === "wheelOfFortune:solve") {
+          await sessionService.wheelOfFortuneSolve(
+            context.sessionId,
+            context.participantId,
+            event.payload.guess
+          );
+        } else if (event.type === "wheelOfFortune:useFreeSpin") {
+          await sessionService.wheelOfFortuneUseFreeSpin(
+            context.sessionId,
+            context.participantId,
+            event.payload.use
+          );
+        } else if (event.type === "wheelOfFortune:bonusPickLetters") {
+          await sessionService.wheelOfFortuneBonusPickLetters(
+            context.sessionId,
+            context.participantId,
+            event.payload.consonants,
+            event.payload.vowel
+          );
+        } else if (event.type === "wheelOfFortune:bonusSolve") {
+          await sessionService.wheelOfFortuneBonusSolve(
+            context.sessionId,
+            context.participantId,
+            event.payload.guess
+          );
+        } else if (event.type === "wheelOfFortune:continue") {
+          await sessionService.wheelOfFortuneContinue(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

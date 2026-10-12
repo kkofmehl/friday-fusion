@@ -13,6 +13,8 @@ import {
   FRIENDLY_FEUD_GAME_WIN_FF_POINTS,
   FRIENDLY_FEUD_MIN_PLAYERS,
   FRIENDLY_FEUD_ROUND_WIN_FF_POINTS,
+  WHEEL_OF_FORTUNE_MIN_PLAYERS,
+  WHEEL_OF_FORTUNE_ROUNDS,
   UNO_HAND_SIZE,
   BAD_ADVICE_DEFAULT_ROUNDS,
   BAD_ADVICE_MAX_CHARS,
@@ -144,6 +146,26 @@ import {
   type FriendlyFeudGameInternal
 } from "./friendlyFeudGame";
 import { pickFriendlyFeudWinners } from "../../shared/friendlyFeudLogic";
+import {
+  applyWheelOfFortuneScores,
+  bonusPickLetters,
+  bonusSolve,
+  bonusTimedOut,
+  buyVowel,
+  callConsonant,
+  continueAfterRound,
+  createWheelOfFortuneGame,
+  detachWheelOfFortunePlayer,
+  hydrateWheelOfFortuneGame,
+  respondFreeSpin,
+  setWheelOfFortunePuzzles,
+  settleWheelSpin,
+  solvePuzzle,
+  startWheelSpin,
+  toPublicWheelOfFortuneState,
+  type WheelOfFortuneGameInternal
+} from "./wheelOfFortuneGame";
+import { normalizeCustomPuzzles, pickWheelOfFortunePuzzles } from "./wheelOfFortunePuzzles";
 import {
   SPLENDOR_MAX_PLAYERS,
   SPLENDOR_MIN_PLAYERS,
@@ -701,7 +723,8 @@ type GameInternal =
   | MonopolyDealGameInternal
   | SplendorGameInternal
   | FriendlyFeudGameInternal
-  | BadAdviceGameInternal;
+  | BadAdviceGameInternal
+  | WheelOfFortuneGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1535,6 +1558,9 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
   if (game.type === "friendlyFeud") {
     return hydrateFriendlyFeudGame(game as FriendlyFeudGameInternal);
   }
+  if (game.type === "wheelOfFortune") {
+    return hydrateWheelOfFortuneGame(game as WheelOfFortuneGameInternal);
+  }
   if (game.type === "badAdvice") {
     const g = game as BadAdviceGameInternal;
     const prompts = Array.isArray(g.prompts)
@@ -1972,6 +1998,7 @@ export class SessionService {
   private readonly memoryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly wordleResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly friendlyFeudResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly wheelOfFortuneResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   public constructor(
     store: FileStore<PersistedState>,
@@ -2345,6 +2372,9 @@ export class SessionService {
     }
     if (previousGame?.type === "friendlyFeud") {
       this.clearFriendlyFeudTimer(sessionId);
+    }
+    if (previousGame?.type === "wheelOfFortune") {
+      this.clearWheelOfFortuneTimer(sessionId);
     }
     const previousTrivia = session.games.find((entry): entry is TriviaGameInternal => entry.type === "trivia");
     session.updatedAt = Date.now();
@@ -2730,6 +2760,36 @@ export class SessionService {
       }
       this.clearFriendlyFeudTimer(sessionId);
       next = createFriendlyFeudGame();
+    } else if (game === "wheelOfFortune") {
+      const actives = activeParticipants(session);
+      if (actives.length < WHEEL_OF_FORTUNE_MIN_PLAYERS) {
+        throw new Error("Wheel of Fortune needs at least two active players.");
+      }
+      this.clearWheelOfFortuneTimer(sessionId);
+      const previousWof = session.games.find(
+        (entry): entry is WheelOfFortuneGameInternal => entry.type === "wheelOfFortune"
+      );
+      const puzzleSource = options.wheelOfFortunePuzzleSource === "custom" ? "custom" : "bank";
+      const usedPuzzleIds = new Set(previousWof?.usedPuzzleIds ?? []);
+      if (puzzleSource === "bank") {
+        const picked = pickWheelOfFortunePuzzles(usedPuzzleIds, WHEEL_OF_FORTUNE_ROUNDS + 1);
+        if (picked.length < WHEEL_OF_FORTUNE_ROUNDS + 1) {
+          throw new Error("Not enough Wheel of Fortune puzzles available.");
+        }
+        picked.forEach((p) => usedPuzzleIds.add(p.id));
+        next = createWheelOfFortuneGame({
+          playerOrder: actives.map((p) => p.id),
+          puzzleSource: "bank",
+          puzzles: picked,
+          usedPuzzleIds: [...usedPuzzleIds]
+        });
+      } else {
+        next = createWheelOfFortuneGame({
+          playerOrder: actives.map((p) => p.id),
+          puzzleSource: "custom",
+          usedPuzzleIds: [...usedPuzzleIds]
+        });
+      }
     } else if (game === "badAdvice") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -3001,6 +3061,9 @@ export class SessionService {
     if (active?.type === "friendlyFeud") {
       this.clearFriendlyFeudTimer(sessionId);
     }
+    if (active?.type === "wheelOfFortune") {
+      this.clearWheelOfFortuneTimer(sessionId);
+    }
     session.games = [];
     session.updatedAt = Date.now();
     await this.persist();
@@ -3101,6 +3164,7 @@ export class SessionService {
     this.clearMemoryTimer(sessionId);
     this.clearWordleTimer(sessionId);
     this.clearFriendlyFeudTimer(sessionId);
+    this.clearWheelOfFortuneTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -3121,6 +3185,7 @@ export class SessionService {
     this.clearMemoryTimer(sessionId);
     this.clearWordleTimer(sessionId);
     this.clearFriendlyFeudTimer(sessionId);
+    this.clearWheelOfFortuneTimer(sessionId);
     await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
     await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -3303,6 +3368,19 @@ export class SessionService {
         this.monopolyDealMaybeApplyScores(session, activeMonopolyDeal);
       }
     }
+
+    const activeWof = session.games[0];
+    if (activeWof?.type === "wheelOfFortune") {
+      this.clearWheelOfFortuneTimer(sessionId);
+      detachWheelOfFortunePlayer(activeWof, participantId);
+      if (activeWof.status === "finished") {
+        this.applyWheelOfFortuneSessionScores(session, activeWof);
+      } else if (activeWof.status === "spinning") {
+        this.scheduleWheelOfFortuneSpinSettle(sessionId);
+      } else if (activeWof.status === "bonusSolve") {
+        this.scheduleWheelOfFortuneBonusDeadline(sessionId);
+      }
+    }
   }
 
   public async removeParticipant(
@@ -3335,6 +3413,7 @@ export class SessionService {
       this.clearMemoryTimer(sessionId);
       this.clearWordleTimer(sessionId);
       this.clearFriendlyFeudTimer(sessionId);
+      this.clearWheelOfFortuneTimer(sessionId);
       await purgeAllIcebreakerSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessWhoSaidItSessionUploads(this.dataDirectory, sessionId);
       await purgeAllGuessTheImageSessionUploads(this.dataDirectory, sessionId);
@@ -9513,6 +9592,18 @@ export class SessionService {
       };
     }
 
+    if (game.type === "wheelOfFortune") {
+      this.applyWheelOfFortuneSessionScores(session, game);
+      return {
+        ...base,
+        activeGame: "wheelOfFortune",
+        gameState: {
+          type: "wheelOfFortune",
+          state: toPublicWheelOfFortuneState(game)
+        }
+      };
+    }
+
     const _never: never = game;
     throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
   }
@@ -10049,6 +10140,228 @@ export class SessionService {
     }
     advanceFriendlyFeudAfterReveal(game);
     await this.friendlyFeudPersist(session);
+  }
+
+  private applyWheelOfFortuneSessionScores(session: SessionInternal, game: WheelOfFortuneGameInternal): void {
+    if (game.status !== "finished") {
+      return;
+    }
+    applyWheelOfFortuneScores(
+      game,
+      (participantId, points) => {
+        const participant = session.participants.find((p) => p.id === participantId);
+        if (participant) {
+          participant.score += points;
+        }
+      },
+      activeParticipants(session).length
+    );
+  }
+
+  private clearWheelOfFortuneTimer(sessionId: string): void {
+    const existing = this.wheelOfFortuneResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.wheelOfFortuneResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleWheelOfFortuneSpinSettle(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (!session || game?.type !== "wheelOfFortune" || game.status !== "spinning" || !game.spinEndsAt) {
+      return;
+    }
+    this.clearWheelOfFortuneTimer(sessionId);
+    const delay = Math.max(0, game.spinEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.wheelOfFortuneSpinTimedOut(sessionId).catch(() => {});
+    }, delay);
+    this.wheelOfFortuneResolveTimers.set(sessionId, timer);
+  }
+
+  private scheduleWheelOfFortuneBonusDeadline(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (!session || game?.type !== "wheelOfFortune" || game.status !== "bonusSolve" || !game.bonusEndsAt) {
+      return;
+    }
+    this.clearWheelOfFortuneTimer(sessionId);
+    const delay = Math.max(0, game.bonusEndsAt - Date.now());
+    const timer = setTimeout(() => {
+      void this.wheelOfFortuneBonusTimedOut(sessionId).catch(() => {});
+    }, delay);
+    this.wheelOfFortuneResolveTimers.set(sessionId, timer);
+  }
+
+  private async wheelOfFortuneSpinTimedOut(sessionId: string): Promise<void> {
+    this.clearWheelOfFortuneTimer(sessionId);
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (!session || game?.type !== "wheelOfFortune" || game.status !== "spinning") {
+      return;
+    }
+    settleWheelSpin(game);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  private async wheelOfFortuneBonusTimedOut(sessionId: string): Promise<void> {
+    this.clearWheelOfFortuneTimer(sessionId);
+    const session = this.sessions.get(sessionId);
+    const game = session?.games[0];
+    if (!session || game?.type !== "wheelOfFortune" || game.status !== "bonusSolve") {
+      return;
+    }
+    bonusTimedOut(game);
+    this.applyWheelOfFortuneSessionScores(session, game);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  private async wheelOfFortunePersist(session: SessionInternal): Promise<void> {
+    const game = session.games[0];
+    if (game?.type === "wheelOfFortune") {
+      this.applyWheelOfFortuneSessionScores(session, game);
+      if (game.status === "spinning") {
+        this.scheduleWheelOfFortuneSpinSettle(session.sessionId);
+      } else if (game.status === "bonusSolve") {
+        this.scheduleWheelOfFortuneBonusDeadline(session.sessionId);
+      } else {
+        this.clearWheelOfFortuneTimer(session.sessionId);
+      }
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(session.sessionId);
+  }
+
+  public async wheelOfFortuneSetPuzzles(
+    sessionId: string,
+    participantId: string,
+    puzzles: { category: string; answer: string }[]
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertHost(session, participantId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune" || game.status !== "setup") {
+      throw new Error("Custom puzzles can only be set during Wheel of Fortune setup.");
+    }
+    setWheelOfFortunePuzzles(game, normalizeCustomPuzzles(puzzles));
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneSpin(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    startWheelSpin(game, participantId);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneCallConsonant(
+    sessionId: string,
+    participantId: string,
+    letter: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    callConsonant(game, participantId, letter);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneBuyVowel(
+    sessionId: string,
+    participantId: string,
+    letter: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    buyVowel(game, participantId, letter);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneSolve(sessionId: string, participantId: string, guess: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    solvePuzzle(game, participantId, guess);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneUseFreeSpin(
+    sessionId: string,
+    participantId: string,
+    use: boolean
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    respondFreeSpin(game, participantId, use);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneBonusPickLetters(
+    sessionId: string,
+    participantId: string,
+    consonants: string[],
+    vowel: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    bonusPickLetters(game, participantId, consonants, vowel);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneBonusSolve(
+    sessionId: string,
+    participantId: string,
+    guess: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    bonusSolve(game, participantId, guess);
+    await this.wheelOfFortunePersist(session);
+  }
+
+  public async wheelOfFortuneContinue(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "wheelOfFortune") {
+      throw new Error("Wheel of Fortune is not active.");
+    }
+    if (game.status === "playing" && game.phase === "roundSolved") {
+      // Any active player (or host) can advance after a solve.
+      continueAfterRound(game);
+      await this.wheelOfFortunePersist(session);
+      return;
+    }
+    throw new Error("Nothing to continue.");
   }
 }
 

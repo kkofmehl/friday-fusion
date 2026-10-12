@@ -1,0 +1,300 @@
+.wof-wheel-wrap {
+  position: relative;
+  width: min(100%, 340px);
+  margin: 0 auto;
+  aspect-ratio: 1;
+}
+
+.wof-flipper {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  margin-left: -10px;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 22px solid #ffd54f;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  transform-origin: 50% 0%;
+}
+
+.wof-wheel-wrap.is-spinning .wof-flipper {
+  animation: wof-flipper-tick 0.12s ease-in-out infinite alternate;
+}
+
+@keyframes wof-flipper-tick {
+  from {
+    transform: rotate(-8deg);
+  }
+  to {
+    transform: rotate(8deg);
+  }
+}
+
+.wof-wheel-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.wof-outer-rim {
+  fill: #1565c0;
+  stroke: #0d47a1;
+  stroke-width: 3;
+}
+
+.wof-peg {
+  fill: #eceff1;
+  stroke: #546e7a;
+  stroke-width: 0.8;
+}
+
+.wof-wedge.is-lit {
+  filter: brightness(1.15);
+}
+
+.wof-wedge-label {
+  fill: #111;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  paint-order: stroke fill;
+  stroke: #fff;
+  stroke-width: 2.5px;
+  pointer-events: none;
+}
+
+.wof-wedge-label.special {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 2px;
+  font-size: 7px;
+  letter-spacing: 0.02em;
+}
+
+.wof-hub {
+  fill: #1565c0;
+  stroke: #0d47a1;
+  stroke-width: 3;
+}
+
+.wof-hub-text {
+  fill: #fffde7;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.wof-hub-text.small {
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.wof-game {
+  display: grid;
+  gap: 1.15rem;
+  padding: 1.4rem 1.5rem 1.6rem;
+  box-sizing: border-box;
+}
+
+.wof-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .wof-layout {
+    grid-template-columns: minmax(260px, 340px) 1fr;
+    align-items: start;
+  }
+}
+
+.wof-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1rem;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  background: linear-gradient(180deg, #1b5e20, #2e7d32);
+  border-radius: 12px;
+  min-height: 4.5rem;
+  overflow-x: auto;
+}
+
+.wof-board-word {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.wof-board-char {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.55rem;
+  height: 2rem;
+  padding: 0 0.15rem;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #111;
+  font-weight: 800;
+  font-size: 1.1rem;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.wof-board-char.is-blank {
+  background: #263238;
+  color: transparent;
+}
+
+.wof-letter {
+  min-width: 2.35rem;
+  min-height: 2.35rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(140, 106, 50, 0.55);
+  background: linear-gradient(180deg, #fffaf3, #f3e6cf);
+  color: #241e18;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(36, 30, 24, 0.18);
+}
+
+.wof-letter:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #8c6a32;
+}
+
+.wof-letter.is-selected {
+  color: #2a2112;
+  background: linear-gradient(180deg, #f0d7a2, #c6a15b);
+  border-color: #8c6a32;
+  box-shadow: 0 0 0 2px #c6a15b, 0 2px 0 rgba(36, 30, 24, 0.18);
+}
+
+.wof-letter:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.wof-pick-label {
+  margin: 0.35rem 0 0.15rem;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.82rem;
+}
+
+.wof-vowel-panel {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+}
+
+.wof-vowel-panel summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.wof-vowel-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.wof-category {
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #102a43;
+}
+
+.wof-money-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.wof-player-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 7rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  background: #fff8e1;
+  border: 2px solid transparent;
+  font-size: 0.85rem;
+}
+
+.wof-player-chip.is-turn {
+  border-color: #f9a825;
+  box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.25);
+}
+
+.wof-player-chip strong {
+  font-size: 0.95rem;
+}
+
+.wof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.wof-letter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: center;
+}
+
+.wof-letter-row .wof-letter {
+  min-width: 2.35rem;
+}
+
+.wof-outcome {
+  text-align: center;
+  font-weight: 600;
+  min-height: 1.4em;
+}
+
+.wof-setup-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.wof-setup-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+@media (min-width: 640px) {
+  .wof-setup-row {
+    grid-template-columns: 8rem 1fr;
+    align-items: center;
+  }
+}
+
+.wof-used {
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wof-wheel-wrap.is-spinning .wof-flipper {
+    animation: none;
+  }
+}

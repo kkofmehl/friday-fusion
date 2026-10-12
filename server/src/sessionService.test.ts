@@ -3672,4 +3672,68 @@ describe("SessionService", () => {
       expect(restarted.gameState.state.prompt.id).not.toBe(round2.gameState.state.prompt.id);
     });
   });
+
+  describe("Wheel of Fortune", () => {
+    it("starts from bank, spins with sync fields, and drops leavers from turn order", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "wheelOfFortune", {
+        wheelOfFortunePuzzleSource: "bank"
+      });
+
+      const playing = setup.service.getState(host.sessionId, host.participantId);
+      expect(playing.gameState?.type).toBe("wheelOfFortune");
+      if (playing.gameState?.type !== "wheelOfFortune" || playing.gameState.state.status !== "playing") {
+        throw new Error("expected playing");
+      }
+      expect(playing.gameState.state.maskedBoard.length).toBeGreaterThan(0);
+      expect(playing.gameState.state.currentTurnId).toBe(host.participantId);
+
+      await setup.service.wheelOfFortuneSpin(host.sessionId, host.participantId);
+      const spinning = setup.service.getState(host.sessionId);
+      if (spinning.gameState?.type !== "wheelOfFortune" || spinning.gameState.state.status !== "spinning") {
+        throw new Error("expected spinning");
+      }
+      expect(spinning.gameState.state.spinStartedAt).toBeTypeOf("number");
+      expect(spinning.gameState.state.finalRotationDeg).toBeGreaterThan(0);
+
+      await setup.service.removeParticipant(host.sessionId, guest.participantId);
+      const afterLeave = setup.service.getState(host.sessionId);
+      if (afterLeave.gameState?.type !== "wheelOfFortune") {
+        throw new Error("expected wheel still active");
+      }
+      expect(afterLeave.gameState.state.status).toBe("finished");
+    });
+
+    it("starts custom mode in setup until host sets puzzles", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "wheelOfFortune", {
+        wheelOfFortunePuzzleSource: "custom"
+      });
+      const setupState = setup.service.getState(host.sessionId);
+      expect(setupState.gameState?.type).toBe("wheelOfFortune");
+      if (setupState.gameState?.type !== "wheelOfFortune") {
+        throw new Error("expected wheel");
+      }
+      expect(setupState.gameState.state.status).toBe("setup");
+
+      await setup.service.wheelOfFortuneSetPuzzles(host.sessionId, host.participantId, [
+        { category: "Phrase", answer: "HELLO WORLD" },
+        { category: "Thing", answer: "COFFEE MUG" },
+        { category: "Place", answer: "NEW YORK" },
+        { category: "Person", answer: "ADA LOVELACE" },
+        { category: "Phrase", answer: "BEST OF LUCK" }
+      ]);
+      const playing = setup.service.getState(host.sessionId);
+      if (playing.gameState?.type !== "wheelOfFortune" || playing.gameState.state.status !== "playing") {
+        throw new Error("expected playing after custom puzzles");
+      }
+      expect(playing.gameState.state.category).toBe("Phrase");
+    });
+  });
 });

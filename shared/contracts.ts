@@ -24,7 +24,8 @@ export const gameTypeSchema = z.enum([
   "monopolyDeal",
   "splendor",
   "friendlyFeud",
-  "badAdvice"
+  "badAdvice",
+  "wheelOfFortune"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -602,6 +603,98 @@ export const badAdviceStateSchema = z.discriminatedUnion("status", [
   })
 ]);
 export type BadAdviceState = z.infer<typeof badAdviceStateSchema>;
+
+export const WHEEL_OF_FORTUNE_MIN_PLAYERS = 2;
+export const WHEEL_OF_FORTUNE_ROUNDS = 4;
+export const WHEEL_OF_FORTUNE_VOWEL_COST = 250;
+export const WHEEL_OF_FORTUNE_BANK_FLOOR = 1_000;
+export const WHEEL_OF_FORTUNE_BONUS_SOLVE_MS = 30_000;
+export const WHEEL_OF_FORTUNE_BONUS_GIVEN_LETTERS = ["R", "S", "T", "L", "N", "E"] as const;
+
+export const wheelOfFortunePuzzleSourceSchema = z.enum(["bank", "custom"]);
+export type WheelOfFortunePuzzleSource = z.infer<typeof wheelOfFortunePuzzleSourceSchema>;
+
+export const wheelOfFortunePuzzleInputSchema = z.object({
+  category: z.string().min(1).max(40),
+  answer: z.string().min(1).max(80)
+});
+export type WheelOfFortunePuzzleInput = z.infer<typeof wheelOfFortunePuzzleInputSchema>;
+
+export const wheelOfFortunePhaseSchema = z.enum([
+  "awaitingAction",
+  "awaitingLetter",
+  "freeSpinPrompt",
+  "roundSolved"
+]);
+export type WheelOfFortunePhase = z.infer<typeof wheelOfFortunePhaseSchema>;
+
+const wheelOfFortuneMoneyMaps = {
+  playerOrder: z.array(z.string()),
+  roundMoney: z.record(z.string(), z.number().int().nonnegative()),
+  bankedMoney: z.record(z.string(), z.number().int().nonnegative()),
+  freeSpinTokens: z.record(z.string(), z.number().int().nonnegative())
+};
+
+const wheelOfFortuneBoardFields = {
+  roundIndex: z.number().int().min(1).max(WHEEL_OF_FORTUNE_ROUNDS),
+  category: z.string(),
+  maskedBoard: z.string(),
+  usedLetters: z.array(z.string()),
+  currentTurnId: z.string().nullable(),
+  phase: wheelOfFortunePhaseSchema,
+  pendingWedgeIndex: z.number().int().min(0).max(23).nullable(),
+  lastOutcome: z.string().nullable(),
+  ...wheelOfFortuneMoneyMaps
+};
+
+export const wheelOfFortuneStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("setup"),
+    puzzleSource: wheelOfFortunePuzzleSourceSchema,
+    playerOrder: z.array(z.string())
+  }),
+  z.object({
+    status: z.literal("playing"),
+    ...wheelOfFortuneBoardFields
+  }),
+  z.object({
+    status: z.literal("spinning"),
+    ...wheelOfFortuneBoardFields,
+    spinStartedAt: z.number().int(),
+    spinEndsAt: z.number().int(),
+    targetWedgeIndex: z.number().int().min(0).max(23),
+    finalRotationDeg: z.number()
+  }),
+  z.object({
+    status: z.literal("bonusLetterPick"),
+    category: z.string(),
+    maskedBoard: z.string(),
+    usedLetters: z.array(z.string()),
+    bonusPlayerId: z.string(),
+    ...wheelOfFortuneMoneyMaps,
+    lastOutcome: z.string().nullable()
+  }),
+  z.object({
+    status: z.literal("bonusSolve"),
+    category: z.string(),
+    maskedBoard: z.string(),
+    usedLetters: z.array(z.string()),
+    bonusPlayerId: z.string(),
+    bonusEndsAt: z.number().int(),
+    ...wheelOfFortuneMoneyMaps,
+    lastOutcome: z.string().nullable()
+  }),
+  z.object({
+    status: z.literal("finished"),
+    category: z.string().nullable(),
+    revealedBoard: z.string().nullable(),
+    bonusPlayerId: z.string().nullable(),
+    bonusSolved: z.boolean(),
+    ...wheelOfFortuneMoneyMaps,
+    lastOutcome: z.string().nullable()
+  })
+]);
+export type WheelOfFortuneState = z.infer<typeof wheelOfFortuneStateSchema>;
 
 /** Per-draw timer bounds (ms) for Pictionary; server clamps `game:start` options to this range. */
 export const PICTORY_ROUND_DURATION_MIN_MS = 30_000;
@@ -1802,6 +1895,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("badAdvice"),
     state: badAdviceStateSchema
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune"),
+    state: wheelOfFortuneStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1835,7 +1932,9 @@ export const gameStartOptionsSchema = z.object({
   /** Memory: 30 cards (15 pairs, 6×5) or 36 cards (18 pairs, 6×6). */
   memoryBoardSize: memoryBoardSizeSchema.optional(),
   /** Bad Advice: number of rounds / prompts (default 5, clamped server-side to 1–50). */
-  badAdviceTotalRounds: z.number().int().positive().optional()
+  badAdviceTotalRounds: z.number().int().positive().optional(),
+  /** Wheel of Fortune: curated bank vs host-entered puzzles. */
+  wheelOfFortunePuzzleSource: wheelOfFortunePuzzleSourceSchema.optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -2502,7 +2601,42 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("badAdvice:vote"),
     payload: z.object({ entryId: z.string().min(1) })
   }),
-  z.object({ type: z.literal("badAdvice:beginNextRound"), payload: z.object({}) })
+  z.object({ type: z.literal("badAdvice:beginNextRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("wheelOfFortune:setPuzzles"),
+    payload: z.object({
+      puzzles: z.array(wheelOfFortunePuzzleInputSchema).length(WHEEL_OF_FORTUNE_ROUNDS + 1)
+    })
+  }),
+  z.object({ type: z.literal("wheelOfFortune:spin"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("wheelOfFortune:callConsonant"),
+    payload: z.object({ letter: z.string().min(1).max(1) })
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune:buyVowel"),
+    payload: z.object({ letter: z.string().min(1).max(1) })
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune:solve"),
+    payload: z.object({ guess: z.string().min(1).max(80) })
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune:useFreeSpin"),
+    payload: z.object({ use: z.boolean() })
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune:bonusPickLetters"),
+    payload: z.object({
+      consonants: z.array(z.string().min(1).max(1)).length(3),
+      vowel: z.string().min(1).max(1)
+    })
+  }),
+  z.object({
+    type: z.literal("wheelOfFortune:bonusSolve"),
+    payload: z.object({ guess: z.string().min(1).max(80) })
+  }),
+  z.object({ type: z.literal("wheelOfFortune:continue"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 
