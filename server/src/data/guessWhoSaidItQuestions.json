@@ -14,5 +14,18 @@
   { "id": "gws-013", "text": "Your go-to karaoke song" },
   { "id": "gws-014", "text": "Something small that always makes your day better" },
   { "id": "gws-015", "text": "Where you'd live if money were no object" },
-  { "id": "gws-016", "text": "A book, game, or podcast you recommend to almost everyone" }
+  { "id": "gws-016", "text": "A book, game, or podcast you recommend to almost everyone" },
+  { "id": "gws-017", "text": "A song that makes you feel nostalgic" },
+  { "id": "gws-018", "text": "A place you've always wanted to visit" },
+  { "id": "gws-019", "text": "A skill you'd like to learn" },
+  { "id": "gws-020", "text": "A movie you can watch over and over" },
+  { "id": "gws-021", "text": "A food you can't get enough of" },
+  { "id": "gws-022", "text": "A book you've read multiple times" },
+  { "id": "gws-023", "text": "A game you've played for hours" },
+  { "id": "gws-024", "text": "A podcast you listen to regularly" },
+  { "id": "gws-025", "text": "A TV show you've binge-watched" },
+  { "id": "gws-026", "text": "A hobby you've taken up recently" },
+  { "id": "gws-027", "text": "A skill you're proud of mastering" },
+  { "id": "gws-028", "text": "Who you would want to be stuck in an elevator with" },
+  { "id": "gws-030", "text": "Something that no one would guess about you"}
 ]
