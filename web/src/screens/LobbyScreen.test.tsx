@@ -223,6 +223,60 @@ describe("LobbyScreen", () => {
     }
   });
 
+  function titlesInGamePicker(): string[] {
+    const section = screen.getByRole("heading", { name: "Choose a game" }).closest("section");
+    if (!section) throw new Error("expected game picker");
+    return within(section)
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => (heading.textContent ?? "").replace(/\s*Beta\s*$/, "").trim());
+  }
+
+  it("lists games alphabetically for the host and for guests", () => {
+    const { rerender } = render(
+      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />
+    );
+
+    const hostTitles = titlesInGamePicker();
+    const sortedHost = [...hostTitles].sort((left, right) =>
+      left.localeCompare(right, undefined, { sensitivity: "base", numeric: true })
+    );
+    expect(hostTitles).toEqual(sortedHost);
+    expect(hostTitles[0]).toBe("20 Questions");
+    expect(hostTitles.indexOf("Guess the image")).toBeLessThan(hostTitles.indexOf("Guess Who Said It?"));
+
+    rerender(<LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />);
+    expect(titlesInGamePicker()).toEqual(hostTitles);
+  });
+
+  it("filters the game list to cards that have every selected attribute", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Activity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Shorter time" }));
+
+    expect(titlesInGamePicker().sort()).toEqual(["Madlibs", "Would You Rather"]);
+    expect(screen.getByText(/2 of \d+ games/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Team game" }));
+    expect(screen.getByText("No games match these filters.")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Madlibs" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("heading", { name: "Hangman" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("filters the guest game list the same way", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Team game" }));
+    const titles = titlesInGamePicker();
+    expect(titles).toContain("Pictionary");
+    expect(titles).toContain("Friendly Feud");
+    expect(titles).not.toContain("Hangman");
+    expect(screen.getAllByRole("button", { name: "Play this!" }).length).toBe(titles.length);
+  });
+
   it("renders attribute badges with accessible names on sample game cards", () => {
     render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
 
@@ -282,7 +336,8 @@ describe("LobbyScreen", () => {
     ];
 
     for (const [gameName, iconPath] of expectedIcons) {
-      const card = screen.getByRole("heading", { name: new RegExp(`^${gameName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }).closest("article");
+      const escapedName = gameName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const card = screen.getByRole("heading", { name: new RegExp(`^${escapedName}(?!\\w)`) }).closest("article");
       if (!card) throw new Error(`expected ${gameName} card`);
       const icon = card.querySelector("img.game-card-icon, img.game-tile-compact-icon-img");
       expect(icon).not.toBeNull();

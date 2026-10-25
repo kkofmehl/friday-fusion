@@ -2227,6 +2227,95 @@ label {
   gap: 1.1rem;
 }
 
+.game-attribute-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.game-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.32rem 0.7rem 0.32rem 0.5rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--slate-600);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.game-filter-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.game-filter-chip.is-active {
+  box-shadow: 0 8px 16px -14px rgba(15, 23, 42, 0.8);
+}
+
+.game-filter-chip.is-active.game-attribute-scorable {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(255, 251, 235, 0.95);
+  color: #92400e;
+}
+
+.game-filter-chip.is-active.game-attribute-game {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(238, 242, 255, 0.95);
+  color: var(--indigo-800);
+}
+
+.game-filter-chip.is-active.game-attribute-activity {
+  border-color: rgba(14, 165, 233, 0.4);
+  background: rgba(240, 249, 255, 0.95);
+  color: #0369a1;
+}
+
+.game-filter-chip.is-active.game-attribute-team {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(236, 253, 245, 0.95);
+  color: #047857;
+}
+
+.game-filter-chip.is-active.game-attribute-short {
+  border-color: rgba(100, 116, 139, 0.4);
+  background: rgba(248, 250, 252, 0.98);
+  color: var(--slate-700);
+}
+
+.game-filter-chip.is-active.game-attribute-long {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(245, 243, 255, 0.96);
+  color: #5b21b6;
+}
+
+.game-filter-hint {
+  flex-basis: 100%;
+  margin: 0.1rem 0 0;
+  font-size: 0.75rem;
+  color: var(--slate-500);
+}
+
+.game-filter-count {
+  margin: 0 0 0 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--slate-500);
+}
+
+.game-filter-empty {
+  margin: 0.2rem 0 0.4rem;
+  color: var(--slate-600);
+  font-size: 0.92rem;
+}
+
 .game-attribute-legend {
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;

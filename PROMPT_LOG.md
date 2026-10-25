@@ -267,3 +267,4 @@
 141. User asked for a Trivial Pursuit end-of-game results screen similar to Yahtzee or Monopoly Deal.
 142. User asked to rename Show Question to Reveal Question, and add Reveal Answers so the answerer can see multiple-choice options.
 143. User changed mind on Reveal Answers: each player may request multiple-choice options themselves, limited to 5 times per game (not reader-controlled).
+144. User asked to list lobby games alphabetically and add filters for game attributes (Activity, Game, Team game, and the rest). Game/Activity and Shorter/Longer match either choice; the other filters narrow further. Host and guest pickers share the same list.

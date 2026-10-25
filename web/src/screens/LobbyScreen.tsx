@@ -13,14 +13,15 @@ import {
   type YahtzeeMode,
   type SessionState
 } from "../../../shared/contracts";
-import { GameAttributeBadge, GameAttributeLegend } from "../components/GameAttributeBadge";
+import { GameAttributeBadge, GameAttributeIcon, GameAttributeLegend } from "../components/GameAttributeBadge";
 import { GameBetaBadge, LobbyGameInfoTooltip } from "../components/LobbyGameInfoTooltip";
 import { PlayerList } from "../components/PlayerList";
 import { SessionQueuePanel } from "../components/SessionQueuePanel";
 import { MyProfilePanel, type ProfileAuth } from "../components/MyProfilePanel";
 import { ProfileViewModal } from "../components/ProfileViewModal";
-import { getGameAttributes } from "../../../shared/gameAttributes";
+import { GAME_ATTRIBUTE_DEFINITIONS, getGameAttributes, type GameAttribute } from "../../../shared/gameAttributes";
 import { buildGameStartPayload, GUESS_IMAGE_LOBBY_EVERYONE } from "../utils/buildGameStartPayload";
+import { filterGamesByAttributes, sortGamesByTitle } from "../utils/lobbyGameDisplay";
 
 type GameOption = {
   id: GameType;
@@ -206,6 +207,8 @@ const GAMES: GameOption[] = [
   }
 ];
 
+const GAMES_BY_TITLE = sortGamesByTitle(GAMES);
+
 const GAME_TITLES_BY_ID = Object.fromEntries(GAMES.map((game) => [game.id, game.title])) as Record<GameType, string>;
 
 export function LobbyScreen({
@@ -229,6 +232,7 @@ export function LobbyScreen({
   const me = session.participants.find((p) => p.id === currentParticipantId);
   const canInteractAsGuest = me?.isActive !== false;
   const waitingOnBenchDuringGame = Boolean(session.activeGame && !canInteractAsGuest);
+  const [selectedAttributes, setSelectedAttributes] = useState<GameAttribute[]>([]);
   const [hangmanMode, setHangmanMode] = useState<HangmanMode>("team");
   const [hangmanCreatorId, setHangmanCreatorId] = useState(currentParticipantId);
   const [guessImagePreparer, setGuessImagePreparer] = useState(() => {
@@ -343,6 +347,12 @@ export function LobbyScreen({
     return Array.isArray(value) ? value : [];
   };
   const myPrefs = prefsFor(currentParticipantId);
+  const visibleGames = filterGamesByAttributes(GAMES_BY_TITLE, (game) => getGameAttributes(game.id), selectedAttributes);
+  const toggleAttributeFilter = (attribute: GameAttribute) => {
+    setSelectedAttributes((current) =>
+      current.includes(attribute) ? current.filter((item) => item !== attribute) : [...current, attribute]
+    );
+  };
   const preferenceRows = [...session.participants]
     .filter((p) => prefsFor(p.id).length > 0)
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -425,11 +435,45 @@ export function LobbyScreen({
             <h2>Choose a game</h2>
             {!isHost && <span className="pill pill-muted">Host picks</span>}
           </header>
+          <div className="game-attribute-filters" role="group" aria-label="Filter games">
+            {GAME_ATTRIBUTE_DEFINITIONS.map((definition) => {
+              const selected = selectedAttributes.includes(definition.id);
+              return (
+                <button
+                  key={definition.id}
+                  type="button"
+                  className={`game-filter-chip${selected ? ` is-active game-attribute-${definition.id}` : ""}`}
+                  aria-pressed={selected}
+                  title={definition.description}
+                  onClick={() => toggleAttributeFilter(definition.id)}
+                >
+                  <span className="game-attribute-icon" aria-hidden>
+                    <GameAttributeIcon attribute={definition.id} />
+                  </span>
+                  {definition.label}
+                </button>
+              );
+            })}
+            {selectedAttributes.length > 0 && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedAttributes([])}>
+                Clear filters
+              </button>
+            )}
+            <p className="game-filter-hint">Game or Activity, and Shorter or Longer, match either one.</p>
+            <p className="game-filter-count" aria-live="polite">
+              {selectedAttributes.length === 0
+                ? `${GAMES_BY_TITLE.length} games`
+                : `${visibleGames.length} of ${GAMES_BY_TITLE.length} games`}
+            </p>
+          </div>
           {isHost ? (
             <>
               <GameAttributeLegend />
+              {visibleGames.length === 0 ? (
+                <p className="game-filter-empty">No games match these filters.</p>
+              ) : (
               <div className="game-grid">
-                {GAMES.map((game) => (
+                {visibleGames.map((game) => (
                   <article key={game.id} className="game-card">
                     <div className="game-card-emoji" aria-hidden="true">
                       <img className="game-card-icon" src={game.iconSrc} alt="" loading="lazy" />
@@ -829,10 +873,13 @@ export function LobbyScreen({
                   </article>
                 ))}
               </div>
+              )}
             </>
+          ) : visibleGames.length === 0 ? (
+            <p className="game-filter-empty">No games match these filters.</p>
           ) : (
             <div className="game-grid-compact">
-              {GAMES.map((game) => {
+              {visibleGames.map((game) => {
                 const isSelected = myPrefs.includes(game.id);
                 const atPreferenceLimit = !isSelected && myPrefs.length >= MAX_LOBBY_GAME_PREFERENCES;
                 const preferenceDisabled = !canInteractAsGuest || atPreferenceLimit;
