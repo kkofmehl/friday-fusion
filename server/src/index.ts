@@ -1635,6 +1635,36 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "wheelOfFortune:continue") {
           await sessionService.wheelOfFortuneContinue(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:roll") {
+          await sessionService.trivialPursuitRoll(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:move") {
+          await sessionService.trivialPursuitMove(
+            context.sessionId,
+            context.participantId,
+            event.payload.spaceId
+          );
+        } else if (event.type === "trivialPursuit:showQuestion") {
+          await sessionService.trivialPursuitShowQuestion(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:requestChoices") {
+          await sessionService.trivialPursuitRequestChoices(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:startClock") {
+          await sessionService.trivialPursuitStartClock(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:reveal") {
+          await sessionService.trivialPursuitReveal(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:judge") {
+          await sessionService.trivialPursuitJudge(
+            context.sessionId,
+            context.participantId,
+            event.payload.correct
+          );
+        } else if (event.type === "trivialPursuit:chooseFinalCategory") {
+          await sessionService.trivialPursuitChooseFinalCategory(
+            context.sessionId,
+            context.participantId,
+            event.payload.category
+          );
+        } else if (event.type === "trivialPursuit:retryQuestion") {
+          await sessionService.trivialPursuitRetryQuestion(context.sessionId, context.participantId);
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

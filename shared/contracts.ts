@@ -25,7 +25,8 @@ export const gameTypeSchema = z.enum([
   "splendor",
   "friendlyFeud",
   "badAdvice",
-  "wheelOfFortune"
+  "wheelOfFortune",
+  "trivialPursuit"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -695,6 +696,91 @@ export const wheelOfFortuneStateSchema = z.discriminatedUnion("status", [
   })
 ]);
 export type WheelOfFortuneState = z.infer<typeof wheelOfFortuneStateSchema>;
+
+export const trivialPursuitCategorySchema = z.enum([
+  "geography",
+  "history",
+  "artsAndLiterature",
+  "entertainment",
+  "sportsAndLeisure",
+  "scienceAndNature"
+]);
+export type TrivialPursuitCategoryContract = z.infer<typeof trivialPursuitCategorySchema>;
+
+export const trivialPursuitPhaseSchema = z.enum([
+  "rolling",
+  "choosingMove",
+  "reading",
+  "judging",
+  "choosingFinalCategory",
+  "finished"
+]);
+export type TrivialPursuitPhase = z.infer<typeof trivialPursuitPhaseSchema>;
+
+/** Classic: wedge only at HQ. Fast: any correct answer for a missing category. */
+export const trivialPursuitWedgeModeSchema = z.enum(["classic", "fast"]);
+export type TrivialPursuitWedgeMode = z.infer<typeof trivialPursuitWedgeModeSchema>;
+
+export const trivialPursuitWedgesSchema = z.object({
+  geography: z.boolean(),
+  history: z.boolean(),
+  artsAndLiterature: z.boolean(),
+  entertainment: z.boolean(),
+  sportsAndLeisure: z.boolean(),
+  scienceAndNature: z.boolean()
+});
+export type TrivialPursuitWedges = z.infer<typeof trivialPursuitWedgesSchema>;
+
+export const trivialPursuitPlayerPublicSchema = z.object({
+  participantId: z.string(),
+  spaceId: z.string(),
+  wedges: trivialPursuitWedgesSchema,
+  /** Remaining times this player may request multiple-choice options (game-wide). */
+  choiceHelpsRemaining: z.number().int().min(0).default(5)
+});
+export type TrivialPursuitPlayerPublic = z.infer<typeof trivialPursuitPlayerPublicSchema>;
+
+export const trivialPursuitQuestionPublicSchema = z.object({
+  id: z.string(),
+  category: trivialPursuitCategorySchema,
+  /** Present for the reader always; for the answerer after show-question; for everyone after reveal. */
+  text: z.string().nullable(),
+  /** Present for everyone only after the reader reveals the answer. */
+  correctAnswer: z.string().nullable(),
+  /**
+   * Shuffled choices (correct + incorrect). Visible to the reader while reading
+   * (so they can decide whether to read them aloud), to the answerer after they
+   * spend a choice help, and to everyone after reveal.
+   */
+  choices: z.array(z.string()).nullable()
+});
+export type TrivialPursuitQuestionPublic = z.infer<typeof trivialPursuitQuestionPublicSchema>;
+
+export const trivialPursuitStateSchema = z.object({
+  status: z.enum(["playing", "finished"]),
+  phase: trivialPursuitPhaseSchema,
+  /** Default keeps older in-flight games broadcastable if wedgeMode was missing. */
+  wedgeMode: trivialPursuitWedgeModeSchema.default("fast"),
+  playerOrder: z.array(z.string()),
+  players: z.array(trivialPursuitPlayerPublicSchema),
+  currentTurnId: z.string().nullable(),
+  readerId: z.string().nullable(),
+  lastDieRoll: z.number().int().min(1).max(6).nullable(),
+  legalMoveSpaceIds: z.array(z.string()),
+  activeCategory: trivialPursuitCategorySchema.nullable(),
+  activeQuestion: trivialPursuitQuestionPublicSchema.nullable(),
+  questionShownAt: z.number().int().nullable(),
+  /** When set, the answerer spent a choice help and can see MC options (unmarked until answer reveal). */
+  choicesShownAt: z.number().int().nullable(),
+  clockEndsAt: z.number().int().nullable(),
+  answerRevealed: z.boolean(),
+  finalCategoryChooserId: z.string().nullable(),
+  awaitingHubReturn: z.boolean(),
+  winnerParticipantId: z.string().nullable(),
+  lastOutcome: z.string().nullable(),
+  questionError: z.string().nullable()
+});
+export type TrivialPursuitState = z.infer<typeof trivialPursuitStateSchema>;
 
 /** Per-draw timer bounds (ms) for Pictionary; server clamps `game:start` options to this range. */
 export const PICTORY_ROUND_DURATION_MIN_MS = 30_000;
@@ -1899,6 +1985,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("wheelOfFortune"),
     state: wheelOfFortuneStateSchema
+  }),
+  z.object({
+    type: z.literal("trivialPursuit"),
+    state: trivialPursuitStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -1934,7 +2024,9 @@ export const gameStartOptionsSchema = z.object({
   /** Bad Advice: number of rounds / prompts (default 5, clamped server-side to 1–50). */
   badAdviceTotalRounds: z.number().int().positive().optional(),
   /** Wheel of Fortune: curated bank vs host-entered puzzles. */
-  wheelOfFortunePuzzleSource: wheelOfFortunePuzzleSourceSchema.optional()
+  wheelOfFortunePuzzleSource: wheelOfFortunePuzzleSourceSchema.optional(),
+  /** Trivial Pursuit: classic HQ-only wedges vs any-correct for missing categories. */
+  trivialPursuitWedgeMode: trivialPursuitWedgeModeSchema.optional()
 });
 export type GameStartOptions = z.infer<typeof gameStartOptionsSchema>;
 
@@ -2636,7 +2728,25 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("wheelOfFortune:bonusSolve"),
     payload: z.object({ guess: z.string().min(1).max(80) })
   }),
-  z.object({ type: z.literal("wheelOfFortune:continue"), payload: z.object({}) })
+  z.object({ type: z.literal("wheelOfFortune:continue"), payload: z.object({}) }),
+  z.object({ type: z.literal("trivialPursuit:roll"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("trivialPursuit:move"),
+    payload: z.object({ spaceId: z.string().min(1) })
+  }),
+  z.object({ type: z.literal("trivialPursuit:showQuestion"), payload: z.object({}) }),
+  z.object({ type: z.literal("trivialPursuit:requestChoices"), payload: z.object({}) }),
+  z.object({ type: z.literal("trivialPursuit:startClock"), payload: z.object({}) }),
+  z.object({ type: z.literal("trivialPursuit:reveal"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("trivialPursuit:judge"),
+    payload: z.object({ correct: z.boolean() })
+  }),
+  z.object({
+    type: z.literal("trivialPursuit:chooseFinalCategory"),
+    payload: z.object({ category: trivialPursuitCategorySchema })
+  }),
+  z.object({ type: z.literal("trivialPursuit:retryQuestion"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

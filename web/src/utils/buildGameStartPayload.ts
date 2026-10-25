@@ -7,6 +7,7 @@ import {
   type HangmanMode,
   type MemoryBoardSize,
   type StoryBuilderMode,
+  type TrivialPursuitWedgeMode,
   type WheelOfFortunePuzzleSource,
   type YahtzeeMode
 } from "../../../shared/contracts";
@@ -30,6 +31,7 @@ export type LobbyGameOptions = {
   storyBuilderMode: StoryBuilderMode;
   storyBuilderFirstTurnId: string;
   memoryBoardSize: MemoryBoardSize;
+  trivialPursuitWedgeMode: TrivialPursuitWedgeMode;
 };
 
 export function buildGameStartPayload(
@@ -110,6 +112,15 @@ export function buildGameStartPayload(
   if (game === "memory") {
     return { game, options: { memoryBoardSize: options.memoryBoardSize } };
   }
+  if (game === "trivialPursuit") {
+    return {
+      game,
+      options: {
+        trivialPursuitWedgeMode:
+          options.trivialPursuitWedgeMode === "classic" ? "classic" : "fast"
+      }
+    };
+  }
   return { game };
 }
 
@@ -149,6 +160,11 @@ export function describeQueuedGameOptions(
   }
   if (game === "guessTheImage" && options.guessImageSetupMode === "everyone") {
     return "Everyone prepares";
+  }
+  if (game === "trivialPursuit" && options.trivialPursuitWedgeMode) {
+    return options.trivialPursuitWedgeMode === "classic"
+      ? "Classic wedges"
+      : "Fast wedges";
   }
   return null;
 }

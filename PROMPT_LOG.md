@@ -253,3 +253,17 @@
 130. User requested adding **Wheel of Fortune** (2–n players, 4 puzzles + RSTLNE bonus with 30s solve, hybrid bank/custom puzzles, synced wheel spin, FF points = money÷100 and bonus = players×2). Assistant implemented shared contracts/logic, puzzle bank, server engine with leave-detach, WebSocket wiring, lobby/GameScreen UI with synced SVG wheel, tests, and prompt log update.
 131. User could not see Wheel of Fortune in the lobby list after restart. Cause was a stale `web/dist` bundle on :3000; rebuilt the web app so the lobby includes the game.
 132. User asked for more padding, styled buttons, words that stay on one board line, and working bonus letter picks. Assistant padded the play stage, styled letter and action buttons with a visible selected state, grouped puzzle tiles by word, and ignored spaces when comparing solves.
+
+## 2026-10-24
+
+133. User requested adding **Trivial Pursuit** (v1): classic wedge board with Roll Again spaces, 2–6 players, questions from The Trivia API, verbal play with a random reader (show question to answerer optional, Clock after 10s for a shared 30s cue, reveal answer, Correct/Incorrect), FF points = player count for the winner. Assistant implemented shared board logic, API loader, server engine with per-viewer projection, lobby/GameScreen UI, tests, and prompt log update.
+134. User found the Trivial Pursuit board unattractive and asked whether to use a photo+overlay or polish the drawn board. Chose polish: continuous ring/spoke lanes, hub pie, stronger HQs/Roll Again, felt backdrop, clearer legal-move and token treatment.
+135. User asked for a faster Trivial Pursuit wedge variant: award a pie piece on any correct answer for a category not yet owned (still roll again on later corrects for that color). Classic HQ-only remains as an option; Fast is the default lobby mode.
+136. Bug: after a Trivial Pursuit turn change, the board/UI stayed on the previous player's screen instead of letting the new active player choose a move. Cause: session:state broadcasts failed Zod when `wedgeMode` was missing on in-flight games, so clients never received the new turn. Hardened toPublic coercion + schema default; also SVG hit-target polish.
+137. User noted some Trivia API questions clearly rely on multiple choice while others have one clear answer; asked for suggestions on how to address that for verbal Trivial Pursuit.
+138. Chose option 3: filter obvious MC-only prompts, keep choices for the reader (optional aloud), and show all choices on reveal for judging.
+139. User found wedge chips hard to read: only show earned colors beside names, and add hover on board tokens showing player name + enlarged piece with pie wedges.
+140. Token hover popover was cut off at the top of the board; open it below the piece instead.
+141. User asked for a Trivial Pursuit end-of-game results screen similar to Yahtzee or Monopoly Deal.
+142. User asked to rename Show Question to Reveal Question, and add Reveal Answers so the answerer can see multiple-choice options.
+143. User changed mind on Reveal Answers: each player may request multiple-choice options themselves, limited to 5 times per game (not reader-controlled).

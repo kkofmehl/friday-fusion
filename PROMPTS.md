@@ -154,3 +154,47 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-09-28:** It's My Birthday simultaneous payment works. Extend it to rent cards that charge all players; those payments are still collected one player at a time.
+
+---
+
+**2026-10-24:** Add Trivial Pursuit to Friday Fusion. Use The Trivia API for questions. Verbal play: random non-turn reader, optional show question to answerer, Clock after 10s for 30s shared cue, reveal answer, Correct/Incorrect. Classic board with Roll Again spaces.
+
+---
+
+**2026-10-24:** Trivial Pursuit board doesn't look awesome. Prefer polishing the drawn SVG board (continuous tracks, hub pie, better HQs) over a photo+overlay for now.
+
+---
+
+**2026-10-24:** Add a faster Trivial Pursuit variant where any correct answer for a missing category awards a wedge; landing on that color after owning the wedge still grants another roll. Keep classic HQ-only as an option.
+
+---
+
+**2026-10-24:** Trivial Pursuit bug — when the turn changed, the board stayed on the last player's screen instead of moving to the active player so they could choose where to move. App shut down so the assistant can run it to reproduce/fix.
+
+---
+
+**2026-10-24:** Some Trivia API questions clearly rely on multiple choice; others have one clear answer. Suggestions on how to address that for verbal play?
+
+---
+
+**2026-10-24:** Go with option 3 — eliminate obvious multiple-choice questions. Some MC falling through is OK. Reader decides whether choices need to be read; on reveal, show all multiple-choice options.
+
+---
+
+**2026-10-24:** Hard to see how many wedges a player has. Only show earned color chips beside names. Add hover on board pieces: modal with player name + enlarged piece with pie wedges.
+
+---
+
+**2026-10-24:** Token hover modal opens below the piece — top-of-board icons were getting cut off.
+
+---
+
+**2026-10-24:** Add an end-of-game results screen for Trivial Pursuit, similar to Yahtzee or Monopoly Deal.
+
+---
+
+**2026-10-24:** Change "Show Question" to "Reveal Question". Add "Reveal Answers" that shows multiple-choice options to the current answerer.
+
+---
+
+**2026-10-24:** Instead of the reader revealing answers, each player can request multiple-choice options themselves — max 5 times per game.

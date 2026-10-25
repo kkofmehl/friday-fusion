@@ -32,6 +32,7 @@ import "../games/playStage.css";
 import { FriendlyFeudGame } from "../games/FriendlyFeudGame";
 import { BadAdviceGame } from "../games/BadAdviceGame";
 import { WheelOfFortuneGame } from "../games/WheelOfFortuneGame";
+import { TrivialPursuitGame } from "../games/TrivialPursuitGame";
 
 const GAME_ICON_BY_ID: Record<string, string> = {
   hangman: "/game_icons/hangman.png",
@@ -58,7 +59,8 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   monopolyDeal: "/game_icons/monopoly_deal.png",
   splendor: "/game_icons/splendor.png",
   friendlyFeud: "/game_icons/friendly_feud.png",
-  wheelOfFortune: "/game_icons/wheel_of_fortune.svg"
+  wheelOfFortune: "/game_icons/wheel_of_fortune.png",
+  trivialPursuit: "/game_icons/trivial_pursuit.png"
 };
 
 const GAME_TITLES_BY_ID: Record<GameType, string> = {
@@ -86,7 +88,8 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   monopolyDeal: "Monopoly Deal",
   splendor: "Splendor",
   friendlyFeud: "Friendly Feud",
-  wheelOfFortune: "Wheel of Fortune"
+  wheelOfFortune: "Wheel of Fortune",
+  trivialPursuit: "Trivial Pursuit"
 };
 
 export function GameScreen({
@@ -225,6 +228,14 @@ export function GameScreen({
                 ? session.gameState.state.puzzleSource
                 : "bank"
           }
+        }
+      }
+    : session.gameState?.type === "trivialPursuit"
+    ? {
+        type: "game:start",
+        payload: {
+          game: "trivialPursuit",
+          options: { trivialPursuitWedgeMode: session.gameState.state.wedgeMode }
         }
       }
     : { type: "game:start", payload: { game: session.activeGame ?? "hangman" } };
@@ -480,6 +491,16 @@ export function GameScreen({
     if (session.gameState?.type === "wheelOfFortune") {
       return (
         <WheelOfFortuneGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "trivialPursuit") {
+      return (
+        <TrivialPursuitGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

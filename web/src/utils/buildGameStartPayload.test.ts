@@ -17,7 +17,8 @@ const baseOptions = {
   wheelOfFortunePuzzleSource: "bank" as const,
   storyBuilderMode: "stock" as const,
   storyBuilderFirstTurnId: "p1",
-  memoryBoardSize: "36" as const
+  memoryBoardSize: "36" as const,
+  trivialPursuitWedgeMode: "fast" as const
 };
 
 describe("buildGameStartPayload", () => {
@@ -55,6 +56,22 @@ describe("buildGameStartPayload", () => {
     ).toEqual({
       game: "wheelOfFortune",
       options: { wheelOfFortunePuzzleSource: "custom" }
+    });
+  });
+
+  it("builds Trivial Pursuit start payload from lobby options", () => {
+    expect(buildGameStartPayload("trivialPursuit", baseOptions)).toEqual({
+      game: "trivialPursuit",
+      options: { trivialPursuitWedgeMode: "fast" }
+    });
+    expect(
+      buildGameStartPayload("trivialPursuit", {
+        ...baseOptions,
+        trivialPursuitWedgeMode: "classic"
+      })
+    ).toEqual({
+      game: "trivialPursuit",
+      options: { trivialPursuitWedgeMode: "classic" }
     });
   });
 });

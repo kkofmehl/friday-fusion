@@ -3736,4 +3736,91 @@ describe("SessionService", () => {
       expect(playing.gameState.state.category).toBe("Phrase");
     });
   });
+
+  describe("Trivial Pursuit", () => {
+    const mockTriviaApiFetch = (): typeof fetch =>
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        const tag = u.includes("geography")
+          ? "geo"
+          : u.includes("history")
+            ? "hist"
+            : u.includes("arts_and_literature")
+              ? "arts"
+              : u.includes("film_and_tv")
+                ? "ent"
+                : u.includes("sport_and_leisure")
+                  ? "sport"
+                  : "sci";
+        const questions = Array.from({ length: 10 }, (_, i) => ({
+          id: `${tag}-${i}`,
+          type: "text_choice",
+          question: { text: `${tag} question ${i}?` },
+          correctAnswer: `Answer ${i}`,
+          incorrectAnswers: ["X", "Y", "Z"]
+        }));
+        return { ok: true, json: async () => questions };
+      }) as unknown as typeof fetch;
+
+    it("starts for 2 players, rolls, and hides question text from the answerer", async () => {
+      const prevFetch = globalThis.fetch;
+      globalThis.fetch = mockTriviaApiFetch();
+      try {
+        const setup = await createService();
+        tempDir = setup.tempDir;
+        const host = await setup.service.createSession("Host");
+        const guest = await setup.service.joinSession(host.joinCode, "Guest");
+        await setup.service.startGame(host.sessionId, "trivialPursuit");
+
+        const state = setup.service.getState(host.sessionId, host.participantId);
+        expect(state.gameState?.type).toBe("trivialPursuit");
+        if (state.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(state.gameState.state.status).toBe("playing");
+        expect(state.gameState.state.phase).toBe("rolling");
+        expect(state.gameState.state.playerOrder).toHaveLength(2);
+
+        const turnId = state.gameState.state.currentTurnId!;
+        await setup.service.trivialPursuitRoll(host.sessionId, turnId);
+        const afterRoll = setup.service.getState(host.sessionId, turnId);
+        if (afterRoll.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(afterRoll.gameState.state.phase).toBe("choosingMove");
+        const dest = afterRoll.gameState.state.legalMoveSpaceIds[0];
+        expect(dest).toBeTruthy();
+        await setup.service.trivialPursuitMove(host.sessionId, turnId, dest!);
+
+        const forAnswerer = setup.service.getState(host.sessionId, turnId);
+        if (forAnswerer.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(forAnswerer.gameState.state.phase).toBe("reading");
+        expect(forAnswerer.gameState.state.readerId).not.toBe(turnId);
+        expect(forAnswerer.gameState.state.activeQuestion?.text).toBeNull();
+
+        const readerId = forAnswerer.gameState.state.readerId!;
+        const forReader = setup.service.getState(host.sessionId, readerId);
+        if (forReader.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(forReader.gameState.state.activeQuestion?.text).toBeTruthy();
+        expect(forReader.gameState.state.activeQuestion?.correctAnswer).toBeNull();
+
+        await setup.service.trivialPursuitReveal(host.sessionId, readerId);
+        await setup.service.trivialPursuitJudge(host.sessionId, readerId, false);
+        const afterJudge = setup.service.getState(host.sessionId, host.participantId);
+        if (afterJudge.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(afterJudge.gameState.state.phase).toBe("rolling");
+        expect(afterJudge.gameState.state.currentTurnId).not.toBe(turnId);
+        expect(afterJudge.gameState.state.wedgeMode).toMatch(/^(classic|fast)$/);
+
+        const nextTurnId = afterJudge.gameState.state.currentTurnId!;
+        await setup.service.trivialPursuitRoll(host.sessionId, nextTurnId);
+        const afterNextRoll = setup.service.getState(host.sessionId, nextTurnId);
+        if (afterNextRoll.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(afterNextRoll.gameState.state.phase).toBe("choosingMove");
+        expect(afterNextRoll.gameState.state.currentTurnId).toBe(nextTurnId);
+        expect(afterNextRoll.gameState.state.legalMoveSpaceIds.length).toBeGreaterThan(0);
+
+        // unused guest reference keeps join real
+        expect(guest.participantId).toBeTruthy();
+      } finally {
+        globalThis.fetch = prevFetch;
+      }
+    });
+  });
 });

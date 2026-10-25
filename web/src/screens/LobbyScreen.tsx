@@ -8,6 +8,7 @@ import {
   type ClientEvent,
   type GameType,
   type HangmanMode,
+  type TrivialPursuitWedgeMode,
   type WheelOfFortunePuzzleSource,
   type YahtzeeMode,
   type SessionState
@@ -145,7 +146,15 @@ const GAMES: GameOption[] = [
     title: "Wheel of Fortune",
     description:
       "Spin the wheel, buy vowels, and solve four puzzles—then the money leader plays a bonus round. 2+ players.",
-    iconSrc: "/game_icons/wheel_of_fortune.svg",
+    iconSrc: "/game_icons/wheel_of_fortune.png",
+    beta: true
+  },
+  {
+    id: "trivialPursuit",
+    title: "Trivial Pursuit",
+    description:
+      "Roll, move, and collect wedges while another player reads questions aloud from The Trivia API. Fast mode awards wedges on any correct answer. 2–6 players.",
+    iconSrc: "/game_icons/trivial_pursuit.png",
     beta: true
   },
   {
@@ -243,6 +252,8 @@ export function LobbyScreen({
   const [badAdviceRounds, setBadAdviceRounds] = useState(5);
   const [wheelOfFortunePuzzleSource, setWheelOfFortunePuzzleSource] =
     useState<WheelOfFortunePuzzleSource>("bank");
+  const [trivialPursuitWedgeMode, setTrivialPursuitWedgeMode] =
+    useState<TrivialPursuitWedgeMode>("fast");
   const [storyBuilderMode, setStoryBuilderMode] = useState<"stock" | "scratch">("stock");
   const [storyBuilderFirstTurnId, setStoryBuilderFirstTurnId] = useState(() => {
     const host = session.participants.find((p) => p.isHost);
@@ -312,6 +323,7 @@ export function LobbyScreen({
     wouldYouRatherAllowSubmissions,
     badAdviceRounds,
     wheelOfFortunePuzzleSource,
+    trivialPursuitWedgeMode,
     storyBuilderMode,
     storyBuilderFirstTurnId,
     memoryBoardSize
@@ -599,6 +611,36 @@ export function LobbyScreen({
                     />
                     <span className="mode-option-title">Custom puzzles</span>
                     <span className="mode-option-hint">Host enters four round puzzles and one bonus after start.</span>
+                  </label>
+                </fieldset>
+              )}
+              {game.id === "trivialPursuit" && (
+                <fieldset className="mode-picker">
+                  <legend className="mode-picker-label">Wedge rules</legend>
+                  <label className={`mode-option${trivialPursuitWedgeMode === "fast" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="tp-wedge-mode"
+                      checked={trivialPursuitWedgeMode === "fast"}
+                      onChange={() => setTrivialPursuitWedgeMode("fast")}
+                    />
+                    <span className="mode-option-title">Fast</span>
+                    <span className="mode-option-hint">
+                      Earn a wedge on any correct answer for a category you do not have yet. Correct answers after that
+                      still grant another roll.
+                    </span>
+                  </label>
+                  <label className={`mode-option${trivialPursuitWedgeMode === "classic" ? " is-active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="tp-wedge-mode"
+                      checked={trivialPursuitWedgeMode === "classic"}
+                      onChange={() => setTrivialPursuitWedgeMode("classic")}
+                    />
+                    <span className="mode-option-title">Classic</span>
+                    <span className="mode-option-hint">
+                      Wedges only from the six headquarters spots at the end of each spoke.
+                    </span>
                   </label>
                 </fieldset>
               )}

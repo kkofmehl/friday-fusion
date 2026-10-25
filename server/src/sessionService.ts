@@ -167,6 +167,26 @@ import {
 } from "./wheelOfFortuneGame";
 import { normalizeCustomPuzzles, pickWheelOfFortunePuzzles } from "./wheelOfFortunePuzzles";
 import {
+  TRIVIAL_PURSUIT_MAX_PLAYERS,
+  TRIVIAL_PURSUIT_MIN_PLAYERS,
+  applyTrivialPursuitScores,
+  createTrivialPursuitGame,
+  detachTrivialPursuitPlayer,
+  hydrateTrivialPursuitGame,
+  toPublicTrivialPursuitState,
+  trivialPursuitChooseFinalCategory as tpChooseFinalCategory,
+  trivialPursuitJudge as tpJudge,
+  trivialPursuitMove as tpMove,
+  trivialPursuitReveal as tpReveal,
+  trivialPursuitRequestChoices as tpRequestChoices,
+  trivialPursuitRetryQuestion as tpRetryQuestion,
+  trivialPursuitRoll as tpRoll,
+  trivialPursuitShowQuestion as tpShowQuestion,
+  trivialPursuitStartClock as tpStartClock,
+  type TrivialPursuitGameInternal
+} from "./trivialPursuitGame";
+import type { TrivialPursuitCategory } from "../../shared/trivialPursuitLogic";
+import {
   SPLENDOR_MAX_PLAYERS,
   SPLENDOR_MIN_PLAYERS,
   marketSlotsForPlayerCount,
@@ -724,7 +744,8 @@ type GameInternal =
   | SplendorGameInternal
   | FriendlyFeudGameInternal
   | BadAdviceGameInternal
-  | WheelOfFortuneGameInternal;
+  | WheelOfFortuneGameInternal
+  | TrivialPursuitGameInternal;
 
 // NOTE: Stored as an array even though the UI currently only allows one active
 // game at a time. This keeps the room open for true multi-game-per-session
@@ -1560,6 +1581,9 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
   }
   if (game.type === "wheelOfFortune") {
     return hydrateWheelOfFortuneGame(game as WheelOfFortuneGameInternal);
+  }
+  if (game.type === "trivialPursuit") {
+    return hydrateTrivialPursuitGame(game as TrivialPursuitGameInternal);
   }
   if (game.type === "badAdvice") {
     const g = game as BadAdviceGameInternal;
@@ -2790,6 +2814,24 @@ export class SessionService {
           usedPuzzleIds: [...usedPuzzleIds]
         });
       }
+    } else if (game === "trivialPursuit") {
+      const actives = activeParticipants(session);
+      if (
+        actives.length < TRIVIAL_PURSUIT_MIN_PLAYERS
+        || actives.length > TRIVIAL_PURSUIT_MAX_PLAYERS
+      ) {
+        throw new Error(
+          `Trivial Pursuit needs ${TRIVIAL_PURSUIT_MIN_PLAYERS}–${TRIVIAL_PURSUIT_MAX_PLAYERS} active players.`
+        );
+      }
+      const previousTp = session.games.find(
+        (entry): entry is TrivialPursuitGameInternal => entry.type === "trivialPursuit"
+      );
+      next = await createTrivialPursuitGame({
+        playerOrder: actives.map((p) => p.id),
+        usedQuestionIds: previousTp?.usedQuestionIds ?? [],
+        wedgeMode: options.trivialPursuitWedgeMode === "classic" ? "classic" : "fast"
+      });
     } else if (game === "badAdvice") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -3379,6 +3421,14 @@ export class SessionService {
         this.scheduleWheelOfFortuneSpinSettle(sessionId);
       } else if (activeWof.status === "bonusSolve") {
         this.scheduleWheelOfFortuneBonusDeadline(sessionId);
+      }
+    }
+
+    const activeTp = session.games[0];
+    if (activeTp?.type === "trivialPursuit") {
+      detachTrivialPursuitPlayer(activeTp, participantId);
+      if (activeTp.status === "finished") {
+        this.applyTrivialPursuitSessionScores(session, activeTp);
       }
     }
   }
@@ -9604,6 +9654,18 @@ export class SessionService {
       };
     }
 
+    if (game.type === "trivialPursuit") {
+      this.applyTrivialPursuitSessionScores(session, game);
+      return {
+        ...base,
+        activeGame: "trivialPursuit",
+        gameState: {
+          type: "trivialPursuit",
+          state: toPublicTrivialPursuitState(game, viewerParticipantId ?? "")
+        }
+      };
+    }
+
     const _never: never = game;
     throw new Error(`Unknown game type: ${(_never as GameInternal).type}`);
   }
@@ -10362,6 +10424,145 @@ export class SessionService {
       return;
     }
     throw new Error("Nothing to continue.");
+  }
+
+  private applyTrivialPursuitSessionScores(
+    session: SessionInternal,
+    game: TrivialPursuitGameInternal
+  ): void {
+    if (game.status !== "finished") {
+      return;
+    }
+    applyTrivialPursuitScores(
+      game,
+      (participantId, points) => {
+        const participant = session.participants.find((p) => p.id === participantId);
+        if (participant) {
+          participant.score += points;
+        }
+      },
+      activeParticipants(session).length
+    );
+  }
+
+  private async trivialPursuitPersist(session: SessionInternal): Promise<void> {
+    const game = session.games[0];
+    if (game?.type === "trivialPursuit") {
+      this.applyTrivialPursuitSessionScores(session, game);
+    }
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async trivialPursuitRoll(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpRoll(game, participantId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitMove(
+    sessionId: string,
+    participantId: string,
+    spaceId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpMove(game, participantId, spaceId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitShowQuestion(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpShowQuestion(game, participantId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitRequestChoices(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpRequestChoices(game, participantId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitStartClock(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpStartClock(game, participantId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitReveal(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpReveal(game, participantId);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitJudge(
+    sessionId: string,
+    participantId: string,
+    correct: boolean
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpJudge(game, participantId, correct);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitChooseFinalCategory(
+    sessionId: string,
+    participantId: string,
+    category: TrivialPursuitCategory
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpChooseFinalCategory(game, participantId, category);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitRetryQuestion(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpRetryQuestion(game, participantId);
+    await this.trivialPursuitPersist(session);
   }
 }
 
