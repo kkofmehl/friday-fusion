@@ -198,3 +198,7 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-10-24:** Instead of the reader revealing answers, each player can request multiple-choice options themselves — max 5 times per game.
+
+---
+
+**2026-10-30:** /env-setup Set up a new development environment for this codebase. Follow the “Set up a new environment” workflow in the env-setup skill. Run the relevant applications and demonstrate that the environment works end to end.
