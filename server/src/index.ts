@@ -1665,6 +1665,11 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           );
         } else if (event.type === "trivialPursuit:retryQuestion") {
           await sessionService.trivialPursuitRetryQuestion(context.sessionId, context.participantId);
+        } else if (event.type === "trivialPursuit:relaxExactCenterRoll") {
+          await sessionService.trivialPursuitRelaxExactCenterRoll(
+            context.sessionId,
+            context.participantId
+          );
         } else if (event.type === "pictionary:setTeams") {
           await sessionService.pictionarySetTeams(
             context.sessionId,

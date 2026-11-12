@@ -268,3 +268,8 @@
 142. User asked to rename Show Question to Reveal Question, and add Reveal Answers so the answerer can see multiple-choice options.
 143. User changed mind on Reveal Answers: each player may request multiple-choice options themselves, limited to 5 times per game (not reader-controlled).
 144. User asked to list lobby games alphabetically and add filters for game attributes (Activity, Game, Team game, and the rest). Game/Activity and Shorter/Longer match either choice; the other filters narrow further. Host and guest pickers share the same list.
+
+## 2026-11-12
+
+145. User asked that a Trivial Pursuit player who reaches the center keep getting questions until they win, in both wedge variants, instead of leaving and returning. Also asked for a host-only, irreversible option to drop the exact-roll requirement so a player with all six wedges can enter the center on any roll long enough to reach it.
+146. User clarified a missed center question ends that player's turn. Other players take their turns. When play returns to the player still in the center, they get a new question, and the opponent who reads it is the one who picks the category.

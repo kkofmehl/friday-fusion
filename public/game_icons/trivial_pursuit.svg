@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Trivial Pursuit">
+  <circle cx="64" cy="64" r="58" fill="#0d47a1" stroke="#062a63" stroke-width="4"/>
+  <g transform="translate(64 64)">
+    <path d="M0 0 L0 -50 A50 50 0 0 1 43.3 -25 Z" fill="#1565c0"/>
+    <path d="M0 0 L43.3 -25 A50 50 0 0 1 43.3 25 Z" fill="#f9a825"/>
+    <path d="M0 0 L43.3 25 A50 50 0 0 1 0 50 Z" fill="#6a1b9a"/>
+    <path d="M0 0 L0 50 A50 50 0 0 1 -43.3 25 Z" fill="#ec407a"/>
+    <path d="M0 0 L-43.3 25 A50 50 0 0 1 -43.3 -25 Z" fill="#ef6c00"/>
+    <path d="M0 0 L-43.3 -25 A50 50 0 0 1 0 -50 Z" fill="#2e7d32"/>
+  </g>
+  <circle cx="64" cy="64" r="16" fill="#0d47a1" stroke="#fffde7" stroke-width="3"/>
+</svg>

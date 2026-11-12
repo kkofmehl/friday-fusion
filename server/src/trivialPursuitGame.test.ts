@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { trivialPursuitStateSchema } from "../../shared/contracts";
 import {
+  TRIVIAL_PURSUIT_CATEGORIES,
   TRIVIAL_PURSUIT_CLOCK_DURATION_MS,
   TRIVIAL_PURSUIT_HUB_ID,
-  TRIVIAL_PURSUIT_SHOW_QUESTION_CLOCK_DELAY_MS
+  TRIVIAL_PURSUIT_SHOW_QUESTION_CLOCK_DELAY_MS,
+  getLegalDestinations
 } from "../../shared/trivialPursuitLogic";
 import {
   createTrivialPursuitGame,
@@ -12,6 +14,7 @@ import {
   trivialPursuitChooseFinalCategory,
   trivialPursuitJudge,
   trivialPursuitMove,
+  trivialPursuitRelaxExactCenterRoll,
   trivialPursuitReveal,
   trivialPursuitRequestChoices,
   trivialPursuitRoll,
@@ -286,6 +289,142 @@ describe("trivialPursuitGame", () => {
     detachTrivialPursuitPlayer(game, "p2", () => 0.9);
     expect(game.readerId).toBe("p3");
     expect(game.phase).toBe("reading");
+  });
+
+  it.each(["classic", "fast"] as const)(
+    "passes the turn after a missed center question and asks again on return in %s mode",
+    async (wedgeMode) => {
+      const game = await createTrivialPursuitGame({
+        playerOrder: ["p1", "p2"],
+        fetchImpl: mockFetchAllCategories(),
+        wedgeMode
+      });
+      game.currentTurnId = "p1";
+      const wedges = game.players.p1!.wedges;
+      for (const key of Object.keys(wedges) as (keyof typeof wedges)[]) {
+        wedges[key] = true;
+      }
+      game.players.p1!.spaceId = "spoke-0-0";
+      game.phase = "choosingMove";
+      game.lastDieRoll = 1;
+      game.legalMoveSpaceIds = [TRIVIAL_PURSUIT_HUB_ID];
+      trivialPursuitMove(game, "p1", TRIVIAL_PURSUIT_HUB_ID, () => 0);
+      trivialPursuitChooseFinalCategory(game, "p2", "geography", () => 0);
+      expect(game.readerId).toBe("p2");
+      trivialPursuitReveal(game, "p2");
+      trivialPursuitJudge(game, "p2", false);
+
+      expect(game.status).toBe("playing");
+      expect(game.phase).toBe("rolling");
+      expect(game.currentTurnId).toBe("p2");
+      expect(game.players.p1!.spaceId).toBe(TRIVIAL_PURSUIT_HUB_ID);
+      expect(game.awaitingHubReturn).toBe(false);
+
+      trivialPursuitRoll(game, "p2");
+      const dest = game.legalMoveSpaceIds[0];
+      expect(dest).toBeTruthy();
+      trivialPursuitMove(game, "p2", dest!, () => 0);
+      trivialPursuitReveal(game, game.readerId!);
+      trivialPursuitJudge(game, game.readerId!, false);
+
+      expect(game.currentTurnId).toBe("p1");
+      expect(game.phase).toBe("choosingFinalCategory");
+      expect(game.players.p1!.spaceId).toBe(TRIVIAL_PURSUIT_HUB_ID);
+      expect(game.finalCategoryChooserId).toBe("p2");
+
+      trivialPursuitChooseFinalCategory(game, "p2", "history", () => 0.99);
+      expect(game.readerId).toBe("p2");
+      trivialPursuitReveal(game, "p2");
+      trivialPursuitJudge(game, "p2", true);
+      expect(game.status).toBe("finished");
+      expect(game.winnerParticipantId).toBe("p1");
+    }
+  );
+
+  it("has the category chooser read the center question even when another opponent would be picked", async () => {
+    const game = await createTrivialPursuitGame({
+      playerOrder: ["p1", "p2", "p3"],
+      fetchImpl: mockFetchAllCategories()
+    });
+    game.currentTurnId = "p1";
+    for (const category of TRIVIAL_PURSUIT_CATEGORIES) {
+      game.players.p1!.wedges[category] = true;
+    }
+    game.players.p1!.spaceId = "spoke-0-0";
+    game.phase = "choosingMove";
+    game.lastDieRoll = 1;
+    game.legalMoveSpaceIds = [TRIVIAL_PURSUIT_HUB_ID];
+    trivialPursuitMove(game, "p1", TRIVIAL_PURSUIT_HUB_ID, () => 0.99);
+    expect(game.finalCategoryChooserId).toBe("p2");
+    trivialPursuitChooseFinalCategory(game, "p2", "geography", () => 0.99);
+    expect(game.readerId).toBe("p2");
+    expect(game.readerId).not.toBe("p3");
+  });
+
+  it("starts another center question instead of rolling off the hub", async () => {
+    const game = await createTrivialPursuitGame({
+      playerOrder: ["p1", "p2"],
+      fetchImpl: mockFetchAllCategories()
+    });
+    game.currentTurnId = "p1";
+    game.phase = "rolling";
+    game.awaitingHubReturn = true;
+    for (const category of TRIVIAL_PURSUIT_CATEGORIES) {
+      game.players.p1!.wedges[category] = true;
+    }
+    game.players.p1!.spaceId = TRIVIAL_PURSUIT_HUB_ID;
+    trivialPursuitRoll(game, "p1");
+    expect(game.phase).toBe("choosingFinalCategory");
+    expect(game.players.p1!.spaceId).toBe(TRIVIAL_PURSUIT_HUB_ID);
+    expect(game.awaitingHubReturn).toBe(false);
+    expect(game.lastDieRoll).toBeNull();
+  });
+
+  it("does not let a player with every wedge move off the center", async () => {
+    const game = await createTrivialPursuitGame({
+      playerOrder: ["p1", "p2"],
+      fetchImpl: mockFetchAllCategories()
+    });
+    game.currentTurnId = "p1";
+    game.phase = "choosingMove";
+    game.lastDieRoll = 1;
+    game.legalMoveSpaceIds = ["spoke-0-0"];
+    for (const category of TRIVIAL_PURSUIT_CATEGORIES) {
+      game.players.p1!.wedges[category] = true;
+    }
+    game.players.p1!.spaceId = TRIVIAL_PURSUIT_HUB_ID;
+    trivialPursuitMove(game, "p1", "spoke-0-0", () => 0);
+    expect(game.phase).toBe("choosingFinalCategory");
+    expect(game.players.p1!.spaceId).toBe(TRIVIAL_PURSUIT_HUB_ID);
+  });
+
+  it("adds the hub to the current roll when the host drops the exact-roll rule", async () => {
+    const game = await createTrivialPursuitGame({
+      playerOrder: ["p1", "p2"],
+      fetchImpl: mockFetchAllCategories(),
+      wedgeMode: "classic"
+    });
+    game.currentTurnId = "p1";
+    for (const category of TRIVIAL_PURSUIT_CATEGORIES) {
+      game.players.p1!.wedges[category] = true;
+    }
+    game.players.p1!.spaceId = "spoke-0-3";
+    game.phase = "choosingMove";
+    game.lastDieRoll = 6;
+    game.legalMoveSpaceIds = getLegalDestinations("spoke-0-3", 6, true);
+    expect(game.legalMoveSpaceIds).not.toContain(TRIVIAL_PURSUIT_HUB_ID);
+    expect(game.requireExactCenterRoll).toBe(true);
+
+    trivialPursuitRelaxExactCenterRoll(game);
+    expect(game.requireExactCenterRoll).toBe(false);
+    expect(game.legalMoveSpaceIds).toContain(TRIVIAL_PURSUIT_HUB_ID);
+
+    trivialPursuitRelaxExactCenterRoll(game);
+    expect(game.requireExactCenterRoll).toBe(false);
+
+    trivialPursuitMove(game, "p1", TRIVIAL_PURSUIT_HUB_ID, () => 0);
+    expect(game.phase).toBe("choosingFinalCategory");
+    expect(game.players.p1!.spaceId).toBe(TRIVIAL_PURSUIT_HUB_ID);
   });
 
   it("wins on a correct final hub answer", async () => {

@@ -4,7 +4,9 @@ import {
   TRIVIAL_PURSUIT_CATEGORIES,
   TRIVIAL_PURSUIT_CATEGORY_COLORS,
   TRIVIAL_PURSUIT_CATEGORY_LABELS,
+  TRIVIAL_PURSUIT_HUB_ID,
   TRIVIAL_PURSUIT_SHOW_QUESTION_CLOCK_DELAY_MS,
+  hasAllWedges,
   trivialPursuitStandings,
   type TrivialPursuitCategory
 } from "../../../shared/trivialPursuitLogic";
@@ -48,6 +50,7 @@ function ShowClockGate({
 export function TrivialPursuitGame({
   session,
   currentParticipantId,
+  isHost,
   send
 }: {
   session: SessionState;
@@ -71,7 +74,15 @@ export function TrivialPursuitGame({
     );
   }
 
-  return <TrivialPursuitPlay state={state} session={session} currentParticipantId={currentParticipantId} send={send} />;
+  return (
+    <TrivialPursuitPlay
+      state={state}
+      session={session}
+      currentParticipantId={currentParticipantId}
+      isHost={isHost}
+      send={send}
+    />
+  );
 }
 
 function TrivialPursuitFinished({
@@ -205,17 +216,27 @@ function TrivialPursuitPlay({
   state,
   session,
   currentParticipantId,
+  isHost,
   send
 }: {
   state: TrivialPursuitState;
   session: SessionState;
   currentParticipantId: string;
+  isHost: boolean;
   send: (event: ClientEvent) => void;
 }): JSX.Element {
   const isMyTurn = currentParticipantId === state.currentTurnId;
   const isReader = currentParticipantId === state.readerId;
   const isChooser = currentParticipantId === state.finalCategoryChooserId;
   const legalSet = new Set(state.legalMoveSpaceIds);
+  const requireExactCenterRoll = state.requireExactCenterRoll !== false;
+  const turnGamePlayer = state.players.find((p) => p.participantId === state.currentTurnId);
+  const continuingInCenter = Boolean(
+    state.phase === "rolling"
+    && turnGamePlayer
+    && turnGamePlayer.spaceId === TRIVIAL_PURSUIT_HUB_ID
+    && hasAllWedges(turnGamePlayer.wedges)
+  );
 
   const turnPlayer = session.participants.find((p) => p.id === state.currentTurnId);
   const readerPlayer = session.participants.find((p) => p.id === state.readerId);
@@ -232,6 +253,11 @@ function TrivialPursuitPlay({
         <span className="tp-mode-pill" data-testid="tp-wedge-mode">
           {state.wedgeMode === "classic" ? "Classic wedges" : "Fast wedges"}
         </span>
+        {!requireExactCenterRoll && (
+          <span className="tp-mode-pill" data-testid="tp-center-roll-rule">
+            Center: any roll that can reach it
+          </span>
+        )}
       </header>
 
       {state.lastOutcome && <p className="tp-outcome">{state.lastOutcome}</p>}
@@ -250,6 +276,21 @@ function TrivialPursuitPlay({
         </div>
 
         <div className="tp-panel">
+          {isHost && requireExactCenterRoll && (
+            <div className="tp-host-rule" data-testid="tp-relax-center-roll">
+              <p className="tp-status">
+                Players with all six wedges must roll the exact number to enter the center.
+                Turn this off to let them enter whenever the roll is large enough. This cannot
+                be undone for the rest of the game.
+              </p>
+              <button
+                type="button"
+                onClick={() => send({ type: "trivialPursuit:relaxExactCenterRoll", payload: {} })}
+              >
+                Allow any roll that reaches the center
+              </button>
+            </div>
+          )}
           <div className="tp-players">
             {state.playerOrder.map((id, index) => {
               const p = session.participants.find((x) => x.id === id);
@@ -295,12 +336,13 @@ function TrivialPursuitPlay({
                     className="is-primary"
                     onClick={() => send({ type: "trivialPursuit:roll", payload: {} })}
                   >
-                    Roll
+                    {continuingInCenter ? "Take another question" : "Roll"}
                   </button>
                 </div>
               ) : (
                 <p className="tp-status">
-                  Waiting for {turnPlayer ? <PlayerName participant={turnPlayer} inline /> : "player"} to roll…
+                  Waiting for {turnPlayer ? <PlayerName participant={turnPlayer} inline /> : "player"}{" "}
+                  {continuingInCenter ? "to take another center question…" : "to roll…"}
                 </p>
               )}
             </div>
@@ -325,7 +367,7 @@ function TrivialPursuitPlay({
             <div className="tp-card">
               <p className="tp-status">
                 {isChooser
-                  ? "Pick the final category."
+                  ? "Pick the category you will read."
                   : (
                     <>
                       Waiting for{" "}
@@ -337,7 +379,7 @@ function TrivialPursuitPlay({
                           />
                         )
                         : "a player"}{" "}
-                      to pick the final category…
+                      to pick the category they will read…
                     </>
                   )}
               </p>

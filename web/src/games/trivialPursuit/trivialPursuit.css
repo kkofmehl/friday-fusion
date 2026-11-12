@@ -132,6 +132,30 @@
   letter-spacing: 0.02em;
 }
 
+.tp-host-rule {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(198, 161, 91, 0.45);
+  background: rgba(198, 161, 91, 0.1);
+}
+
+.tp-host-rule .tp-status {
+  margin: 0;
+}
+
+.tp-host-rule button {
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  padding: 0.4rem 0.8rem;
+  background: #fff;
+  cursor: pointer;
+}
+
 .tp-layout {
   display: grid;
   gap: 1rem;

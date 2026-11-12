@@ -239,14 +239,17 @@ export function nextPlayerInOrder(playerOrder: readonly string[], currentId: str
 
 /**
  * Legal landing spaces for a die roll. Paths never reverse (cannot immediately
- * step back to the previous space). The hub may only be entered as the final
- * space of a walk, and only when `wedgesComplete` is true. Paths may not pass
- * through the hub as a shortcut.
+ * step back to the previous space). The hub may only be entered when
+ * `wedgesComplete` is true. By default it must be the exact final step of the
+ * roll. When `requireExactCenterRoll` is false, the hub is also a legal stop
+ * if any non-reversing path reaches it in `roll` steps or fewer. Paths may
+ * not pass through the hub as a shortcut.
  */
 export function getLegalDestinations(
   fromId: string,
   roll: number,
-  wedgesComplete: boolean
+  wedgesComplete: boolean,
+  options?: { requireExactCenterRoll?: boolean }
 ): string[] {
   if (!Number.isInteger(roll) || roll < 1 || roll > 6) {
     return [];
@@ -255,6 +258,7 @@ export function getLegalDestinations(
     return [];
   }
 
+  const requireExactCenterRoll = options?.requireExactCenterRoll !== false;
   const destinations = new Set<string>();
 
   const walk = (current: string, remaining: number, previous: string | null): void => {
@@ -268,8 +272,14 @@ export function getLegalDestinations(
     for (const neighbor of adjacency.get(current) ?? []) {
       if (neighbor === previous) continue;
       if (neighbor === HUB_ID) {
-        if (remaining !== 1) continue;
         if (!wedgesComplete) continue;
+        if (requireExactCenterRoll) {
+          if (remaining !== 1) continue;
+          walk(neighbor, remaining - 1, current);
+        } else {
+          destinations.add(HUB_ID);
+        }
+        continue;
       }
       walk(neighbor, remaining - 1, current);
     }

@@ -80,6 +80,23 @@ describe("trivialPursuitLogic board", () => {
     expect(dests).toContain("spoke-0-2");
   });
 
+  it("requires an exact roll to land on the hub by default", () => {
+    // spoke-0-3 is four steps from the hub.
+    expect(getLegalDestinations("spoke-0-3", 4, true)).toContain(TRIVIAL_PURSUIT_HUB_ID);
+    expect(getLegalDestinations("spoke-0-3", 6, true)).not.toContain(TRIVIAL_PURSUIT_HUB_ID);
+  });
+
+  it("allows the hub when the roll is at least the distance and exact entry is off", () => {
+    const relaxed = { requireExactCenterRoll: false };
+    expect(getLegalDestinations("spoke-0-3", 6, true, relaxed)).toContain(TRIVIAL_PURSUIT_HUB_ID);
+    expect(getLegalDestinations("spoke-0-3", 3, true, relaxed)).not.toContain(TRIVIAL_PURSUIT_HUB_ID);
+    expect(getLegalDestinations("spoke-0-0", 2, false, relaxed)).not.toContain(TRIVIAL_PURSUIT_HUB_ID);
+    const throughHub = getLegalDestinations("spoke-0-0", 2, true, relaxed);
+    expect(throughHub).toContain(TRIVIAL_PURSUIT_HUB_ID);
+    expect(throughHub).not.toContain("spoke-1-0");
+    expect(throughHub).toContain("spoke-0-2");
+  });
+
   it("treats roll-again ring slots as non-category spaces", () => {
     expect(getTrivialPursuitSpace("ring-0-1")?.kind).toBe("rollAgain");
     expect(categoryForSpace("ring-0-1")).toBeNull();

@@ -48,6 +48,8 @@ export type TrivialPursuitGameInternal = {
   status: "playing" | "finished";
   phase: TrivialPursuitPhase;
   wedgeMode: TrivialPursuitWedgeMode;
+  /** When false, a long enough roll may enter the center. Host can only turn this off. */
+  requireExactCenterRoll: boolean;
   playerOrder: string[];
   players: Record<string, TrivialPursuitPlayerInternal>;
   currentTurnId: string | null;
@@ -62,7 +64,7 @@ export type TrivialPursuitGameInternal = {
   clockEndsAt: number | null;
   answerRevealed: boolean;
   finalCategoryChooserId: string | null;
-  /** Contestant must leave hub and return after a failed final. */
+  /** Legacy flag from the leave-and-return center rule. New games keep this false. */
   awaitingHubReturn: boolean;
   winnerParticipantId: string | null;
   lastOutcome: string | null;
@@ -93,12 +95,56 @@ const clearCard = (game: TrivialPursuitGameInternal): void => {
   game.questionError = null;
 };
 
+const beginFinalCategoryChoice = (game: TrivialPursuitGameInternal): void => {
+  game.phase = "choosingFinalCategory";
+  game.finalCategoryChooserId = nextPlayerInOrder(game.playerOrder, game.currentTurnId);
+  game.awaitingHubReturn = false;
+  game.legalMoveSpaceIds = [];
+  clearCard(game);
+};
+
+const isAnsweringFromCenter = (game: TrivialPursuitGameInternal): boolean => {
+  const player = contestant(game);
+  return Boolean(
+    player
+    && player.spaceId === TRIVIAL_PURSUIT_HUB_ID
+    && hasAllWedges(player.wedges)
+  );
+};
+
+/** Center questions are chosen and read by the same opponent. */
+const readerForQuestion = (
+  game: TrivialPursuitGameInternal,
+  random: () => number
+): string | null => {
+  const chooser = game.finalCategoryChooserId;
+  if (
+    isAnsweringFromCenter(game)
+    && chooser
+    && chooser !== game.currentTurnId
+    && game.playerOrder.includes(chooser)
+  ) {
+    return chooser;
+  }
+  return pickReaderId(game.playerOrder, game.currentTurnId ?? "", random);
+};
+
 const beginRolling = (game: TrivialPursuitGameInternal): void => {
-  game.phase = "rolling";
+  const player = contestant(game);
   game.lastDieRoll = null;
   game.legalMoveSpaceIds = [];
   clearCard(game);
   game.finalCategoryChooserId = null;
+  if (
+    player
+    && player.spaceId === TRIVIAL_PURSUIT_HUB_ID
+    && hasAllWedges(player.wedges)
+  ) {
+    beginFinalCategoryChoice(game);
+    game.lastOutcome = "In the center — the next player picks the category and reads it.";
+    return;
+  }
+  game.phase = "rolling";
 };
 
 const beginChoosingMove = (game: TrivialPursuitGameInternal, roll: number): void => {
@@ -111,7 +157,8 @@ const beginChoosingMove = (game: TrivialPursuitGameInternal, roll: number): void
   game.legalMoveSpaceIds = getLegalDestinations(
     player.spaceId,
     roll,
-    hasAllWedges(player.wedges)
+    hasAllWedges(player.wedges),
+    { requireExactCenterRoll: game.requireExactCenterRoll !== false }
   );
   clearCard(game);
 };
@@ -131,7 +178,7 @@ const startQuestion = (
     game.phase = "reading";
     game.activeCategory = category;
     game.activeQuestion = null;
-    game.readerId = pickReaderId(game.playerOrder, game.currentTurnId, random);
+    game.readerId = readerForQuestion(game, random);
     game.questionShownAt = null;
     game.choicesShownAt = null;
     game.clockEndsAt = null;
@@ -141,7 +188,7 @@ const startQuestion = (
   game.usedQuestionIds.push(question.id);
   game.activeCategory = category;
   game.activeQuestion = question;
-  game.readerId = pickReaderId(game.playerOrder, game.currentTurnId, random);
+  game.readerId = readerForQuestion(game, random);
   game.questionShownAt = null;
   game.choicesShownAt = null;
   game.clockEndsAt = null;
@@ -188,6 +235,7 @@ export async function createTrivialPursuitGame(opts: {
     status: "playing",
     phase: "rolling",
     wedgeMode: opts.wedgeMode === "classic" ? "classic" : "fast",
+    requireExactCenterRoll: true,
     playerOrder: [...opts.playerOrder],
     players,
     currentTurnId: first,
@@ -252,6 +300,7 @@ export function hydrateTrivialPursuitGame(
         ? raw.phase
         : "rolling",
     wedgeMode: raw.wedgeMode === "fast" ? "fast" : "classic",
+    requireExactCenterRoll: raw.requireExactCenterRoll !== false,
     playerOrder,
     players,
     currentTurnId: typeof raw.currentTurnId === "string" ? raw.currentTurnId : playerOrder[0] ?? null,
@@ -291,6 +340,16 @@ export function trivialPursuitRoll(game: TrivialPursuitGameInternal, participant
   if (participantId !== game.currentTurnId) {
     throw new Error("Only the current player can roll.");
   }
+  const player = contestant(game);
+  if (
+    player
+    && player.spaceId === TRIVIAL_PURSUIT_HUB_ID
+    && hasAllWedges(player.wedges)
+  ) {
+    beginFinalCategoryChoice(game);
+    game.lastOutcome = "In the center — the next player picks the category and reads it.";
+    return;
+  }
   game.lastOutcome = null;
   beginChoosingMove(game, rollDie());
   if (game.legalMoveSpaceIds.length === 0) {
@@ -318,6 +377,12 @@ export function trivialPursuitMove(
   const player = contestant(game);
   if (!player) throw new Error("No current player.");
 
+  if (player.spaceId === TRIVIAL_PURSUIT_HUB_ID && hasAllWedges(player.wedges)) {
+    beginFinalCategoryChoice(game);
+    game.lastOutcome = "In the center — the next player picks the category and reads it.";
+    return;
+  }
+
   player.spaceId = spaceId;
   game.legalMoveSpaceIds = [];
 
@@ -331,14 +396,8 @@ export function trivialPursuitMove(
     if (!hasAllWedges(player.wedges)) {
       throw new Error("You need all six wedges to enter the hub.");
     }
-    if (game.awaitingHubReturn) {
-      // Must leave and return; landing counts.
-      game.awaitingHubReturn = false;
-    }
-    game.phase = "choosingFinalCategory";
-    game.finalCategoryChooserId = nextPlayerInOrder(game.playerOrder, game.currentTurnId);
-    clearCard(game);
-    game.lastOutcome = "Final question — next player picks the category.";
+    beginFinalCategoryChoice(game);
+    game.lastOutcome = "Final question — the next player picks the category and reads it.";
     return;
   }
 
@@ -507,14 +566,33 @@ export function trivialPursuitJudge(
     return;
   }
 
-  // Incorrect
-  if (onHub && hasAllWedges(player.wedges)) {
-    game.awaitingHubReturn = true;
-    game.lastOutcome = "Incorrect — leave the hub and return for another try.";
-  } else {
-    game.lastOutcome = "Incorrect — turn passes.";
-  }
+  game.lastOutcome = onHub && hasAllWedges(player.wedges)
+    ? "Incorrect — turn passes. A new center question comes on your next turn."
+    : "Incorrect — turn passes.";
   passTurn(game);
+}
+
+/** Host-only rule change. Once off, an exact center roll stays off for this game. */
+export function trivialPursuitRelaxExactCenterRoll(game: TrivialPursuitGameInternal): void {
+  if (game.status !== "playing") {
+    throw new Error("The game is already over.");
+  }
+  if (game.requireExactCenterRoll === false) {
+    return;
+  }
+  game.requireExactCenterRoll = false;
+  game.lastOutcome = "Exact roll to reach the center is no longer required.";
+  if (game.phase === "choosingMove" && game.lastDieRoll != null) {
+    const player = contestant(game);
+    if (player) {
+      game.legalMoveSpaceIds = getLegalDestinations(
+        player.spaceId,
+        game.lastDieRoll,
+        hasAllWedges(player.wedges),
+        { requireExactCenterRoll: false }
+      );
+    }
+  }
 }
 
 export function trivialPursuitRetryQuestion(
@@ -653,6 +731,7 @@ export function toPublicTrivialPursuitState(
     // Always emit a valid mode so session:state broadcasts never fail schema checks
     // (a missing field freezes every client on the previous turn UI).
     wedgeMode: game.wedgeMode === "classic" ? "classic" : "fast",
+    requireExactCenterRoll: game.requireExactCenterRoll !== false,
     playerOrder: [...game.playerOrder],
     players: playerList(game).map((p) => ({
       participantId: p.participantId,

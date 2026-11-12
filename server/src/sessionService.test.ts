@@ -3818,6 +3818,38 @@ describe("SessionService", () => {
 
         // unused guest reference keeps join real
         expect(guest.participantId).toBeTruthy();
+        expect(state.gameState.state.requireExactCenterRoll).toBe(true);
+      } finally {
+        globalThis.fetch = prevFetch;
+      }
+    });
+
+    it("lets only the host turn off exact center rolls, and keeps it off", async () => {
+      const prevFetch = globalThis.fetch;
+      globalThis.fetch = mockTriviaApiFetch();
+      try {
+        const setup = await createService();
+        tempDir = setup.tempDir;
+        const host = await setup.service.createSession("Host");
+        const guest = await setup.service.joinSession(host.joinCode, "Guest");
+        await setup.service.startGame(host.sessionId, "trivialPursuit", {
+          trivialPursuitWedgeMode: "classic"
+        });
+
+        await expect(
+          setup.service.trivialPursuitRelaxExactCenterRoll(host.sessionId, guest.participantId)
+        ).rejects.toThrow("Only the host can change the center roll rule.");
+
+        await setup.service.trivialPursuitRelaxExactCenterRoll(host.sessionId, host.participantId);
+        const relaxed = setup.service.getState(host.sessionId, guest.participantId);
+        if (relaxed.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(relaxed.gameState.state.requireExactCenterRoll).toBe(false);
+        expect(relaxed.gameState.state.wedgeMode).toBe("classic");
+
+        await setup.service.trivialPursuitRelaxExactCenterRoll(host.sessionId, host.participantId);
+        const still = setup.service.getState(host.sessionId, host.participantId);
+        if (still.gameState?.type !== "trivialPursuit") throw new Error("expected tp");
+        expect(still.gameState.state.requireExactCenterRoll).toBe(false);
       } finally {
         globalThis.fetch = prevFetch;
       }

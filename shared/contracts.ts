@@ -761,6 +761,11 @@ export const trivialPursuitStateSchema = z.object({
   phase: trivialPursuitPhaseSchema,
   /** Default keeps older in-flight games broadcastable if wedgeMode was missing. */
   wedgeMode: trivialPursuitWedgeModeSchema.default("fast"),
+  /**
+   * When true, entering the center takes an exact roll. The host may set this
+   * to false for the rest of the game; older games default to exact.
+   */
+  requireExactCenterRoll: z.boolean().default(true),
   playerOrder: z.array(z.string()),
   players: z.array(trivialPursuitPlayerPublicSchema),
   currentTurnId: z.string().nullable(),
@@ -2746,7 +2751,8 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("trivialPursuit:chooseFinalCategory"),
     payload: z.object({ category: trivialPursuitCategorySchema })
   }),
-  z.object({ type: z.literal("trivialPursuit:retryQuestion"), payload: z.object({}) })
+  z.object({ type: z.literal("trivialPursuit:retryQuestion"), payload: z.object({}) }),
+  z.object({ type: z.literal("trivialPursuit:relaxExactCenterRoll"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

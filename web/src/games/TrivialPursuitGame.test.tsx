@@ -25,6 +25,7 @@ const baseState = (overrides: Partial<TrivialPursuitState> = {}): TrivialPursuit
   answerRevealed: false,
   finalCategoryChooserId: null,
   awaitingHubReturn: false,
+  requireExactCenterRoll: true,
   winnerParticipantId: null,
   lastOutcome: null,
   questionError: null,
@@ -314,6 +315,67 @@ describe("TrivialPursuitGame", () => {
       type: "trivialPursuit:move",
       payload: { spaceId: "spoke-0-0" }
     });
+  });
+
+  it("lets the host turn off exact center rolls for the rest of the game", () => {
+    const send = vi.fn();
+    const { rerender } = render(
+      <TrivialPursuitGame
+        session={buildSession(baseState())}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Allow any roll that reaches the center" }));
+    expect(send).toHaveBeenCalledWith({ type: "trivialPursuit:relaxExactCenterRoll", payload: {} });
+
+    rerender(
+      <TrivialPursuitGame
+        session={buildSession(baseState({ requireExactCenterRoll: false }))}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Allow any roll that reaches the center" })).toBeNull();
+    expect(screen.getByTestId("tp-center-roll-rule").textContent).toMatch(/any roll that can reach it/i);
+
+    rerender(
+      <TrivialPursuitGame
+        session={buildSession(baseState())}
+        currentParticipantId="p2"
+        isHost={false}
+        send={send}
+      />
+    );
+    expect(screen.queryByTestId("tp-relax-center-roll")).toBeNull();
+  });
+
+  it("offers another center question instead of a roll when the player is already there", () => {
+    const wedges = emptyWedges();
+    for (const key of Object.keys(wedges) as (keyof typeof wedges)[]) {
+      wedges[key] = true;
+    }
+    const send = vi.fn();
+    render(
+      <TrivialPursuitGame
+        session={buildSession(
+          baseState({
+            players: [
+              { participantId: "p1", spaceId: "hub", wedges, choiceHelpsRemaining: 5 },
+              { participantId: "p2", spaceId: "spoke-0-0", wedges: emptyWedges(), choiceHelpsRemaining: 5 }
+            ]
+          })
+        )}
+        currentParticipantId="p1"
+        isHost
+        send={send}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Take another question" }));
+    expect(send).toHaveBeenCalledWith({ type: "trivialPursuit:roll", payload: {} });
+    expect(screen.queryByRole("button", { name: "Roll" })).toBeNull();
   });
 
   it("renders the polished board with hub and track", () => {

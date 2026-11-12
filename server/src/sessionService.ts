@@ -179,6 +179,7 @@ import {
   trivialPursuitMove as tpMove,
   trivialPursuitReveal as tpReveal,
   trivialPursuitRequestChoices as tpRequestChoices,
+  trivialPursuitRelaxExactCenterRoll as tpRelaxExactCenterRoll,
   trivialPursuitRetryQuestion as tpRetryQuestion,
   trivialPursuitRoll as tpRoll,
   trivialPursuitShowQuestion as tpShowQuestion,
@@ -10551,6 +10552,23 @@ export class SessionService {
       throw new Error("Trivial Pursuit is not active.");
     }
     tpChooseFinalCategory(game, participantId, category);
+    await this.trivialPursuitPersist(session);
+  }
+
+  public async trivialPursuitRelaxExactCenterRoll(
+    sessionId: string,
+    participantId: string
+  ): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    if (!session.participants.some((p) => p.id === participantId && p.isHost)) {
+      throw new Error("Only the host can change the center roll rule.");
+    }
+    const game = session.games[0];
+    if (game?.type !== "trivialPursuit") {
+      throw new Error("Trivial Pursuit is not active.");
+    }
+    tpRelaxExactCenterRoll(game);
     await this.trivialPursuitPersist(session);
   }
 

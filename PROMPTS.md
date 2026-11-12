@@ -198,3 +198,11 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-10-24:** Instead of the reader revealing answers, each player can request multiple-choice options themselves — max 5 times per game.
+
+---
+
+**2026-11-12:** In Trivial Pursuit, once a player has reached the center circle, they should continue to have questions asked in the same way until they win. Currently they have to leave and come back. Remove that in both game variants. Also add a host feature that turns off the requirement to roll the exact number to get to the center circle. If this is turned off, a player who rolls enough to reach the center (and has all 6 pie pieces) can go directly there. Once the host selects this, it cannot be undone for the rest of that game.
+
+---
+
+**2026-11-12:** Just to be clear, if a player is in the center space and gets the question wrong, their turn is over. Other players get their turn. When it comes back to that player that is in the middle, then they get a new question (category selected by the opponent that will be reading the question).
