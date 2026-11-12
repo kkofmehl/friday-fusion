@@ -104,14 +104,16 @@ function DiceGlyph({ x, y }: { x: number; y: number }): JSX.Element {
 
 function HubPie({
   isLegal,
+  dimmed,
   onClick
 }: {
   isLegal: boolean;
+  dimmed: boolean;
   onClick: () => void;
 }): JSX.Element {
   return (
     <g
-      className={`tp-hub${isLegal ? " is-legal" : ""}`}
+      className={`tp-hub${isLegal ? " is-legal" : ""}${dimmed ? " is-dimmed" : ""}`}
       onClick={onClick}
       data-testid={`tp-space-${TRIVIAL_PURSUIT_HUB_ID}`}
       role="button"
@@ -144,10 +146,12 @@ function HubPie({
 function SpacePlate({
   space,
   isLegal,
+  dimmed,
   onClick
 }: {
   space: TrivialPursuitSpace;
   isLegal: boolean;
+  dimmed: boolean;
   onClick: () => void;
 }): JSX.Element | null {
   if (space.kind === "hub") return null;
@@ -161,7 +165,7 @@ function SpacePlate({
 
   return (
     <g
-      className={`tp-space-group${isLegal ? " is-legal" : ""}${
+      className={`tp-space-group${isLegal ? " is-legal" : ""}${dimmed ? " is-dimmed" : ""}${
         space.kind === "headquarters" ? " is-hq" : ""
       }${space.kind === "rollAgain" ? " is-roll-again" : ""}`}
       transform={`translate(${x} ${y}) rotate(${rotate})`}
@@ -313,6 +317,7 @@ export function TrivialPursuitBoard({
   playerNames: Record<string, string>;
 }): JSX.Element {
   const legal = new Set(legalMoveSpaceIds);
+  const isChoosingMove = legalMoveSpaceIds.length > 0;
   const tokensBySpace = new Map<string, string[]>();
   for (const p of players) {
     const list = tokensBySpace.get(p.spaceId) ?? [];
@@ -339,7 +344,7 @@ export function TrivialPursuitBoard({
   return (
     <div className="tp-board-stage">
       <svg
-        className="tp-board"
+        className={`tp-board${isChoosingMove ? " is-choosing-move" : ""}`}
         viewBox="0 0 200 200"
         role="group"
         aria-label="Trivial Pursuit board"
@@ -370,6 +375,7 @@ export function TrivialPursuitBoard({
 
         <HubPie
           isLegal={legal.has(TRIVIAL_PURSUIT_HUB_ID)}
+          dimmed={isChoosingMove && !legal.has(TRIVIAL_PURSUIT_HUB_ID)}
           onClick={() => onSpaceClick(TRIVIAL_PURSUIT_HUB_ID)}
         />
 
@@ -378,6 +384,7 @@ export function TrivialPursuitBoard({
             key={space.id}
             space={space}
             isLegal={legal.has(space.id)}
+            dimmed={isChoosingMove && !legal.has(space.id)}
             onClick={() => onSpaceClick(space.id)}
           />
         ))}

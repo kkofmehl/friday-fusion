@@ -17,10 +17,10 @@ import {
   WHEEL_WEDGES,
   WHEEL_WEDGE_COUNT,
   bankRoundWinnings,
-  bonusFfPoints,
   computeFinalRotationDeg,
   countLetterOccurrences,
-  fridayFusionPointsFromMoney,
+  firstPlaceByBankedMoney,
+  fridayFusionPointsForFirstPlace,
   isConsonant,
   isVowel,
   maskPuzzle,
@@ -31,6 +31,10 @@ import {
   solutionsMatch
 } from "../../shared/wheelOfFortuneLogic";
 import type { WheelOfFortunePuzzle } from "./wheelOfFortunePuzzles";
+
+export type WheelOfFortuneRandomIndex = (n: number) => number;
+
+const defaultRandomIndex: WheelOfFortuneRandomIndex = (n) => randomInt(0, n);
 
 export type WheelOfFortuneGameInternal = {
   id: string;
@@ -82,11 +86,13 @@ export function createWheelOfFortuneGame(opts: {
   puzzleSource: WheelOfFortunePuzzleSource;
   puzzles?: WheelOfFortunePuzzle[];
   usedPuzzleIds?: string[];
+  randomIndex?: WheelOfFortuneRandomIndex;
 }): WheelOfFortuneGameInternal {
   const maps = emptyMoneyMaps(opts.playerOrder);
   const isCustom = opts.puzzleSource === "custom";
   const puzzles = opts.puzzles ?? [];
   const ready = !isCustom && puzzles.length >= WHEEL_OF_FORTUNE_ROUNDS + 1;
+  const randomIndex = opts.randomIndex ?? defaultRandomIndex;
   const game: WheelOfFortuneGameInternal = {
     id: nanoid(6),
     type: "wheelOfFortune",
@@ -115,7 +121,7 @@ export function createWheelOfFortuneGame(opts: {
     freeSpinReason: null
   };
   if (ready) {
-    beginRound(game, 0);
+    beginRound(game, 0, randomIndex);
   }
   return game;
 }
@@ -222,7 +228,11 @@ const ensureMoneyKeys = (game: WheelOfFortuneGameInternal, participantId: string
   }
 };
 
-function beginRound(game: WheelOfFortuneGameInternal, roundIndex: number): void {
+function beginRound(
+  game: WheelOfFortuneGameInternal,
+  roundIndex: number,
+  randomIndex: WheelOfFortuneRandomIndex = defaultRandomIndex
+): void {
   game.roundIndex = roundIndex;
   game.status = "playing";
   game.phase = "awaitingAction";
@@ -238,9 +248,11 @@ function beginRound(game: WheelOfFortuneGameInternal, roundIndex: number): void 
   for (const id of Object.keys(game.roundMoney)) {
     game.roundMoney[id] = 0;
   }
-  // Solver of previous round starts next; first round uses seat 0.
-  if (!game.currentTurnId || !game.playerOrder.includes(game.currentTurnId)) {
-    game.currentTurnId = game.playerOrder[0] ?? null;
+  // Each main round starts with a random player.
+  if (game.playerOrder.length === 0) {
+    game.currentTurnId = null;
+  } else {
+    game.currentTurnId = game.playerOrder[randomIndex(game.playerOrder.length)] ?? null;
   }
   const puzzle = currentPuzzle(game);
   game.lastOutcome = `Round ${roundIndex + 1}: ${puzzle.category}`;
@@ -329,7 +341,8 @@ export function toPublicWheelOfFortuneState(game: WheelOfFortuneGameInternal): W
 
 export function setWheelOfFortunePuzzles(
   game: WheelOfFortuneGameInternal,
-  puzzles: WheelOfFortunePuzzle[]
+  puzzles: WheelOfFortunePuzzle[],
+  randomIndex: WheelOfFortuneRandomIndex = defaultRandomIndex
 ): void {
   if (game.status !== "setup") {
     throw new Error("Puzzles can only be set during setup.");
@@ -347,7 +360,7 @@ export function setWheelOfFortunePuzzles(
       game.usedPuzzleIds.push(p.id);
     }
   }
-  beginRound(game, 0);
+  beginRound(game, 0, randomIndex);
 }
 
 function endTurn(game: WheelOfFortuneGameInternal, message: string): void {
@@ -569,13 +582,16 @@ export function respondFreeSpin(game: WheelOfFortuneGameInternal, participantId:
   game.lastOutcome = "Free Spin used — keep playing!";
 }
 
-export function continueAfterRound(game: WheelOfFortuneGameInternal): void {
+export function continueAfterRound(
+  game: WheelOfFortuneGameInternal,
+  randomIndex: WheelOfFortuneRandomIndex = defaultRandomIndex
+): void {
   if (game.status !== "playing" || game.phase !== "roundSolved") {
     throw new Error("No round to continue from.");
   }
   const nextRound = game.roundIndex + 1;
   if (nextRound < WHEEL_OF_FORTUNE_ROUNDS) {
-    beginRound(game, nextRound);
+    beginRound(game, nextRound, randomIndex);
     return;
   }
   startBonusRound(game);
@@ -695,34 +711,32 @@ function finishGame(game: WheelOfFortuneGameInternal, message: string): void {
 
 /**
  * Apply Friday Fusion points once. Returns awards applied for tests.
- * `sessionPlayerCount` is used for bonus FF (players at finish time).
+ * First place (highest banked money, ties share) and a solved bonus each get
+ * points equal to `sessionPlayerCount`.
  */
 export function applyWheelOfFortuneScores(
   game: WheelOfFortuneGameInternal,
   award: (participantId: string, points: number) => void,
   sessionPlayerCount: number
-): { moneyAwards: Record<string, number>; bonusAward: number } {
+): { firstPlaceAwards: Record<string, number>; bonusAward: number } {
   if (game.scoresApplied) {
-    return { moneyAwards: {}, bonusAward: 0 };
+    return { firstPlaceAwards: {}, bonusAward: 0 };
   }
   game.scoresApplied = true;
-  const moneyAwards: Record<string, number> = {};
-  const ids = new Set([...game.playerOrder, ...Object.keys(game.bankedMoney)]);
-  for (const id of ids) {
-    const pts = fridayFusionPointsFromMoney(game.bankedMoney[id] ?? 0);
-    if (pts > 0) {
+  const pts = fridayFusionPointsForFirstPlace(sessionPlayerCount);
+  const firstPlaceAwards: Record<string, number> = {};
+  if (pts > 0) {
+    for (const id of firstPlaceByBankedMoney(game.playerOrder, game.bankedMoney)) {
       award(id, pts);
-      moneyAwards[id] = pts;
+      firstPlaceAwards[id] = pts;
     }
   }
   let bonusAward = 0;
-  if (game.bonusSolved && game.bonusPlayerId) {
-    bonusAward = bonusFfPoints(sessionPlayerCount);
-    if (bonusAward > 0) {
-      award(game.bonusPlayerId, bonusAward);
-    }
+  if (game.bonusSolved && game.bonusPlayerId && pts > 0) {
+    bonusAward = pts;
+    award(game.bonusPlayerId, bonusAward);
   }
-  return { moneyAwards, bonusAward };
+  return { firstPlaceAwards, bonusAward };
 }
 
 /**

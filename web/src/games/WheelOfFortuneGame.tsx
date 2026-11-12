@@ -190,8 +190,8 @@ export function WheelOfFortuneGame({
         {state.revealedBoard && <Board masked={state.revealedBoard} />}
         <MoneyStrip state={state} session={session} turnId={null} />
         <p>
-          Friday Fusion points: banked money ÷ 100
-          {state.bonusSolved ? " + bonus (players × 2)" : ""}.
+          Friday Fusion points: first place gets points equal to the number of players
+          {state.bonusSolved ? "; bonus solve awards the same again" : ""}.
         </p>
       </div>
     );

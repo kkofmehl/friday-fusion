@@ -273,3 +273,4 @@
 
 145. User asked that a Trivial Pursuit player who reaches the center keep getting questions until they win, in both wedge variants, instead of leaving and returning. Also asked for a host-only, irreversible option to drop the exact-roll requirement so a player with all six wedges can enter the center on any roll long enough to reach it.
 146. User clarified a missed center question ends that player's turn. Other players take their turns. When play returns to the player still in the center, they get a new question, and the opponent who reads it is the one who picks the category.
+147. User requested updates from `updates.txt`: Wheel of Fortune Friday Fusion scoring to first place = player count (bonus solve awards the same again) and random round starter; Scattergories typing disruption fix plus UI polish; Trivial Pursuit dim/gray out non-legal spaces after a roll.

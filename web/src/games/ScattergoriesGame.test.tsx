@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScattergoriesState, SessionState } from "../../../shared/contracts";
 import { ScattergoriesGame } from "./ScattergoriesGame";
@@ -28,6 +28,175 @@ describe("ScattergoriesGame", () => {
         json: async () => []
       })
     );
+  });
+
+  it("keeps local typing when a stale session echo arrives mid-keystroke", () => {
+    const send = vi.fn();
+    const roundEndsAt = Date.now() + 60_000;
+    const answering = (answers: Record<string, string[]>): ScattergoriesState => ({
+      status: "answering",
+      listId: "scat-001",
+      listTitle: "Around the house",
+      prompts: ["Something in the kitchen", "A tool"],
+      letter: "S",
+      answerDurationMs: 60_000,
+      usedListIds: ["scat-001"],
+      usedLetters: ["S"],
+      roundEndsAt,
+      answers
+    });
+    const { rerender } = render(
+      <ScattergoriesGame
+        session={sessionWithState(answering({ host: ["", ""] }))}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    const input = screen.getByLabelText(/1\.\s*Something in the kitchen/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Spoo" } });
+    expect(input.value).toBe("Spoo");
+
+    // Echo of an older snapshot (and another player's answers) must not wipe local draft.
+    rerender(
+      <ScattergoriesGame
+        session={sessionWithState(
+          answering({
+            host: ["S"],
+            p2: ["Saw"]
+          })
+        )}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect((screen.getByLabelText(/1\.\s*Something in the kitchen/i) as HTMLInputElement).value).toBe(
+      "Spoo"
+    );
+
+    fireEvent.change(screen.getByLabelText(/1\.\s*Something in the kitchen/i), {
+      target: { value: "Spoon" }
+    });
+    expect((screen.getByLabelText(/1\.\s*Something in the kitchen/i) as HTMLInputElement).value).toBe(
+      "Spoon"
+    );
+  });
+
+  it("resets answer fields when a new answering round starts", () => {
+    const send = vi.fn();
+    const firstRound: ScattergoriesState = {
+      status: "answering",
+      listId: "scat-001",
+      listTitle: "Around the house",
+      prompts: ["Something in the kitchen", "A tool"],
+      letter: "S",
+      answerDurationMs: 60_000,
+      usedListIds: ["scat-001"],
+      usedLetters: ["S"],
+      roundEndsAt: Date.now() + 60_000,
+      answers: { host: ["Spoon", ""] }
+    };
+    const { rerender } = render(
+      <ScattergoriesGame
+        session={sessionWithState(firstRound)}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect((screen.getByLabelText(/1\.\s*Something in the kitchen/i) as HTMLInputElement).value).toBe(
+      "Spoon"
+    );
+
+    const nextRound: ScattergoriesState = {
+      ...firstRound,
+      letter: "T",
+      usedLetters: ["S", "T"],
+      roundEndsAt: Date.now() + 90_000,
+      answers: { host: ["", ""] }
+    };
+    rerender(
+      <ScattergoriesGame
+        session={sessionWithState(nextRound)}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect((screen.getByLabelText(/1\.\s*Something in the kitchen/i) as HTMLInputElement).value).toBe(
+      ""
+    );
+  });
+
+  it("flushes pending answers when leaving the answering phase", () => {
+    vi.useFakeTimers();
+    const send = vi.fn();
+    const roundEndsAt = Date.now() + 60_000;
+    const answering: ScattergoriesState = {
+      status: "answering",
+      listId: "scat-001",
+      listTitle: "Around the house",
+      prompts: ["Something in the kitchen"],
+      letter: "S",
+      answerDurationMs: 60_000,
+      usedListIds: ["scat-001"],
+      usedLetters: ["S"],
+      roundEndsAt,
+      answers: { host: [""] }
+    };
+    const reviewing: ScattergoriesState = {
+      status: "reviewing",
+      listId: "scat-001",
+      listTitle: "Around the house",
+      prompts: ["Something in the kitchen"],
+      letter: "S",
+      answerDurationMs: 60_000,
+      usedListIds: ["scat-001"],
+      usedLetters: ["S"],
+      currentPromptIndex: 0,
+      revealedAnswers: [{ participantId: "host", text: "Spoon", isDuplicate: false }],
+      verdicts: { host: null }
+    };
+    const { rerender } = render(
+      <ScattergoriesGame
+        session={sessionWithState(answering)}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    fireEvent.change(screen.getByLabelText(/1\.\s*Something in the kitchen/i), {
+      target: { value: "Spoon" }
+    });
+    expect(send).not.toHaveBeenCalled();
+    act(() => {
+      rerender(
+        <ScattergoriesGame
+          session={sessionWithState(reviewing)}
+          currentParticipantId="host"
+          isHost
+          canPlay
+          send={send}
+          apiBase="http://localhost:3000"
+        />
+      );
+    });
+    expect(send).toHaveBeenCalledWith({
+      type: "scattergories:updateAnswers",
+      payload: { answers: ["Spoon"] }
+    });
+    vi.useRealTimers();
   });
 
   it("shows invalid styling when answer does not start with the letter", () => {

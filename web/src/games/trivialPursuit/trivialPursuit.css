@@ -290,6 +290,11 @@
   cursor: pointer;
 }
 
+.tp-hub.is-dimmed {
+  opacity: 0.38;
+  filter: grayscale(0.35);
+}
+
 .tp-hub.is-legal .tp-hub-ring {
   stroke: #ffe082;
   stroke-width: 2.4;
@@ -321,10 +326,15 @@
   cursor: pointer;
 }
 
+.tp-space-group.is-dimmed {
+  opacity: 0.38;
+  filter: grayscale(0.35);
+}
+
 .tp-space {
   stroke: rgba(255, 253, 231, 0.55);
   stroke-width: 1.15;
-  transition: filter 120ms ease, stroke-width 120ms ease;
+  transition: filter 120ms ease, stroke-width 120ms ease, opacity 120ms ease;
 }
 
 .tp-space-group.is-hq .tp-space {

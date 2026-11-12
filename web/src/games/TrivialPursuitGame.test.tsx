@@ -310,11 +310,28 @@ describe("TrivialPursuitGame", () => {
         send={send}
       />
     );
+    expect(screen.getByTestId("tp-board").getAttribute("class")).toContain("is-choosing-move");
+    expect(screen.getByTestId("tp-space-spoke-0-0").getAttribute("class")).toContain("is-legal");
+    expect(screen.getByTestId("tp-space-spoke-0-0").getAttribute("class")).not.toContain("is-dimmed");
+    expect(screen.getByTestId("tp-space-spoke-1-0").getAttribute("class")).toContain("is-dimmed");
     fireEvent.click(screen.getByTestId("tp-space-spoke-0-0"));
     expect(send).toHaveBeenCalledWith({
       type: "trivialPursuit:move",
       payload: { spaceId: "spoke-0-0" }
     });
+  });
+
+  it("does not dim spaces before a roll", () => {
+    render(
+      <TrivialPursuitGame
+        session={buildSession(baseState({ phase: "rolling", legalMoveSpaceIds: [] }))}
+        currentParticipantId="p1"
+        isHost
+        send={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("tp-board").getAttribute("class")).not.toContain("is-choosing-move");
+    expect(screen.getByTestId("tp-space-spoke-0-0").getAttribute("class")).not.toContain("is-dimmed");
   });
 
   it("lets the host turn off exact center rolls for the rest of the game", () => {

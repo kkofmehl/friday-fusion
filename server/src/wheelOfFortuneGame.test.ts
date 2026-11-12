@@ -29,12 +29,16 @@ const samplePuzzles = () => [
   { id: "p5", category: "Phrase", answer: "BEST OF LUCK" }
 ];
 
-const bankGame = (players = ["a", "b", "c"]) =>
+/** Deterministic starter: always seat 0 unless overridden. */
+const seat0 = () => 0;
+
+const bankGame = (players = ["a", "b", "c"], randomIndex: (n: number) => number = seat0) =>
   createWheelOfFortuneGame({
     playerOrder: players,
     puzzleSource: "bank",
     puzzles: samplePuzzles(),
-    usedPuzzleIds: []
+    usedPuzzleIds: [],
+    randomIndex
   });
 
 describe("wheelOfFortuneGame", () => {
@@ -54,11 +58,23 @@ describe("wheelOfFortuneGame", () => {
   it("starts custom games in setup until puzzles are set", () => {
     const game = createWheelOfFortuneGame({
       playerOrder: ["a", "b"],
-      puzzleSource: "custom"
+      puzzleSource: "custom",
+      randomIndex: seat0
     });
     expect(game.status).toBe("setup");
-    setWheelOfFortunePuzzles(game, samplePuzzles());
+    setWheelOfFortunePuzzles(game, samplePuzzles(), seat0);
     expect(game.status).toBe("playing");
+    expect(game.currentTurnId).toBe("a");
+  });
+
+  it("picks a random starter for each main round", () => {
+    const game = bankGame(["a", "b", "c"], () => 1);
+    expect(game.currentTurnId).toBe("b");
+    game.roundMoney.b = 2000;
+    solvePuzzle(game, "b", game.puzzles[0]!.answer);
+    continueAfterRound(game, () => 2);
+    expect(game.roundIndex).toBe(1);
+    expect(game.currentTurnId).toBe("c");
   });
 
   it("spins with sync fields then settles to awaiting letter or penalty", () => {
@@ -154,9 +170,10 @@ describe("wheelOfFortuneGame", () => {
   it("advances through four rounds into bonus then scores FF", () => {
     const game = bankGame();
     for (let r = 0; r < WHEEL_OF_FORTUNE_ROUNDS; r++) {
+      game.currentTurnId = "a";
       game.roundMoney.a = 2000;
       solvePuzzle(game, "a", game.puzzles[r]!.answer);
-      continueAfterRound(game);
+      continueAfterRound(game, seat0);
     }
     expect(game.status).toBe("bonusLetterPick");
     expect(game.bonusPlayerId).toBe("a");
@@ -170,22 +187,37 @@ describe("wheelOfFortuneGame", () => {
     const result = applyWheelOfFortuneScores(game, (id, pts) => {
       awards[id] = (awards[id] ?? 0) + pts;
     }, 3);
-    expect(result.moneyAwards.a).toBe(80); // 8000 / 100
-    expect(result.bonusAward).toBe(6);
-    expect(awards.a).toBe(86);
+    // First place = 3 players; bonus solve = +3 again
+    expect(result.firstPlaceAwards.a).toBe(3);
+    expect(result.bonusAward).toBe(3);
+    expect(awards.a).toBe(6);
     // Idempotent
     applyWheelOfFortuneScores(game, () => {
       throw new Error("should not award twice");
     }, 3);
   });
 
+  it("shares first-place Friday Fusion points on a money tie", () => {
+    const game = bankGame();
+    game.status = "finished";
+    game.bankedMoney = { a: 4000, b: 4000, c: 1000 };
+    const awards: Record<string, number> = {};
+    const result = applyWheelOfFortuneScores(game, (id, pts) => {
+      awards[id] = (awards[id] ?? 0) + pts;
+    }, 3);
+    expect(result.firstPlaceAwards).toEqual({ a: 3, b: 3 });
+    expect(result.bonusAward).toBe(0);
+    expect(awards).toEqual({ a: 3, b: 3 });
+  });
+
   it("bonus timeout finishes unsolved", () => {
     const game = bankGame();
     game.bankedMoney.a = 5000;
     for (let r = 0; r < WHEEL_OF_FORTUNE_ROUNDS; r++) {
+      game.currentTurnId = "a";
       game.roundMoney.a = 1000;
       solvePuzzle(game, "a", game.puzzles[r]!.answer);
-      continueAfterRound(game);
+      continueAfterRound(game, seat0);
     }
     bonusPickLetters(game, "a", ["B", "C", "D"], "I");
     bonusTimedOut(game);
@@ -212,9 +244,10 @@ describe("wheelOfFortuneGame", () => {
     game.bankedMoney.a = 4000;
     game.bankedMoney.b = 1000;
     for (let r = 0; r < WHEEL_OF_FORTUNE_ROUNDS; r++) {
+      game.currentTurnId = "a";
       game.roundMoney.a = 1000;
       solvePuzzle(game, "a", game.puzzles[r]!.answer);
-      continueAfterRound(game);
+      continueAfterRound(game, seat0);
     }
     expect(game.status).toBe("bonusLetterPick");
     const before = game.bankedMoney.a;

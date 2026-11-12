@@ -47,6 +47,14 @@ export function ScattergoriesGame({
   const [localAnswers, setLocalAnswers] = useState<string[]>([]);
   const [, setTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localAnswersRef = useRef<string[]>([]);
+  const answeringRoundKeyRef = useRef<string | null>(null);
+  const statusRef = useRef<string | undefined>(state?.status);
+  const pushAnswersRef = useRef<(answers: string[]) => void>(() => undefined);
+
+  useEffect(() => {
+    localAnswersRef.current = localAnswers;
+  }, [localAnswers]);
 
   useEffect(() => {
     if (!isHost) {
@@ -75,26 +83,6 @@ export function ScattergoriesGame({
     };
   }, [apiBase, isHost]);
 
-  useEffect(() => {
-    if (!state || state.status !== "answering") {
-      return;
-    }
-    const mine = state.answers[currentParticipantId];
-    if (mine) {
-      setLocalAnswers(mine);
-    } else {
-      setLocalAnswers(Array.from({ length: state.prompts.length }, () => ""));
-    }
-  }, [state, currentParticipantId]);
-
-  useEffect(() => {
-    if (state?.status !== "countdown" && state?.status !== "answering") {
-      return;
-    }
-    const id = window.setInterval(() => setTick((t) => t + 1), 250);
-    return () => window.clearInterval(id);
-  }, [state?.status]);
-
   const pushAnswers = useCallback(
     (answers: string[]) => {
       if (!canPlay) {
@@ -105,22 +93,70 @@ export function ScattergoriesGame({
     [canPlay, send]
   );
 
+  useEffect(() => {
+    pushAnswersRef.current = pushAnswers;
+  }, [pushAnswers]);
+
   const schedulePush = useCallback(
     (answers: string[]) => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
       debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
         pushAnswers(answers);
       }, 300);
     },
     [pushAnswers]
   );
 
+  // Hydrate local answers only when a new answering round starts — not on every
+  // session echo (other players' updates used to overwrite in-progress typing).
+  useEffect(() => {
+    if (!state || state.status !== "answering") {
+      answeringRoundKeyRef.current = null;
+      return;
+    }
+    const roundKey = `${state.listId}|${state.letter}|${state.roundEndsAt}`;
+    if (answeringRoundKeyRef.current === roundKey) {
+      return;
+    }
+    answeringRoundKeyRef.current = roundKey;
+    const mine = state.answers[currentParticipantId];
+    const next = mine
+      ? [...mine]
+      : Array.from({ length: state.prompts.length }, () => "");
+    localAnswersRef.current = next;
+    setLocalAnswers(next);
+  }, [state, currentParticipantId]);
+
+  // Flush any pending debounce when leaving the answering phase.
+  useEffect(() => {
+    const prev = statusRef.current;
+    statusRef.current = state?.status;
+    if (prev === "answering" && state?.status !== "answering") {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        pushAnswersRef.current(localAnswersRef.current);
+      }
+    }
+  }, [state?.status]);
+
+  useEffect(() => {
+    if (state?.status !== "countdown" && state?.status !== "answering") {
+      return;
+    }
+    const id = window.setInterval(() => setTick((t) => t + 1), 250);
+    return () => window.clearInterval(id);
+  }, [state?.status]);
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        pushAnswersRef.current(localAnswersRef.current);
       }
     };
   }, []);
@@ -186,7 +222,7 @@ export function ScattergoriesGame({
           <div className="scattergories-setup-row">
             <span className="scattergories-label">Round letter</span>
             <div className="scattergories-letter-row">
-              <span className="scattergories-letter" aria-live="polite">
+              <span className="scattergories-letter scattergories-letter--hero" aria-live="polite">
                 {state.letter ?? "—"}
               </span>
               <button
@@ -246,7 +282,7 @@ export function ScattergoriesGame({
 
   if (state.status === "idle") {
     return (
-      <section className="card game-card-scattergories">
+      <section className="card game-card-scattergories play-stage">
         <header className="card-head">
           <h2>Scattergories</h2>
           <span className="pill pill-status">{statusLabel}</span>
@@ -258,19 +294,23 @@ export function ScattergoriesGame({
 
   if (state.status === "roundComplete") {
     return (
-      <section className="card game-card-scattergories">
+      <section className="card game-card-scattergories play-stage">
         <header className="card-head">
           <h2>Scattergories</h2>
           <span className="pill pill-status pill-status-finished">{statusLabel}</span>
         </header>
-        <p className="scattergories-round-summary">
-          Letter <strong>{state.letter}</strong> · {state.listTitle}
-        </p>
+        <div className="scattergories-round-banner">
+          <span className="scattergories-letter scattergories-letter--hero">{state.letter}</span>
+          <div className="scattergories-round-banner-copy">
+            <p className="scattergories-list-title">{state.listTitle}</p>
+            <p className="scattergories-round-hint">Round complete</p>
+          </div>
+        </div>
         <ol className="scattergories-standings">
           {state.roundScores.map((row, i) => (
             <li key={row.participantId} className="scattergories-standing-row">
-              <span className="scattergories-standing-rank">{i + 1}.</span>
-              <span>{nameNode(row.participantId, "xs")}</span>
+              <span className="scattergories-standing-rank">{i + 1}</span>
+              <span className="scattergories-standing-name">{nameNode(row.participantId, "xs")}</span>
               <span className="scattergories-standing-pts">+{row.pointsThisRound} this round</span>
             </li>
           ))}
@@ -295,15 +335,18 @@ export function ScattergoriesGame({
     const msLeft = Math.max(0, state.countdownEndsAt - Date.now());
     const seconds = Math.ceil(msLeft / 1000) || 1;
     return (
-      <section className="card game-card-scattergories">
+      <section className="card game-card-scattergories play-stage">
         <header className="card-head">
           <h2>Scattergories</h2>
           <span className="pill pill-status">{statusLabel}</span>
         </header>
-        <p className="scattergories-meta">
-          <span className="scattergories-letter scattergories-letter--inline">{state.letter}</span>
-          <span>{state.listTitle}</span>
-        </p>
+        <div className="scattergories-round-banner">
+          <span className="scattergories-letter scattergories-letter--hero">{state.letter}</span>
+          <div className="scattergories-round-banner-copy">
+            <p className="scattergories-list-title">{state.listTitle}</p>
+            <p className="scattergories-round-hint">Get ready…</p>
+          </div>
+        </div>
         <p className="scattergories-countdown" aria-live="polite">
           {seconds}
         </p>
@@ -319,17 +362,20 @@ export function ScattergoriesGame({
     const isLast = state.currentPromptIndex + 1 >= state.prompts.length;
 
     return (
-      <section className="card game-card-scattergories">
+      <section className="card game-card-scattergories play-stage">
         <header className="card-head">
           <h2>Scattergories</h2>
           <span className="pill pill-status pill-status-revealing">{statusLabel}</span>
         </header>
-        <p className="scattergories-meta">
-          <span className="scattergories-letter scattergories-letter--inline">{state.letter}</span>
-          <span>{state.listTitle}</span>
-        </p>
+        <div className="scattergories-round-banner">
+          <span className="scattergories-letter scattergories-letter--hero">{state.letter}</span>
+          <div className="scattergories-round-banner-copy">
+            <p className="scattergories-list-title">{state.listTitle}</p>
+            <p className="scattergories-round-hint">Host scores each answer</p>
+          </div>
+        </div>
         <h3 className="scattergories-review-prompt">
-          {state.currentPromptIndex + 1}. {prompt}
+          <span className="scattergories-prompt-num">{state.currentPromptIndex + 1}.</span> {prompt}
         </h3>
         <ul className="scattergories-review-list">
           {state.revealedAnswers.map((row) => {
@@ -430,23 +476,40 @@ export function ScattergoriesGame({
     const secondsLeft = Math.ceil(msLeft / 1000);
 
     const onAnswerChange = (index: number, value: string) => {
-      const next = [...localAnswers];
-      next[index] = value.slice(0, SCATTERGORIES_ANSWER_MAX_CHARS);
-      setLocalAnswers(next);
-      schedulePush(next);
+      const clipped = value.slice(0, SCATTERGORIES_ANSWER_MAX_CHARS);
+      setLocalAnswers((prev) => {
+        const next = [...prev];
+        while (next.length < state.prompts.length) {
+          next.push("");
+        }
+        next[index] = clipped;
+        localAnswersRef.current = next;
+        schedulePush(next);
+        return next;
+      });
     };
 
+    const timerUrgent = secondsLeft <= 15;
+
     return (
-      <section className="card game-card-scattergories">
+      <section className="card game-card-scattergories play-stage">
         <header className="card-head">
           <h2>Scattergories</h2>
           <span className="pill pill-status pill-status-collecting">{statusLabel}</span>
         </header>
-        <p className="scattergories-meta">
-          <span className="scattergories-letter scattergories-letter--inline">{state.letter}</span>
-          <span>{state.listTitle}</span>
-        </p>
-        <div className="scattergories-timer-subtle" aria-label="Time remaining">
+        <div className="scattergories-round-banner">
+          <span className="scattergories-letter scattergories-letter--hero" aria-label={`Letter ${state.letter}`}>
+            {state.letter}
+          </span>
+          <div className="scattergories-round-banner-copy">
+            <p className="scattergories-list-title">{state.listTitle}</p>
+            <p className="scattergories-round-hint">Answers must start with this letter</p>
+          </div>
+        </div>
+        <div
+          className={`scattergories-timer${timerUrgent ? " scattergories-timer--urgent" : ""}`}
+          aria-label="Time remaining"
+        >
           <div className="scattergories-timer-bar">
             <div className="scattergories-timer-fill" style={{ width: `${timerPct}%` }} />
           </div>
@@ -461,7 +524,8 @@ export function ScattergoriesGame({
             return (
               <li key={prompt} className="scattergories-answer-row">
                 <label className="scattergories-answer-label" htmlFor={`scat-ans-${index}`}>
-                  <span className="scattergories-prompt-num">{index + 1}.</span> {prompt}
+                  <span className="scattergories-prompt-num">{index + 1}.</span>
+                  <span className="scattergories-prompt-text">{prompt}</span>
                 </label>
                 <input
                   id={`scat-ans-${index}`}

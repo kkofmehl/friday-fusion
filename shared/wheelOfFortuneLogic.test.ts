@@ -3,10 +3,10 @@ import {
   WHEEL_WEDGES,
   WHEEL_WEDGE_COUNT,
   bankRoundWinnings,
-  bonusFfPoints,
   computeFinalRotationDeg,
   countLetterOccurrences,
-  fridayFusionPointsFromMoney,
+  firstPlaceByBankedMoney,
+  fridayFusionPointsForFirstPlace,
   isConsonant,
   isVowel,
   maskPuzzle,
@@ -68,11 +68,15 @@ describe("wheelOfFortuneLogic", () => {
     expect(bankRoundWinnings(2500)).toBe(2500);
   });
 
-  it("converts money and bonus to Friday Fusion points", () => {
-    expect(fridayFusionPointsFromMoney(2000)).toBe(20);
-    expect(fridayFusionPointsFromMoney(1999)).toBe(19);
-    expect(bonusFfPoints(3)).toBe(6);
-    expect(bonusFfPoints(2)).toBe(4);
+  it("awards Friday Fusion points equal to player count for first place and bonus", () => {
+    expect(fridayFusionPointsForFirstPlace(3)).toBe(3);
+    expect(fridayFusionPointsForFirstPlace(2)).toBe(2);
+    expect(fridayFusionPointsForFirstPlace(0)).toBe(0);
+    expect(firstPlaceByBankedMoney(["a", "b", "c"], { a: 5000, b: 2000, c: 5000 })).toEqual([
+      "a",
+      "c"
+    ]);
+    expect(firstPlaceByBankedMoney(["a", "b"], { a: 0, b: 0 })).toEqual(["a", "b"]);
   });
 
   it("eases spin rotation toward the final angle", () => {

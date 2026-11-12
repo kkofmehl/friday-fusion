@@ -161,12 +161,35 @@ export function bankRoundWinnings(roundMoney: number): number {
   return Math.max(roundMoney, WHEEL_OF_FORTUNE_BANK_FLOOR);
 }
 
-export function fridayFusionPointsFromMoney(bankedMoney: number): number {
-  return Math.floor(Math.max(0, bankedMoney) / 100);
+/** Friday Fusion points for first place (and for a solved bonus): one point per player. */
+export function fridayFusionPointsForFirstPlace(playerCount: number): number {
+  return Math.max(0, Math.floor(playerCount));
 }
 
-export function bonusFfPoints(playerCount: number): number {
-  return Math.max(0, playerCount) * 2;
+/**
+ * Participant ids tied for highest banked money among `playerOrder`.
+ * An all-zero bank still awards first place to everyone in the order.
+ */
+export function firstPlaceByBankedMoney(
+  playerOrder: readonly string[],
+  bankedMoney: Readonly<Record<string, number>>
+): string[] {
+  if (playerOrder.length === 0) {
+    return [];
+  }
+  let best = Number.NEGATIVE_INFINITY;
+  const tied: string[] = [];
+  for (const id of playerOrder) {
+    const money = bankedMoney[id] ?? 0;
+    if (money > best) {
+      best = money;
+      tied.length = 0;
+      tied.push(id);
+    } else if (money === best) {
+      tied.push(id);
+    }
+  }
+  return tied;
 }
 
 /**
