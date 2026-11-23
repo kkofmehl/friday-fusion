@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionState, YahtzeeMode, YahtzeeSheetRow } from "../../../shared/contracts";
 import { YahtzeeGame } from "./YahtzeeGame";
@@ -139,6 +139,81 @@ describe("YahtzeeGame", () => {
     expect(aliceRow?.querySelectorAll(".yahtzee-lb-check--yes")).toHaveLength(2);
     const bobRow = screen.getByRole("rowheader", { name: /Bob/i }).closest("tr");
     expect(bobRow?.querySelectorAll(".yahtzee-lb-check--yes")).toHaveLength(0);
+  });
+
+  it("shows an opening hint that fades out after 5 seconds", () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      render(
+        <YahtzeeGame session={playingSession()} currentParticipantId="p1" isHost canPlay send={send} />
+      );
+      const hint = screen.getByText("First roll already done. Click on dice to hold");
+      expect(hint.className).not.toContain("yahtzee-opening-hint--fading");
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.getByText("First roll already done. Click on dice to hold").className).toContain(
+        "yahtzee-opening-hint--fading"
+      );
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(screen.queryByText("First roll already done. Click on dice to hold")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the opening hint again when a new game starts with empty scorecards", () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn();
+      const { rerender } = render(
+        <YahtzeeGame
+          session={playingSession([{ category: "chance", points: 10 }])}
+          currentParticipantId="p1"
+          isHost
+          canPlay
+          send={send}
+        />
+      );
+      expect(screen.queryByText("First roll already done. Click on dice to hold")).toBeNull();
+      rerender(
+        <YahtzeeGame session={playingSession()} currentParticipantId="p1" isHost canPlay send={send} />
+      );
+      expect(screen.getByText("First roll already done. Click on dice to hold")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("skips the opening hint once any score has been recorded", () => {
+    const send = vi.fn();
+    render(
+      <YahtzeeGame
+        session={playingSession([{ category: "chance", points: 10 }])}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={send}
+      />
+    );
+    expect(screen.queryByText("First roll already done. Click on dice to hold")).toBeNull();
+  });
+
+  it("labels held dice", () => {
+    const send = vi.fn();
+    const session = playingSession();
+    if (session.gameState?.type !== "yahtzee" || session.gameState.state.status !== "playing") {
+      throw new Error("expected yahtzee playing");
+    }
+    session.gameState.state.held = [true, false, true, false, false];
+    render(<YahtzeeGame session={session} currentParticipantId="p1" isHost canPlay send={send} />);
+    expect(screen.getAllByText("Held")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Die showing 2, held" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Die showing 3, held" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Die showing 4" })).toBeTruthy();
   });
 
   it("shows live progress and yahtzee announcement in simultaneous mode", () => {

@@ -90,19 +90,25 @@ function DieFace({
 }): JSX.Element {
   const pips = pipPositions(value);
   return (
-    <button
-      type="button"
-      className={`yahtzee-die${held ? " yahtzee-die--held" : ""}${disabled ? " yahtzee-die--disabled" : ""}`}
-      disabled={disabled}
-      onClick={onToggle}
-      aria-pressed={held}
-    >
-      <span className="yahtzee-die-grid">
-        {pips.map((on, i) => (
-          <span key={i} className={`yahtzee-die-cell${on ? " yahtzee-die-cell--pip" : ""}`} />
-        ))}
+    <div className="yahtzee-die-slot">
+      <button
+        type="button"
+        className={`yahtzee-die${held ? " yahtzee-die--held" : ""}${disabled ? " yahtzee-die--disabled" : ""}`}
+        disabled={disabled}
+        onClick={onToggle}
+        aria-pressed={held}
+        aria-label={held ? `Die showing ${value}, held` : `Die showing ${value}`}
+      >
+        <span className="yahtzee-die-grid">
+          {pips.map((on, i) => (
+            <span key={i} className={`yahtzee-die-cell${on ? " yahtzee-die-cell--pip" : ""}`} />
+          ))}
+        </span>
+      </button>
+      <span className={`yahtzee-die-held-label${held ? " yahtzee-die-held-label--on" : ""}`}>
+        {held ? "Held" : ""}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -156,9 +162,29 @@ export function YahtzeeGame({
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => readStoredYahtzeeDiceSoundEnabled());
   const soundEnabledRef = useRef(soundEnabled);
+  const gameJustStarted =
+    state.status === "playing" &&
+    Object.values(state.sheetsByParticipant).every((rows) => rows.length === 0);
+  const [openingHintPhase, setOpeningHintPhase] = useState<"show" | "fade" | "hide">(() =>
+    gameJustStarted ? "show" : "hide"
+  );
   const audioContextRef = useRef<AudioContext | null>(null);
   const prevDiceKeyRef = useRef<string | null>(null);
   const skipNextDiceSoundRef = useRef(true);
+
+  useEffect(() => {
+    if (!gameJustStarted) {
+      setOpeningHintPhase("hide");
+      return;
+    }
+    setOpeningHintPhase("show");
+    const fadeTimer = window.setTimeout(() => setOpeningHintPhase("fade"), 5000);
+    const hideTimer = window.setTimeout(() => setOpeningHintPhase("hide"), 5600);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [gameJustStarted]);
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
@@ -491,6 +517,15 @@ export function YahtzeeGame({
           Dice sound
         </label>
       </header>
+
+      {openingHintPhase !== "hide" && (
+        <p
+          className={`yahtzee-opening-hint${openingHintPhase === "fade" ? " yahtzee-opening-hint--fading" : ""}`}
+          role="status"
+        >
+          First roll already done. Click on dice to hold
+        </p>
+      )}
 
       <div className="yahtzee-dice-row">
         {dice.map((v, i) => (
