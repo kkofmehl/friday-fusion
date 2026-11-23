@@ -45,6 +45,7 @@ export function ScattergoriesGame({
   const state = game?.state;
   const [lists, setLists] = useState<ScattergoriesListSummary[]>([]);
   const [localAnswers, setLocalAnswers] = useState<string[]>([]);
+  const [pointsDraft, setPointsDraft] = useState<Record<string, number>>({});
   const [, setTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localAnswersRef = useRef<string[]>([]);
@@ -150,6 +151,13 @@ export function ScattergoriesGame({
     const id = window.setInterval(() => setTick((t) => t + 1), 250);
     return () => window.clearInterval(id);
   }, [state?.status]);
+
+  // Reset host point drafts when leaving review or advancing prompts.
+  const reviewPromptKey =
+    state?.status === "reviewing" ? `${state.status}:${state.currentPromptIndex}` : state?.status;
+  useEffect(() => {
+    setPointsDraft({});
+  }, [reviewPromptKey]);
 
   useEffect(() => {
     return () => {
@@ -381,8 +389,33 @@ export function ScattergoriesGame({
           {state.revealedAnswers.map((row) => {
             const verdict = state.verdicts[row.participantId];
             const isBlank = row.text.trim().length === 0;
+            const detected = countLetterWords(row.text, state.letter);
+            const awarded = state.awardedPoints[row.participantId];
             const preview =
-              verdict === "valid" ? countLetterWords(row.text, state.letter) : 0;
+              verdict === "valid"
+                ? typeof awarded === "number"
+                  ? awarded
+                  : detected
+                : 0;
+            const showPointsInput = isHost && !isBlank && !row.isDuplicate && detected > 1;
+            const draft = pointsDraft[row.participantId];
+            const pointsValue =
+              typeof draft === "number" && draft >= 1 && draft <= detected
+                ? draft
+                : typeof awarded === "number" && awarded >= 1 && awarded <= detected
+                  ? awarded
+                  : detected;
+            const markValid = (points: number) => {
+              send({
+                type: "scattergories:markAnswer",
+                payload: {
+                  promptIndex: state.currentPromptIndex,
+                  participantId: row.participantId,
+                  valid: true,
+                  ...(detected > 1 ? { points } : {})
+                }
+              });
+            };
             return (
               <li
                 key={row.participantId}
@@ -407,6 +440,34 @@ export function ScattergoriesGame({
                 </div>
                 {isHost && !isBlank && (
                   <div className="scattergories-verdicts">
+                    {showPointsInput && (
+                      <label className="scattergories-points-label">
+                        <span className="scattergories-points-label-text">Pts</span>
+                        <input
+                          type="number"
+                          className="scattergories-points-input"
+                          min={1}
+                          max={detected}
+                          step={1}
+                          value={pointsValue}
+                          aria-label={`Points for ${nameFor(row.participantId)}`}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isInteger(raw) || raw < 1 || raw > detected) {
+                              return;
+                            }
+                            setPointsDraft((prev) => ({
+                              ...prev,
+                              [row.participantId]: raw
+                            }));
+                            if (verdict === "valid") {
+                              markValid(raw);
+                            }
+                          }}
+                        />
+                        <span className="scattergories-points-max">/{detected}</span>
+                      </label>
+                    )}
                     <button
                       type="button"
                       className={`scattergories-verdict-btn scattergories-verdict-btn--valid${
@@ -415,16 +476,7 @@ export function ScattergoriesGame({
                       aria-label={`Accept answer from ${nameFor(row.participantId)}`}
                       disabled={row.isDuplicate}
                       title={row.isDuplicate ? "Duplicate answers cannot be accepted" : undefined}
-                      onClick={() =>
-                        send({
-                          type: "scattergories:markAnswer",
-                          payload: {
-                            promptIndex: state.currentPromptIndex,
-                            participantId: row.participantId,
-                            valid: true
-                          }
-                        })
-                      }
+                      onClick={() => markValid(pointsValue)}
                     >
                       ✓
                     </button>

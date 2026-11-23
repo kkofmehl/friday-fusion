@@ -1750,7 +1750,8 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.promptIndex,
             event.payload.participantId,
-            event.payload.valid
+            event.payload.valid,
+            event.payload.points
           );
         } else if (event.type === "scattergories:nextPrompt") {
           await sessionService.scattergoriesNextPrompt(context.sessionId, context.participantId);

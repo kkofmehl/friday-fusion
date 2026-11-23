@@ -662,6 +662,7 @@ type ScattergoriesGameInternal = {
   answers: Record<string, string[]>;
   currentPromptIndex: number;
   verdictsByPrompt: Record<number, Record<string, "valid" | "invalid">>;
+  awardedPointsByPrompt: Record<number, Record<string, number>>;
   roundScoreDelta: Record<string, number>;
 };
 
@@ -1618,6 +1619,18 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       votes: g.votes && typeof g.votes === "object" ? g.votes : {},
       usedPromptIds: Array.isArray(g.usedPromptIds) ? g.usedPromptIds : [],
       roundScoreApplied: g.roundScoreApplied === true
+    };
+  }
+  if (game.type === "scattergories") {
+    const g = game as ScattergoriesGameInternal;
+    return {
+      ...g,
+      id: g.id ?? nanoid(6),
+      verdictsByPrompt: g.verdictsByPrompt && typeof g.verdictsByPrompt === "object" ? g.verdictsByPrompt : {},
+      awardedPointsByPrompt:
+        g.awardedPointsByPrompt && typeof g.awardedPointsByPrompt === "object" ? g.awardedPointsByPrompt : {},
+      roundScoreDelta: g.roundScoreDelta && typeof g.roundScoreDelta === "object" ? g.roundScoreDelta : {},
+      answers: g.answers && typeof g.answers === "object" ? g.answers : {}
     };
   }
   return { ...game, id: game.id ?? nanoid(6) };
@@ -3056,6 +3069,7 @@ export class SessionService {
         answers: {},
         currentPromptIndex: 0,
         verdictsByPrompt: {},
+        awardedPointsByPrompt: {},
         roundScoreDelta: {}
       };
     } else {
@@ -7375,6 +7389,7 @@ export class SessionService {
     game.roundEndsAt = null;
     game.currentPromptIndex = 0;
     game.verdictsByPrompt = {};
+    game.awardedPointsByPrompt = {};
     this.scattergoriesApplyAutoVerdictsForPrompt(session, game, 0);
     session.updatedAt = Date.now();
     await this.persist();
@@ -7434,9 +7449,14 @@ export class SessionService {
     if (prior !== "valid" || !game.letter) {
       return;
     }
+    const stored = game.awardedPointsByPrompt[promptIndex]?.[participantId];
     const text = game.answers[participantId]?.[promptIndex] ?? "";
-    const points = countLetterWords(text, game.letter);
+    const points =
+      typeof stored === "number" ? stored : countLetterWords(text, game.letter);
     this.scattergoriesAdjustScore(session, participantId, -points, game);
+    if (game.awardedPointsByPrompt[promptIndex]) {
+      delete game.awardedPointsByPrompt[promptIndex]![participantId];
+    }
   }
 
   public async scattergoriesSelectList(
@@ -7525,6 +7545,7 @@ export class SessionService {
     game.answers = {};
     game.currentPromptIndex = 0;
     game.verdictsByPrompt = {};
+    game.awardedPointsByPrompt = {};
     game.roundScoreDelta = {};
     game.roundEndsAt = null;
     const countdownEndsAt = Date.now() + SCATTERGORIES_COUNTDOWN_MS;
@@ -7561,7 +7582,8 @@ export class SessionService {
     hostParticipantId: string,
     promptIndex: number,
     targetParticipantId: string,
-    valid: boolean
+    valid: boolean,
+    pointsOverride?: number
   ): Promise<void> {
     const session = this.getSessionOrThrow(sessionId);
     this.scattergoriesAssertHost(session, hostParticipantId);
@@ -7585,15 +7607,35 @@ export class SessionService {
     if (valid && this.scattergoriesIsDuplicateAnswer(game, targetParticipantId, promptIndex)) {
       throw new Error("Duplicate answers cannot be accepted.");
     }
+    const detected = countLetterWords(answerText, game.letter);
+    let pointsToAward = detected;
+    if (valid && pointsOverride !== undefined) {
+      if (
+        !Number.isInteger(pointsOverride) ||
+        pointsOverride < 1 ||
+        pointsOverride > detected
+      ) {
+        throw new Error(
+          detected > 0
+            ? `Points must be an integer from 1 to ${detected}.`
+            : "Points cannot be awarded for an answer with no qualifying words."
+        );
+      }
+      pointsToAward = pointsOverride;
+    }
     this.scattergoriesRevokeVerdictPoints(session, game, promptIndex, targetParticipantId);
     if (!game.verdictsByPrompt[promptIndex]) {
       game.verdictsByPrompt[promptIndex] = {};
     }
+    if (!game.awardedPointsByPrompt[promptIndex]) {
+      game.awardedPointsByPrompt[promptIndex] = {};
+    }
     game.verdictsByPrompt[promptIndex]![targetParticipantId] = valid ? "valid" : "invalid";
     if (valid) {
-      const text = game.answers[targetParticipantId]?.[promptIndex] ?? "";
-      const points = countLetterWords(text, game.letter);
-      this.scattergoriesAdjustScore(session, targetParticipantId, points, game);
+      game.awardedPointsByPrompt[promptIndex]![targetParticipantId] = pointsToAward;
+      this.scattergoriesAdjustScore(session, targetParticipantId, pointsToAward, game);
+    } else {
+      delete game.awardedPointsByPrompt[promptIndex]![targetParticipantId];
     }
     session.updatedAt = Date.now();
     await this.persist();
@@ -7640,6 +7682,7 @@ export class SessionService {
     game.answers = {};
     game.currentPromptIndex = 0;
     game.verdictsByPrompt = {};
+    game.awardedPointsByPrompt = {};
     game.roundScoreDelta = {};
     session.updatedAt = Date.now();
     await this.persist();
@@ -9201,10 +9244,16 @@ export class SessionService {
           isDuplicate: this.scattergoriesIsDuplicateAnswer(game, p.id, game.currentPromptIndex)
         }));
         const promptVerdicts = game.verdictsByPrompt[game.currentPromptIndex] ?? {};
+        const promptAwards = game.awardedPointsByPrompt[game.currentPromptIndex] ?? {};
         const verdicts: Record<string, "valid" | "invalid" | null> = {};
+        const awardedPoints: Record<string, number> = {};
         for (const p of roster) {
           const v = promptVerdicts[p.id];
           verdicts[p.id] = v === "valid" || v === "invalid" ? v : null;
+          const awarded = promptAwards[p.id];
+          if (typeof awarded === "number") {
+            awardedPoints[p.id] = awarded;
+          }
         }
         return {
           ...base,
@@ -9217,7 +9266,8 @@ export class SessionService {
               status: "reviewing" as const,
               currentPromptIndex: game.currentPromptIndex,
               revealedAnswers,
-              verdicts
+              verdicts,
+              awardedPoints
             }
           }
         };

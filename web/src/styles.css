@@ -6093,7 +6093,46 @@ label {
 
 .scattergories-verdicts {
   display: flex;
+  align-items: center;
   gap: 0.4rem;
+}
+
+.scattergories-points-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 0.15rem;
+}
+
+.scattergories-points-label-text {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--slate-500);
+}
+
+.scattergories-points-input {
+  width: 2.6rem;
+  height: 2.1rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--slate-300);
+  background: #fff;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--slate-800);
+}
+
+.scattergories-points-input:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.scattergories-points-max {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--slate-500);
 }
 
 .scattergories-verdict-btn {

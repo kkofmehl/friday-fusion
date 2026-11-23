@@ -164,7 +164,8 @@ describe("ScattergoriesGame", () => {
       usedLetters: ["S"],
       currentPromptIndex: 0,
       revealedAnswers: [{ participantId: "host", text: "Spoon", isDuplicate: false }],
-      verdicts: { host: null }
+      verdicts: { host: null },
+      awardedPoints: {}
     };
     const { rerender } = render(
       <ScattergoriesGame
@@ -281,7 +282,8 @@ describe("ScattergoriesGame", () => {
         { participantId: "host", text: "Spoon", isDuplicate: true },
         { participantId: "p2", text: "", isDuplicate: false }
       ],
-      verdicts: { host: null, p2: "invalid" }
+      verdicts: { host: null, p2: "invalid" },
+      awardedPoints: {}
     };
     render(
       <ScattergoriesGame
@@ -318,7 +320,8 @@ describe("ScattergoriesGame", () => {
         { participantId: "host", text: "Spoon", isDuplicate: false },
         { participantId: "p2", text: "Soup", isDuplicate: false }
       ],
-      verdicts: { host: "valid", p2: null }
+      verdicts: { host: "valid", p2: null },
+      awardedPoints: { host: 1 }
     };
     render(
       <ScattergoriesGame
@@ -332,5 +335,59 @@ describe("ScattergoriesGame", () => {
     );
     const nextBtn = screen.getByRole("button", { name: /next prompt|finish round/i });
     expect((nextBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows a points input for multi-word answers and sends the edited total on accept", () => {
+    const send = vi.fn();
+    const state: ScattergoriesState = {
+      status: "reviewing",
+      listId: "scat-001",
+      listTitle: "Around the house",
+      prompts: ["Something in the kitchen"],
+      letter: "S",
+      answerDurationMs: 60_000,
+      usedListIds: ["scat-001"],
+      usedLetters: ["S"],
+      currentPromptIndex: 0,
+      revealedAnswers: [
+        { participantId: "p2", text: "Silly Silo", isDuplicate: false },
+        { participantId: "host", text: "Spoon", isDuplicate: false }
+      ],
+      verdicts: { host: null, p2: null },
+      awardedPoints: {}
+    };
+    render(
+      <ScattergoriesGame
+        session={sessionWithState(state)}
+        currentParticipantId="host"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+    const multiInput = screen.getByLabelText(/points for guest/i) as HTMLInputElement;
+    expect(multiInput.value).toBe("2");
+    expect(screen.queryByLabelText(/points for host/i)).toBeNull();
+    fireEvent.change(multiInput, { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: /accept answer from guest/i }));
+    expect(send).toHaveBeenCalledWith({
+      type: "scattergories:markAnswer",
+      payload: {
+        promptIndex: 0,
+        participantId: "p2",
+        valid: true,
+        points: 1
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /accept answer from host/i }));
+    expect(send).toHaveBeenCalledWith({
+      type: "scattergories:markAnswer",
+      payload: {
+        promptIndex: 0,
+        participantId: "host",
+        valid: true
+      }
+    });
   });
 });

@@ -3269,6 +3269,11 @@ describe("SessionService", () => {
       let guestScore = setup.service.getState(host.sessionId).participants.find((p) => p.id === guest.participantId)
         ?.score;
       expect(guestScore).toBe(2);
+      const afterAccept = setup.service.getState(host.sessionId).gameState;
+      if (afterAccept?.type !== "scattergories" || afterAccept.state.status !== "reviewing") {
+        throw new Error("reviewing expected after accept");
+      }
+      expect(afterAccept.state.awardedPoints[guest.participantId]).toBe(2);
       await setup.service.scattergoriesMarkAnswer(
         host.sessionId,
         host.participantId,
@@ -3277,6 +3282,96 @@ describe("SessionService", () => {
         false
       );
       guestScore = setup.service.getState(host.sessionId).participants.find((p) => p.id === guest.participantId)?.score;
+      expect(guestScore).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it("allows the host to award fewer than the detected multi-word points", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "scattergories");
+      await setup.service.scattergoriesSetDuration(host.sessionId, host.participantId, 60_000);
+      await setup.service.scattergoriesDrawLetter(host.sessionId, host.participantId);
+      const drawn = setup.service.getState(host.sessionId).gameState;
+      if (drawn?.type !== "scattergories" || !drawn.state.letter) {
+        throw new Error("letter expected");
+      }
+      const letter = drawn.state.letter;
+      await setup.service.scattergoriesStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(SCATTERGORIES_COUNTDOWN_MS + 100);
+      const answering = setup.service.getState(host.sessionId).gameState;
+      if (answering?.type !== "scattergories" || answering.state.status !== "answering") {
+        throw new Error("answering expected");
+      }
+      const blanks = answering.state.prompts.map(() => "");
+      const first = `${letter}illy ${letter}ilo`;
+      await setup.service.scattergoriesUpdateAnswers(host.sessionId, guest.participantId, [
+        first,
+        ...blanks.slice(1)
+      ]);
+      await vi.advanceTimersByTimeAsync(60_100);
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        true,
+        1
+      );
+      let guestScore = setup.service
+        .getState(host.sessionId)
+        .participants.find((p) => p.id === guest.participantId)?.score;
+      expect(guestScore).toBe(1);
+      const reviewing = setup.service.getState(host.sessionId).gameState;
+      if (reviewing?.type !== "scattergories" || reviewing.state.status !== "reviewing") {
+        throw new Error("reviewing expected");
+      }
+      expect(reviewing.state.awardedPoints[guest.participantId]).toBe(1);
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        true,
+        2
+      );
+      guestScore = setup.service
+        .getState(host.sessionId)
+        .participants.find((p) => p.id === guest.participantId)?.score;
+      expect(guestScore).toBe(2);
+      await expect(
+        setup.service.scattergoriesMarkAnswer(
+          host.sessionId,
+          host.participantId,
+          0,
+          guest.participantId,
+          true,
+          3
+        )
+      ).rejects.toThrow(/1 to 2/i);
+      await expect(
+        setup.service.scattergoriesMarkAnswer(
+          host.sessionId,
+          host.participantId,
+          0,
+          guest.participantId,
+          true,
+          0
+        )
+      ).rejects.toThrow(/1 to 2/i);
+      await setup.service.scattergoriesMarkAnswer(
+        host.sessionId,
+        host.participantId,
+        0,
+        guest.participantId,
+        false
+      );
+      guestScore = setup.service
+        .getState(host.sessionId)
+        .participants.find((p) => p.id === guest.participantId)?.score;
       expect(guestScore).toBe(0);
       vi.useRealTimers();
     });

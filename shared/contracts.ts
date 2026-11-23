@@ -1703,7 +1703,8 @@ export const scattergoriesStateSchema = z.discriminatedUnion("status", [
         isDuplicate: z.boolean()
       })
     ),
-    verdicts: z.record(z.string(), scattergoriesVerdictSchema.nullable())
+    verdicts: z.record(z.string(), scattergoriesVerdictSchema.nullable()),
+    awardedPoints: z.record(z.string(), z.number().int().nonnegative())
   }),
   scattergoriesSetupFieldsSchema.extend({
     status: z.literal("roundComplete"),
@@ -2546,7 +2547,8 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({
       promptIndex: z.number().int().nonnegative(),
       participantId: z.string().min(1),
-      valid: z.boolean()
+      valid: z.boolean(),
+      points: z.number().int().positive().optional()
     })
   }),
   z.object({ type: z.literal("scattergories:nextPrompt"), payload: z.object({}) }),
