@@ -310,3 +310,19 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-11-25:** okay, last one I think is friendly fued. The text on the answer panels is washed out.
+
+---
+
+**2026-11-25:** I would like to attempt to add a type racing game to Friday fusion. The main idea is that all players will be presented a block of text that is about a paragraph in length, a timer counts down, and then each player types out the paragraph. I know some type racing apps will give live feedback about accuracy, I don't want that. The players should just type it out as fast and as accurately as they can. Once they are done they click the "Finished" button and their completion time is captured. Their text is compared against the prompt and their accuracy percentage is calculated (number of correct characters versus incorrect). They are then assesed a 0.5 second penalty for each error. The player that completed it the fastest (after assessed penalties) is the winner. Build out about 50 different prompts in a library.
+
+---
+
+**2026-11-25:** Type Race feedback: Show the input box while countdown is happening but have it disabled. When timer hits 0, enable it and make sure the cursor is focused on it. Display results are off — different backgrounds and the light one is washed out. Make sure that pasting in text to the input box is disabled.
+
+---
+
+**2026-11-25:** Can we add a calculated words-per-minute to the results as well?
+
+---
+
+**2026-11-25:** Just noticed the "Short" label is washed out in the UI

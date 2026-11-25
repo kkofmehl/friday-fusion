@@ -26,7 +26,8 @@ export const gameTypeSchema = z.enum([
   "friendlyFeud",
   "badAdvice",
   "wheelOfFortune",
-  "trivialPursuit"
+  "trivialPursuit",
+  "typeRace"
 ]);
 export type GameType = z.infer<typeof gameTypeSchema>;
 
@@ -1725,6 +1726,69 @@ export const WORDLE_COUNTDOWN_MS = 3_000;
 export const WORDLE_MAX_GUESSES = 6;
 export const WORDLE_WORD_LENGTH = 5;
 
+export const TYPE_RACE_COUNTDOWN_MS = 3_000;
+export const TYPE_RACE_SUBMISSION_MAX_CHARS = 2_000;
+
+export const typeRacePromptSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1).max(TYPE_RACE_SUBMISSION_MAX_CHARS)
+});
+export type TypeRacePrompt = z.infer<typeof typeRacePromptSchema>;
+
+export const typeRacePlayerStatusSchema = z.enum(["racing", "finished", "dnf"]);
+export type TypeRacePlayerStatus = z.infer<typeof typeRacePlayerStatusSchema>;
+
+export const typeRacePlayerPublicSchema = z.object({
+  status: typeRacePlayerStatusSchema,
+  finishedAt: z.number().int().nullable()
+});
+export type TypeRacePlayerPublic = z.infer<typeof typeRacePlayerPublicSchema>;
+
+export const typeRaceStandingSchema = z.object({
+  participantId: z.string(),
+  place: z.number().int().positive(),
+  finished: z.boolean(),
+  elapsedMs: z.number().int().nonnegative(),
+  errors: z.number().int().nonnegative(),
+  correct: z.number().int().nonnegative(),
+  accuracy: z.number().nonnegative(),
+  penaltyMs: z.number().int().nonnegative(),
+  adjustedMs: z.number().nonnegative(),
+  wordsPerMinute: z.number().nonnegative(),
+  submittedText: z.string(),
+  ffPoints: z.number().int().nonnegative()
+});
+export type TypeRaceStanding = z.infer<typeof typeRaceStandingSchema>;
+
+const typeRaceSharedFieldsSchema = z.object({
+  players: z.record(z.string(), typeRacePlayerPublicSchema),
+  usedPromptIds: z.array(z.string())
+});
+
+export const typeRaceStateSchema = z.discriminatedUnion("status", [
+  typeRaceSharedFieldsSchema.extend({
+    status: z.literal("idle")
+  }),
+  typeRaceSharedFieldsSchema.extend({
+    status: z.literal("countdown"),
+    prompt: typeRacePromptSchema,
+    countdownEndsAt: z.number().int()
+  }),
+  typeRaceSharedFieldsSchema.extend({
+    status: z.literal("racing"),
+    prompt: typeRacePromptSchema,
+    startedAt: z.number().int()
+  }),
+  typeRaceSharedFieldsSchema.extend({
+    status: z.literal("results"),
+    prompt: typeRacePromptSchema,
+    startedAt: z.number().int(),
+    standings: z.array(typeRaceStandingSchema),
+    winnerIds: z.array(z.string())
+  })
+]);
+export type TypeRaceState = z.infer<typeof typeRaceStateSchema>;
+
 export const wordleTileSchema = z.enum(["absent", "present", "correct"]);
 export type WordleTile = z.infer<typeof wordleTileSchema>;
 
@@ -1997,6 +2061,10 @@ export const gameStateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("trivialPursuit"),
     state: trivialPursuitStateSchema
+  }),
+  z.object({
+    type: z.literal("typeRace"),
+    state: typeRaceStateSchema
   })
 ]);
 export type GameState = z.infer<typeof gameStateSchema>;
@@ -2757,7 +2825,13 @@ export const clientEventSchema = z.discriminatedUnion("type", [
     payload: z.object({ category: trivialPursuitCategorySchema })
   }),
   z.object({ type: z.literal("trivialPursuit:retryQuestion"), payload: z.object({}) }),
-  z.object({ type: z.literal("trivialPursuit:relaxExactCenterRoll"), payload: z.object({}) })
+  z.object({ type: z.literal("trivialPursuit:relaxExactCenterRoll"), payload: z.object({}) }),
+  z.object({ type: z.literal("typeRace:startRound"), payload: z.object({}) }),
+  z.object({
+    type: z.literal("typeRace:finish"),
+    payload: z.object({ text: z.string().max(TYPE_RACE_SUBMISSION_MAX_CHARS) })
+  }),
+  z.object({ type: z.literal("typeRace:endRace"), payload: z.object({}) })
 ]);
 export type ClientEvent = z.infer<typeof clientEventSchema>;
 

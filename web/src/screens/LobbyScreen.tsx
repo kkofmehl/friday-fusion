@@ -205,6 +205,13 @@ const GAMES: GameOption[] = [
     description:
       "Everyone races the same 5-letter word after a 3-2-1 countdown. Watch live mini boards, then earn inverse placement Friday Fusion points.",
     iconSrc: "/game_icons/wordle.png"
+  },
+  {
+    id: "typeRace",
+    title: "Type Race",
+    description:
+      "Same paragraph for everyone after a countdown—type it out, click Finished, and the fastest adjusted time (0.5s per error) wins a Friday Fusion point.",
+    iconSrc: "/game_icons/type_race.png"
   }
 ];
 

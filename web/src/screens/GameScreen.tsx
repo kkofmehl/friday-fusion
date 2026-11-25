@@ -25,6 +25,7 @@ import { ScattergoriesGame } from "../games/ScattergoriesGame";
 import { StoryBuilderGame } from "../games/StoryBuilderGame";
 import { MemoryGame } from "../games/MemoryGame";
 import { WordleGame } from "../games/WordleGame";
+import { TypeRaceGame } from "../games/TypeRaceGame";
 import { MonopolyDealGame } from "../games/MonopolyDealGame";
 import { MonopolyDealActionFeed } from "../games/monopolyDeal/ActionFeed";
 import { SplendorGame } from "../games/SplendorGame";
@@ -56,6 +57,7 @@ const GAME_ICON_BY_ID: Record<string, string> = {
   storyBuilder: "/game_icons/story_builder.png",
   memory: "/game_icons/memory.png",
   wordle: "/game_icons/wordle.png",
+  typeRace: "/game_icons/type_race.png",
   monopolyDeal: "/game_icons/monopoly_deal.png",
   splendor: "/game_icons/splendor.png",
   friendlyFeud: "/game_icons/friendly_feud.png",
@@ -85,6 +87,7 @@ const GAME_TITLES_BY_ID: Record<GameType, string> = {
   storyBuilder: "Story Builder",
   memory: "Memory",
   wordle: "Wordle Race",
+  typeRace: "Type Race",
   monopolyDeal: "Monopoly Deal",
   splendor: "Splendor",
   friendlyFeud: "Friendly Feud",
@@ -439,6 +442,17 @@ export function GameScreen({
     if (session.gameState?.type === "wordle") {
       return (
         <WordleGame
+          session={session}
+          currentParticipantId={currentParticipantId}
+          isHost={isHost}
+          canPlay={canPlay}
+          send={send}
+        />
+      );
+    }
+    if (session.gameState?.type === "typeRace") {
+      return (
+        <TypeRaceGame
           session={session}
           currentParticipantId={currentParticipantId}
           isHost={isHost}

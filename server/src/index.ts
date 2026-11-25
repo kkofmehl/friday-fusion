@@ -1427,6 +1427,16 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
             context.participantId,
             event.payload.guess
           );
+        } else if (event.type === "typeRace:startRound") {
+          await sessionService.typeRaceStartRound(context.sessionId, context.participantId);
+        } else if (event.type === "typeRace:finish") {
+          await sessionService.typeRaceFinish(
+            context.sessionId,
+            context.participantId,
+            event.payload.text
+          );
+        } else if (event.type === "typeRace:endRace") {
+          await sessionService.typeRaceEndRace(context.sessionId, context.participantId);
         } else if (event.type === "monopolyDeal:setWager") {
           await sessionService.monopolyDealSetWager(
             context.sessionId,

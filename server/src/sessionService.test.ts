@@ -2,7 +2,12 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SCATTERGORIES_COUNTDOWN_MS, WORDLE_COUNTDOWN_MS, type SessionState } from "../../shared/contracts";
+import {
+  SCATTERGORIES_COUNTDOWN_MS,
+  TYPE_RACE_COUNTDOWN_MS,
+  WORDLE_COUNTDOWN_MS,
+  type SessionState
+} from "../../shared/contracts";
 import { SessionService } from "./sessionService";
 import { FileStore } from "./storage/fileStore";
 
@@ -3603,6 +3608,148 @@ describe("SessionService", () => {
       tempDir = setup.tempDir;
       const host = await setup.service.createSession("Host");
       await expect(setup.service.startGame(host.sessionId, "wordle")).rejects.toThrow(/two/i);
+    });
+  });
+
+  describe("typeRace", () => {
+    it("transitions from countdown to racing after 3 seconds", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "typeRace");
+      await setup.service.typeRaceStartRound(host.sessionId, host.participantId);
+      let state = setup.service.getState(host.sessionId, host.participantId);
+      expect(state.gameState?.type).toBe("typeRace");
+      if (state.gameState?.type !== "typeRace") {
+        throw new Error("expected typeRace");
+      }
+      expect(state.gameState.state.status).toBe("countdown");
+      if (state.gameState.state.status !== "countdown") {
+        throw new Error("expected countdown");
+      }
+      expect(state.gameState.state.prompt.text.length).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(TYPE_RACE_COUNTDOWN_MS + 100);
+      state = setup.service.getState(host.sessionId, host.participantId);
+      if (state.gameState?.type !== "typeRace") {
+        throw new Error("expected typeRace");
+      }
+      expect(state.gameState.state.status).toBe("racing");
+      vi.useRealTimers();
+    });
+
+    it("hides submissions while racing and awards only the winner", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "typeRace");
+      await setup.service.typeRaceStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(TYPE_RACE_COUNTDOWN_MS + 50);
+
+      let racing = setup.service.getState(host.sessionId, host.participantId);
+      if (racing.gameState?.type !== "typeRace" || racing.gameState.state.status !== "racing") {
+        throw new Error("expected racing");
+      }
+      const promptText = racing.gameState.state.prompt.text;
+
+      await setup.service.typeRaceFinish(host.sessionId, host.participantId, promptText);
+      const mid = setup.service.getState(host.sessionId, guest.participantId);
+      if (mid.gameState?.type !== "typeRace" || mid.gameState.state.status !== "racing") {
+        throw new Error("expected still racing");
+      }
+      expect(mid.gameState.state.players[host.participantId]?.status).toBe("finished");
+      expect("standings" in mid.gameState.state).toBe(false);
+      expect(JSON.stringify(mid.gameState.state)).not.toContain("submittedText");
+      expect(JSON.stringify(mid.gameState.state.players)).not.toMatch(/"text"/);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      await setup.service.typeRaceFinish(host.sessionId, guest.participantId, promptText);
+      const done = setup.service.getState(host.sessionId, host.participantId);
+      if (done.gameState?.type !== "typeRace" || done.gameState.state.status !== "results") {
+        throw new Error("expected results");
+      }
+      expect(done.gameState.state.winnerIds).toEqual([host.participantId]);
+      expect(done.gameState.state.standings[0]?.participantId).toBe(host.participantId);
+      expect(done.gameState.state.standings[0]?.ffPoints).toBe(1);
+      expect(done.gameState.state.standings[1]?.ffPoints).toBe(0);
+      expect(done.participants.find((p) => p.id === host.participantId)?.score).toBe(1);
+      expect(done.participants.find((p) => p.id === guest.participantId)?.score).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it("lets penalties change the winner", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "typeRace");
+      await setup.service.typeRaceStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(TYPE_RACE_COUNTDOWN_MS + 50);
+
+      const racing = setup.service.getState(host.sessionId, host.participantId);
+      if (racing.gameState?.type !== "typeRace" || racing.gameState.state.status !== "racing") {
+        throw new Error("expected racing");
+      }
+      const promptText = racing.gameState.state.prompt.text;
+      const messy = `${promptText.slice(0, 10)}XXXXXXXXXX${promptText.slice(20)}`;
+
+      await setup.service.typeRaceFinish(host.sessionId, host.participantId, messy);
+      await vi.advanceTimersByTimeAsync(1_500);
+      await setup.service.typeRaceFinish(host.sessionId, guest.participantId, promptText);
+
+      const done = setup.service.getState(host.sessionId, host.participantId);
+      if (done.gameState?.type !== "typeRace" || done.gameState.state.status !== "results") {
+        throw new Error("expected results");
+      }
+      expect(done.gameState.state.winnerIds).toEqual([guest.participantId]);
+      expect(done.participants.find((p) => p.id === guest.participantId)?.score).toBe(1);
+      expect(done.participants.find((p) => p.id === host.participantId)?.score).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it("marks unfinished players DNF when the host ends the race", async () => {
+      vi.useFakeTimers();
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      const guest = await setup.service.joinSession(host.joinCode, "Guest");
+      await setup.service.startGame(host.sessionId, "typeRace");
+      await setup.service.typeRaceStartRound(host.sessionId, host.participantId);
+      await vi.advanceTimersByTimeAsync(TYPE_RACE_COUNTDOWN_MS + 50);
+
+      const racing = setup.service.getState(host.sessionId, host.participantId);
+      if (racing.gameState?.type !== "typeRace" || racing.gameState.state.status !== "racing") {
+        throw new Error("expected racing");
+      }
+      await setup.service.typeRaceFinish(
+        host.sessionId,
+        host.participantId,
+        racing.gameState.state.prompt.text
+      );
+      await setup.service.typeRaceEndRace(host.sessionId, host.participantId);
+
+      const done = setup.service.getState(host.sessionId, host.participantId);
+      if (done.gameState?.type !== "typeRace" || done.gameState.state.status !== "results") {
+        throw new Error("expected results");
+      }
+      expect(done.gameState.state.standings.find((s) => s.participantId === guest.participantId)?.finished).toBe(
+        false
+      );
+      expect(done.gameState.state.winnerIds).toEqual([host.participantId]);
+      expect(done.participants.find((p) => p.id === host.participantId)?.score).toBe(1);
+      expect(done.participants.find((p) => p.id === guest.participantId)?.score).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it("requires at least two players to start", async () => {
+      const setup = await createService();
+      tempDir = setup.tempDir;
+      const host = await setup.service.createSession("Host");
+      await expect(setup.service.startGame(host.sessionId, "typeRace")).rejects.toThrow(/two/i);
     });
   });
 

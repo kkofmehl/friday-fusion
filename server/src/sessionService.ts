@@ -33,6 +33,8 @@ import {
   WORDLE_COUNTDOWN_MS,
   WORDLE_MAX_GUESSES,
   WORDLE_WORD_LENGTH,
+  TYPE_RACE_COUNTDOWN_MS,
+  TYPE_RACE_SUBMISSION_MAX_CHARS,
   gameTypeSchema,
   MAX_LOBBY_GAME_PREFERENCES,
   type GameStartOptions,
@@ -55,6 +57,8 @@ import {
   type MemoryCardPublic,
   type WordleStanding,
   type WordleTile,
+  type TypeRacePrompt,
+  type TypeRaceStanding,
   SCATTERGORIES_ANSWER_MAX_CHARS,
   SCATTERGORIES_COUNTDOWN_MS
 } from "../../shared/contracts";
@@ -69,7 +73,9 @@ import {
   evaluateGuess,
   isSolvedEvaluation
 } from "../../shared/wordleLogic";
+import { buildTypeRacePlayerResult, computeTypeRaceStandings } from "../../shared/typeRaceLogic";
 import { isValidWordleGuess, pickWordleAnswer } from "./wordleWords";
+import { pickTypeRacePrompt } from "./typeRacePromptLoader";
 import { pickPictionaryClue } from "./pictionaryClues";
 import { pickCatchPhraseClue } from "./catchPhraseClues";
 import { pickIcebreakerQuestions } from "./icebreakerQuestionLoader";
@@ -723,6 +729,26 @@ type WordleGameInternal = {
   scoresApplied: boolean;
 };
 
+type TypeRacePlayerInternal = {
+  status: "racing" | "finished" | "dnf";
+  finishedAt: number | null;
+  submittedText: string | null;
+};
+
+type TypeRaceGameInternal = {
+  id: string;
+  type: "typeRace";
+  status: "idle" | "countdown" | "racing" | "results";
+  prompt: TypeRacePrompt | null;
+  usedPromptIds: string[];
+  countdownEndsAt: number | null;
+  startedAt: number | null;
+  players: Record<string, TypeRacePlayerInternal>;
+  standings: TypeRaceStanding[] | null;
+  winnerIds: string[] | null;
+  scoresApplied: boolean;
+};
+
 type GameInternal =
   | HangmanGameInternal
   | TwoTruthsGameInternal
@@ -744,6 +770,7 @@ type GameInternal =
   | StoryBuilderGameInternal
   | MemoryGameInternal
   | WordleGameInternal
+  | TypeRaceGameInternal
   | MonopolyDealGameInternal
   | SplendorGameInternal
   | FriendlyFeudGameInternal
@@ -1581,6 +1608,46 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       scoresApplied: g.scoresApplied === true
     };
   }
+  if (game.type === "typeRace") {
+    const g = game as TypeRaceGameInternal;
+    const status =
+      g.status === "countdown" || g.status === "racing" || g.status === "results" || g.status === "idle"
+        ? g.status
+        : "idle";
+    const players: Record<string, TypeRacePlayerInternal> = {};
+    if (g.players && typeof g.players === "object") {
+      for (const [pid, raw] of Object.entries(g.players)) {
+        if (!raw || typeof raw !== "object") {
+          continue;
+        }
+        players[pid] = {
+          status: raw.status === "finished" || raw.status === "dnf" ? raw.status : "racing",
+          finishedAt: typeof raw.finishedAt === "number" ? raw.finishedAt : null,
+          submittedText: typeof raw.submittedText === "string" ? raw.submittedText : null
+        };
+      }
+    }
+    const restoredStatus = status === "countdown" || status === "racing" ? "idle" : status;
+    const prompt =
+      g.prompt && typeof g.prompt.id === "string" && typeof g.prompt.text === "string"
+        ? { id: g.prompt.id, text: g.prompt.text }
+        : null;
+    return {
+      id: g.id ?? nanoid(6),
+      type: "typeRace",
+      status: restoredStatus,
+      prompt: restoredStatus === "results" ? prompt : null,
+      usedPromptIds: Array.isArray(g.usedPromptIds)
+        ? g.usedPromptIds.filter((id) => typeof id === "string")
+        : [],
+      countdownEndsAt: null,
+      startedAt: restoredStatus === "results" && typeof g.startedAt === "number" ? g.startedAt : null,
+      players: restoredStatus === "idle" ? {} : players,
+      standings: Array.isArray(g.standings) ? g.standings : null,
+      winnerIds: Array.isArray(g.winnerIds) ? g.winnerIds.filter((id) => typeof id === "string") : null,
+      scoresApplied: g.scoresApplied === true
+    };
+  }
   if (game.type === "friendlyFeud") {
     return hydrateFriendlyFeudGame(game as FriendlyFeudGameInternal);
   }
@@ -2038,6 +2105,7 @@ export class SessionService {
   private readonly scattergoriesResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly memoryResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly wordleResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly typeRaceResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly friendlyFeudResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly wheelOfFortuneResolveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -2410,6 +2478,9 @@ export class SessionService {
     }
     if (previousGame?.type === "wordle") {
       this.clearWordleTimer(sessionId);
+    }
+    if (previousGame?.type === "typeRace") {
+      this.clearTypeRaceTimer(sessionId);
     }
     if (previousGame?.type === "friendlyFeud") {
       this.clearFriendlyFeudTimer(sessionId);
@@ -3051,6 +3122,24 @@ export class SessionService {
         placementAwards: null,
         scoresApplied: false
       };
+    } else if (game === "typeRace") {
+      const actives = activeParticipants(session);
+      if (actives.length < 2) {
+        throw new Error("Type Race needs at least two active players.");
+      }
+      next = {
+        id: nanoid(6),
+        type: "typeRace",
+        status: "idle",
+        prompt: null,
+        usedPromptIds: [],
+        countdownEndsAt: null,
+        startedAt: null,
+        players: {},
+        standings: null,
+        winnerIds: null,
+        scoresApplied: false
+      };
     } else if (game === "scattergories") {
       const actives = activeParticipants(session);
       if (actives.length < 2) {
@@ -3118,6 +3207,9 @@ export class SessionService {
     }
     if (active?.type === "wordle") {
       this.clearWordleTimer(sessionId);
+    }
+    if (active?.type === "typeRace") {
+      this.clearTypeRaceTimer(sessionId);
     }
     if (active?.type === "friendlyFeud") {
       this.clearFriendlyFeudTimer(sessionId);
@@ -3388,6 +3480,26 @@ export class SessionService {
           activeWordle.scoresApplied = false;
         } else if (activeWordle.status === "racing") {
           this.wordleMaybeFinalizeRound(session, activeWordle);
+        }
+      }
+    }
+
+    const activeTypeRace = session.games[0];
+    if (activeTypeRace?.type === "typeRace") {
+      delete activeTypeRace.players[participantId];
+      if (activeTypeRace.status === "racing" || activeTypeRace.status === "countdown") {
+        const remaining = Object.keys(activeTypeRace.players);
+        if (remaining.length === 0) {
+          this.clearTypeRaceTimer(sessionId);
+          activeTypeRace.status = "idle";
+          activeTypeRace.prompt = null;
+          activeTypeRace.countdownEndsAt = null;
+          activeTypeRace.startedAt = null;
+          activeTypeRace.standings = null;
+          activeTypeRace.winnerIds = null;
+          activeTypeRace.scoresApplied = false;
+        } else if (activeTypeRace.status === "racing") {
+          this.typeRaceMaybeFinalizeRound(session, activeTypeRace);
         }
       }
     }
@@ -7274,6 +7386,210 @@ export class SessionService {
     await this.persist();
   }
 
+  private clearTypeRaceTimer(sessionId: string): void {
+    const existing = this.typeRaceResolveTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.typeRaceResolveTimers.delete(sessionId);
+    }
+  }
+
+  private scheduleTypeRaceTimer(sessionId: string, deadlineMs: number, onFire: () => Promise<void>): void {
+    this.clearTypeRaceTimer(sessionId);
+    const delay = Math.max(0, deadlineMs - Date.now());
+    const timer = setTimeout(() => {
+      void onFire().catch(() => {});
+    }, delay);
+    this.typeRaceResolveTimers.set(sessionId, timer);
+  }
+
+  private typeRaceEmptyPlayer(): TypeRacePlayerInternal {
+    return {
+      status: "racing",
+      finishedAt: null,
+      submittedText: null
+    };
+  }
+
+  private typeRacePublicPlayers(
+    game: TypeRaceGameInternal
+  ): Record<string, { status: TypeRacePlayerInternal["status"]; finishedAt: number | null }> {
+    const revealTimes = game.status === "results";
+    const out: Record<string, { status: TypeRacePlayerInternal["status"]; finishedAt: number | null }> = {};
+    for (const [pid, player] of Object.entries(game.players)) {
+      out[pid] = {
+        status: player.status,
+        finishedAt: revealTimes ? player.finishedAt : null
+      };
+    }
+    return out;
+  }
+
+  private typeRaceFinalizeRound(session: SessionInternal, game: TypeRaceGameInternal, markRemainingDnf: boolean): void {
+    if (game.status !== "racing" || !game.startedAt || !game.prompt) {
+      return;
+    }
+    if (game.scoresApplied) {
+      return;
+    }
+    if (markRemainingDnf) {
+      for (const player of Object.values(game.players)) {
+        if (player.status === "racing") {
+          player.status = "dnf";
+          player.finishedAt = null;
+          player.submittedText = null;
+        }
+      }
+    }
+    const entries = Object.entries(game.players);
+    if (entries.length === 0) {
+      return;
+    }
+    if (!entries.every(([, p]) => p.status === "finished" || p.status === "dnf")) {
+      return;
+    }
+    const results = entries.map(([participantId, player]) =>
+      buildTypeRacePlayerResult({
+        participantId,
+        finished: player.status === "finished",
+        elapsedMs:
+          player.status === "finished" && player.finishedAt !== null
+            ? Math.max(0, player.finishedAt - game.startedAt!)
+            : 0,
+        submittedText: player.submittedText ?? "",
+        prompt: game.prompt!.text
+      })
+    );
+    const standings = computeTypeRaceStandings(results);
+    for (const row of standings) {
+      if (row.ffPoints <= 0) {
+        continue;
+      }
+      const p = session.participants.find((x) => x.id === row.participantId);
+      if (p) {
+        p.score += row.ffPoints;
+      }
+    }
+    game.scoresApplied = true;
+    game.status = "results";
+    game.standings = standings.map((row) => ({
+      participantId: row.participantId,
+      place: row.place,
+      finished: row.finished,
+      elapsedMs: row.finished ? row.elapsedMs : 0,
+      errors: row.finished ? row.errors : 0,
+      correct: row.finished ? row.correct : 0,
+      accuracy: row.finished ? row.accuracy : 0,
+      penaltyMs: row.finished ? row.penaltyMs : 0,
+      adjustedMs: row.finished ? row.adjustedMs : 0,
+      wordsPerMinute: row.finished ? row.wordsPerMinute : 0,
+      submittedText: row.finished ? row.submittedText : "",
+      ffPoints: row.ffPoints
+    }));
+    game.winnerIds = standings.filter((s) => s.ffPoints > 0).map((s) => s.participantId);
+  }
+
+  private typeRaceMaybeFinalizeRound(session: SessionInternal, game: TypeRaceGameInternal): void {
+    this.typeRaceFinalizeRound(session, game, false);
+  }
+
+  private async typeRaceTransitionToRacing(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    const game = session.games[0];
+    if (game?.type !== "typeRace" || game.status !== "countdown") {
+      return;
+    }
+    this.clearTypeRaceTimer(sessionId);
+    game.status = "racing";
+    game.countdownEndsAt = null;
+    game.startedAt = Date.now();
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.onSessionUpdated?.(sessionId);
+  }
+
+  public async typeRaceStartRound(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const isHost = session.participants.some((p) => p.id === hostParticipantId && p.isHost);
+    if (!isHost) {
+      throw new Error("Only the host can start a Type Race.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "typeRace") {
+      throw new Error("Type Race is not the active game.");
+    }
+    if (game.status !== "idle" && game.status !== "results") {
+      throw new Error("A Type Race is already in progress.");
+    }
+    const actives = activeParticipants(session);
+    if (actives.length < 2) {
+      throw new Error("Type Race needs at least two active players.");
+    }
+    this.clearTypeRaceTimer(sessionId);
+    const prompt = pickTypeRacePrompt(new Set(game.usedPromptIds));
+    game.prompt = prompt;
+    game.usedPromptIds = [...game.usedPromptIds, prompt.id];
+    game.players = Object.fromEntries(actives.map((p) => [p.id, this.typeRaceEmptyPlayer()]));
+    game.standings = null;
+    game.winnerIds = null;
+    game.scoresApplied = false;
+    game.startedAt = null;
+    const countdownEndsAt = Date.now() + TYPE_RACE_COUNTDOWN_MS;
+    game.countdownEndsAt = countdownEndsAt;
+    game.status = "countdown";
+    session.updatedAt = Date.now();
+    await this.persist();
+    this.scheduleTypeRaceTimer(sessionId, countdownEndsAt, () => this.typeRaceTransitionToRacing(sessionId));
+  }
+
+  public async typeRaceFinish(sessionId: string, participantId: string, rawText: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "typeRace" || game.status !== "racing" || !game.prompt || !game.startedAt) {
+      throw new Error("Type Race is not in progress.");
+    }
+    const player = game.players[participantId];
+    if (!player) {
+      throw new Error("You are not in this Type Race.");
+    }
+    if (player.status !== "racing") {
+      throw new Error("You have already finished this race.");
+    }
+    if (typeof rawText !== "string") {
+      throw new Error("Submission text is required.");
+    }
+    if (rawText.length > TYPE_RACE_SUBMISSION_MAX_CHARS) {
+      throw new Error(`Submission must be at most ${TYPE_RACE_SUBMISSION_MAX_CHARS} characters.`);
+    }
+    player.status = "finished";
+    player.finishedAt = Date.now();
+    player.submittedText = rawText;
+    this.typeRaceMaybeFinalizeRound(session, game);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
+  public async typeRaceEndRace(sessionId: string, hostParticipantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    const isHost = session.participants.some((p) => p.id === hostParticipantId && p.isHost);
+    if (!isHost) {
+      throw new Error("Only the host can end a Type Race.");
+    }
+    assertParticipantActiveForGameplay(session, hostParticipantId);
+    const game = session.games[0];
+    if (game?.type !== "typeRace" || game.status !== "racing") {
+      throw new Error("Type Race is not in progress.");
+    }
+    this.typeRaceFinalizeRound(session, game, true);
+    session.updatedAt = Date.now();
+    await this.persist();
+  }
+
   private scheduleMemoryMismatchResolve(sessionId: string): void {
     this.clearMemoryTimer(sessionId);
     const timer = setTimeout(() => {
@@ -9522,6 +9838,80 @@ export class SessionService {
         activeGame: "wordle",
         gameState: {
           type: "wordle",
+          state: { status: "idle" as const, ...shared }
+        }
+      };
+    }
+
+    if (game.type === "typeRace") {
+      const g = game as TypeRaceGameInternal;
+      const players = this.typeRacePublicPlayers(g);
+      const shared = {
+        players,
+        usedPromptIds: [...g.usedPromptIds]
+      };
+      if (g.status === "idle") {
+        return {
+          ...base,
+          activeGame: "typeRace",
+          gameState: {
+            type: "typeRace",
+            state: { status: "idle" as const, ...shared }
+          }
+        };
+      }
+      if (g.status === "countdown" && g.countdownEndsAt !== null && g.prompt) {
+        return {
+          ...base,
+          activeGame: "typeRace",
+          gameState: {
+            type: "typeRace",
+            state: {
+              status: "countdown" as const,
+              prompt: { ...g.prompt },
+              countdownEndsAt: g.countdownEndsAt,
+              ...shared
+            }
+          }
+        };
+      }
+      if (g.status === "racing" && g.startedAt !== null && g.prompt) {
+        return {
+          ...base,
+          activeGame: "typeRace",
+          gameState: {
+            type: "typeRace",
+            state: {
+              status: "racing" as const,
+              prompt: { ...g.prompt },
+              startedAt: g.startedAt,
+              ...shared
+            }
+          }
+        };
+      }
+      if (g.status === "results" && g.startedAt !== null && g.prompt && g.standings && g.winnerIds) {
+        return {
+          ...base,
+          activeGame: "typeRace",
+          gameState: {
+            type: "typeRace",
+            state: {
+              status: "results" as const,
+              prompt: { ...g.prompt },
+              startedAt: g.startedAt,
+              standings: g.standings.map((row) => ({ ...row })),
+              winnerIds: [...g.winnerIds],
+              ...shared
+            }
+          }
+        };
+      }
+      return {
+        ...base,
+        activeGame: "typeRace",
+        gameState: {
+          type: "typeRace",
           state: { status: "idle" as const, ...shared }
         }
       };

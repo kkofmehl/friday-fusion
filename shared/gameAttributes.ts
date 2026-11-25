@@ -77,7 +77,8 @@ export const GAME_ATTRIBUTES_BY_TYPE: Record<GameType, readonly GameAttribute[]>
   friendlyFeud: ["scorable", "game", "team", "long"],
   badAdvice: ["scorable", "game", "long"],
   wheelOfFortune: ["scorable", "game", "long"],
-  trivialPursuit: ["scorable", "game", "long"]
+  trivialPursuit: ["scorable", "game", "long"],
+  typeRace: ["scorable", "game", "short"]
 };
 
 export function getGameAttributes(game: GameType): readonly GameAttribute[] {

@@ -348,7 +348,8 @@ describe("LobbyScreen", () => {
       ["Scattergories", "/game_icons/scattegories.png"],
       ["Story Builder", "/game_icons/story_builder.png"],
       ["Memory", "/game_icons/memory.png"],
-      ["Wordle Race", "/game_icons/wordle.png"]
+      ["Wordle Race", "/game_icons/wordle.png"],
+      ["Type Race", "/game_icons/type_race.png"]
     ];
 
     for (const [gameName, iconPath] of expectedIcons) {

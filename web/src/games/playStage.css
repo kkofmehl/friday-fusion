@@ -288,6 +288,42 @@
   letter-spacing: 0.06em;
 }
 
+.play-stage .type-race-countdown {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.play-stage .type-race-prompt {
+  border-left-color: var(--accent);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.play-stage .type-race-input {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.play-stage .type-race-input:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.play-stage .type-race-standing-row {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.play-stage .type-race-standing-row.is-winner {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface-raised));
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .play-stage .wordle-key:not(.is-correct):not(.is-present):not(.is-absent) {
   color: var(--text);
   background: var(--surface-raised);

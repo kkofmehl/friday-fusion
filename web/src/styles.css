@@ -2550,9 +2550,9 @@ label {
 }
 
 .game-filter-chip.is-active.game-attribute-short {
-  border-color: var(--line-strong);
-  background: var(--slate-200);
-  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
 }
 
 .game-filter-chip.is-active.game-attribute-long {
@@ -2701,9 +2701,9 @@ label {
 }
 
 .game-attribute-short {
-  border-color: var(--line);
-  background: var(--slate-200);
-  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
 }
 
 .game-attribute-long {
@@ -8443,4 +8443,216 @@ button.md-mini-chip-btn {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text);
+}
+
+/* —— Type Race —— */
+.type-race-game {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.type-race-sub {
+  color: var(--slate-600);
+  margin: 0;
+}
+
+.type-race-countdown {
+  font-size: clamp(4rem, 18vw, 7rem);
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  color: var(--indigo-700, #4338ca);
+  margin: 1rem 0 0.5rem;
+}
+
+.type-race-prompt {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border-left: 4px solid var(--accent, #2563eb);
+  background: var(--surface-raised, #f8fafc);
+  color: var(--text, #0f172a);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.type-race-prompt--results {
+  opacity: 0.92;
+}
+
+.type-race-input-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.type-race-input {
+  width: 100%;
+  min-height: 10rem;
+  resize: vertical;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--line, #cbd5e1);
+  background: var(--surface, #fff);
+  color: var(--text, #0f172a);
+}
+
+.type-race-input:focus {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 1px;
+}
+
+.type-race-finish {
+  align-self: flex-start;
+}
+
+.type-race-done-banner {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--indigo-50, #eef2ff);
+  color: var(--indigo-800, #3730a3);
+  font-weight: 600;
+}
+
+.type-race-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.type-race-roster-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-raised, #f8fafc);
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.type-race-roster-status {
+  color: var(--slate-600, #475569);
+  font-size: 0.92rem;
+}
+
+.type-race-roster-item.is-finished .type-race-roster-status {
+  color: var(--emerald-700, #047857);
+  font-weight: 600;
+}
+
+.type-race-winner {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.type-race-summary h3 {
+  margin: 0 0 0.5rem;
+}
+
+.type-race-standings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.type-race-standing-row {
+  display: grid;
+  grid-template-columns: 2rem minmax(6rem, 1.4fr) repeat(7, minmax(3.5rem, auto)) auto;
+  gap: 0.4rem 0.65rem;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-raised, #f8fafc);
+  border: 1px solid var(--line, #e2e8f0);
+  font-variant-numeric: tabular-nums;
+}
+
+.type-race-standing-row.is-winner {
+  border-color: var(--accent, #2563eb);
+  background: color-mix(in srgb, var(--accent, #2563eb) 22%, var(--surface-raised, #f8fafc));
+  color: var(--text, #0f172a);
+}
+
+.type-race-standing-row.is-winner .type-race-standing-pts,
+.type-race-standing-row.is-winner .type-race-standing-status,
+.type-race-standing-row.is-winner .type-race-standing-time,
+.type-race-standing-row.is-winner .type-race-standing-errors,
+.type-race-standing-row.is-winner .type-race-standing-penalty,
+.type-race-standing-row.is-winner .type-race-standing-adjusted,
+.type-race-standing-row.is-winner .type-race-standing-accuracy,
+.type-race-standing-row.is-winner .type-race-standing-wpm {
+  color: inherit;
+}
+
+.type-race-standing-place {
+  font-weight: 700;
+}
+
+.type-race-standing-pts {
+  font-weight: 600;
+  justify-self: end;
+}
+
+@media (max-width: 860px) {
+  .type-race-standing-row {
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    grid-template-areas:
+      "place name pts"
+      "place status time"
+      "place errors penalty"
+      "place adjusted accuracy"
+      "place wpm wpm";
+  }
+
+  .type-race-standing-place {
+    grid-area: place;
+  }
+
+  .type-race-standing-name {
+    grid-area: name;
+  }
+
+  .type-race-standing-pts {
+    grid-area: pts;
+  }
+
+  .type-race-standing-status {
+    grid-area: status;
+  }
+
+  .type-race-standing-time {
+    grid-area: time;
+  }
+
+  .type-race-standing-errors {
+    grid-area: errors;
+  }
+
+  .type-race-standing-penalty {
+    grid-area: penalty;
+  }
+
+  .type-race-standing-adjusted {
+    grid-area: adjusted;
+  }
+
+  .type-race-standing-accuracy {
+    grid-area: accuracy;
+  }
+
+  .type-race-standing-wpm {
+    grid-area: wpm;
+  }
 }
