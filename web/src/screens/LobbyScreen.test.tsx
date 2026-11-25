@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../../../shared/contracts";
+import { ACCENT_STORAGE_KEY } from "../theme/accentTheme";
 import { LobbyScreen } from "./LobbyScreen";
 
 const buildSession = (overrides: Partial<SessionState> = {}): SessionState => ({
@@ -18,6 +19,21 @@ const buildSession = (overrides: Partial<SessionState> = {}): SessionState => ({
 });
 
 describe("LobbyScreen", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(ACCENT_STORAGE_KEY);
+    delete document.documentElement.dataset.accent;
+  });
+
+  it("lets the user change the local accent from lobby swatches", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cyan" }));
+
+    expect(document.documentElement.dataset.accent).toBe("cyan");
+    expect(window.localStorage.getItem(ACCENT_STORAGE_KEY)).toBe("cyan");
+    expect(screen.getByRole("button", { name: "Cyan" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("sends selected creator and mode when starting hangman", () => {
     const send = vi.fn();
     render(

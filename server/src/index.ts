@@ -1704,6 +1704,8 @@ export const buildApp = async (options: BuildAppOptions = {}): Promise<{
           await sessionService.catchPhraseStartRound(context.sessionId, context.participantId);
         } else if (event.type === "catchPhrase:guessed") {
           await sessionService.catchPhraseGuessed(context.sessionId, context.participantId);
+        } else if (event.type === "catchPhrase:skipClue") {
+          await sessionService.catchPhraseSkipClue(context.sessionId, context.participantId);
         } else if (event.type === "yahtzee:toggleHold") {
           await sessionService.yahtzeeToggleHold(
             context.sessionId,

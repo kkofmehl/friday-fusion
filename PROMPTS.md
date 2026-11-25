@@ -206,3 +206,107 @@ Return: files changed, brief summary of behavior, test commands run and results,
 ---
 
 **2026-11-12:** Just to be clear, if a player is in the center space and gets the question wrong, their turn is over. Other players get their turn. When it comes back to that player that is in the middle, then they get a new question (category selected by the opponent that will be reading the question).
+
+---
+
+**2026-11-24:** I'd like to explore a whole new look and feel for the app. I want it to be more tech feeling. Sharp, sleek, modern. Default the primary color to a rich orange. Once in the lobby, allow users to change the color scheme from a few options (blue, green, purple, red, yellow, cyan).
+
+---
+
+**2026-11-24:** Feedback: UI Visibility Issues: Alot of the apps are having text visibility issues after the change. Text inputs are turning black on focus, thus making text not visible while typing it in.
+
+---
+
+**2026-11-25:** I don't think I like the fact that the site template is dark, but the games are keeping their lighter look. Let's go game by game and re-style each game to fit the new template. I know some games might be okay as they are, but many of them can be changed to better fit with the site refactor.
+
+---
+
+**2026-11-25:** I think converting shared play-stage makes sense. Let's go with a full dark tech look for everything. I want everything looking uniform, clean, and fresh.
+
+---
+
+**2026-11-25:** Started spot checking. Got to "Guess the image" and the text boxes are incongruent and the text is hard to read. Not sure if this issue will be in other games, but this one needs adjusted for sure.
+
+---
+
+**2026-11-25:** Minor adjustment needs made to the hangman segments. They are too dark against the background. Lighten those up to a soft white so they stand out.
+
+---
+
+**2026-11-25:** sorry, I was talking about the actual hangman pieces, the body, arms, legs, etc.
+
+---
+
+**2026-11-25:** um, the head turned white, but the body parts are still dark
+
+---
+
+**2026-11-25:** Let's redo the memory cards in Memory game. They are white and stand out against the black in a strong way
+
+---
+
+**2026-11-25:** that's too far. They are too dark now. Maybe we go with a contrasting gray that stands out but not too much
+
+---
+
+**2026-11-25:** checked in on Monopoly deal. Some of the text is washed out in the cards. Most noticiably the dollar value of cards. I think the contrast of the cards is okay. Let's try muting the white a little by making them more of a light gray
+
+---
+
+**2026-11-25:** that's good. The "Choose target" text is washed out a bit here.
+
+---
+
+**2026-11-25:** the text in the event boxes is washed out and needs adjusted
+
+---
+
+**2026-11-25:** The end-game screen for monopoly deal is washed out as well. Let's clean that up too
+
+---
+
+**2026-11-25:** moving on to pictionary. Some of the text is hard to see. i.e. who's on which team in the Scores area and the "Alex is drawing" status above the canvas
+
+---
+
+**2026-11-25:** okay, moving on to Scattergories. Text at the top needs addressed. It's washed out. In the attached image, "Party Time" is not visible
+
+---
+
+**2026-11-25:** At the end of the round, the names are not visible here:
+
+---
+
+**2026-11-25:** checking trivial pursuit, this button text is not visible
+
+---
+
+**2026-11-25:** okay, uno looks generally okay. I noticed the instructions text is washed out when selecting a wild color
+
+---
+
+**2026-11-25:** looking at wheel of fortune. Some text is washed out. See screen shot
+
+---
+
+**2026-11-25:** Looking at Wordle, the text when typing out letters is too light
+
+---
+
+**2026-11-25:** Yahtzee needs some attention. The light blue background needs changed to match the template. Make sure text is contrasted appropriately as well
+
+---
+
+**2026-11-25:** The text that shows up in the lobby when players are saying what they want to play could be lighter. Kinda hard to read. Also, while you are at it, can you add an "Are you sure" modal for when the host clicks "End Game"
+
+---
+
+**2026-11-25:** looked at Catch Phrase. Some of the text at the top is hard to read and needs adjusted
+
+---
+
+**2026-11-25:** Also, I need to add an additional feature to Catch Phrase. If a clue is too hard, the person can press the button for a new clue and it stays their turn. However, each person is only allowed 1 skip on that turn. But when it comes back to them, they get that 1 skip again.
+
+---
+
+**2026-11-25:** okay, last one I think is friendly fued. The text on the answer panels is washed out.

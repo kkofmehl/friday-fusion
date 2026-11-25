@@ -13,19 +13,19 @@ const ratio = (value: number, total: number): number => {
 };
 
 const OPTION_COLORS = [
-  "#fef3c7",
-  "#fee2e2",
-  "#dbeafe",
-  "#dcfce7",
-  "#ede9fe",
-  "#fce7f3",
-  "#cffafe",
-  "#fef9c3"
+  "#3a2410",
+  "#3a1518",
+  "#13233a",
+  "#12301f",
+  "#26153a",
+  "#3a1530",
+  "#0f2f36",
+  "#33280f"
 ];
 
 const pickDistinctOptionColors = (): { optionA: string; optionB: string } => {
   if (OPTION_COLORS.length < 2) {
-    return { optionA: "#f1f5f9", optionB: "#e2e8f0" };
+    return { optionA: "#151b26", optionB: "#1e2636" };
   }
   const firstIndex = Math.floor(Math.random() * OPTION_COLORS.length);
   let secondIndex = Math.floor(Math.random() * OPTION_COLORS.length);

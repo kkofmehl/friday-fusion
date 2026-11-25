@@ -7,6 +7,7 @@
 
 .tp-root--finished {
   background: linear-gradient(180deg, #f8fafc 0%, #fff 42%);
+  color: #0f172a;
 }
 
 .tp-finished-head {
@@ -20,6 +21,7 @@
   gap: 0.55rem;
   margin-bottom: 1.1rem;
   text-align: center;
+  color: #0f172a;
 }
 
 .tp-finished-hero .tp-token-preview-art {
@@ -31,7 +33,7 @@
   margin: 0;
   font-size: 1.15rem;
   font-weight: 650;
-  color: var(--slate-800, #1e293b);
+  color: #0f172a;
 }
 
 .tp-finished-standings-wrap {
@@ -150,10 +152,16 @@
 
 .tp-host-rule button {
   border-radius: 999px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid #8c6a32;
   padding: 0.4rem 0.8rem;
-  background: #fff;
+  background: #f3ebe0;
+  color: #241e18;
+  font-weight: 650;
   cursor: pointer;
+}
+
+.tp-host-rule button:hover {
+  background: #ebe0d0;
 }
 
 .tp-layout {
@@ -467,8 +475,9 @@
   width: 2.4rem;
   height: 2.4rem;
   border-radius: 8px;
-  background: #fff;
-  border: 2px solid var(--line-strong);
+  background: #f3ebe0;
+  color: #241e18;
+  border: 2px solid rgba(140, 106, 50, 0.55);
   font-size: 1.25rem;
   font-weight: 700;
   box-shadow: var(--shadow-soft);
@@ -477,7 +486,8 @@
 .tp-card {
   border-radius: 14px;
   border: 1px solid var(--line-strong);
-  background: #fff;
+  background: #f3ebe0;
+  color: #241e18;
   padding: 0.9rem 1rem;
   box-shadow: var(--shadow-soft);
   display: flex;
@@ -505,6 +515,7 @@
   font-size: 1.05rem;
   line-height: 1.35;
   font-family: var(--font-display);
+  color: #241e18;
 }
 
 .tp-answer {
@@ -541,8 +552,9 @@
   margin: 0;
   padding: 0.45rem 0.65rem;
   border-radius: 8px;
-  border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(140, 106, 50, 0.35);
+  background: rgba(255, 255, 255, 0.55);
+  color: #241e18;
   font-size: 0.95rem;
 }
 
@@ -570,8 +582,9 @@
 
 .tp-actions button {
   border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(180deg, #fff, #f3ebe0);
+  border: 1px solid rgba(140, 106, 50, 0.45);
+  background: linear-gradient(180deg, #fff8ee, #f3ebe0);
+  color: #241e18;
   padding: 0.45rem 0.9rem;
   font-weight: 600;
   cursor: pointer;

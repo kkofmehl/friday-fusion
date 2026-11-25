@@ -323,7 +323,7 @@ export function GuessTheImageGame({
     const canPreparerStartSingle =
       !everyoneMode && currentParticipantId === state.setupParticipantId && state.configured;
     return (
-      <div className="guess-image card">
+      <div className="guess-image card play-stage">
         <header className="card-head">
           <h2>Guess the image</h2>
           {everyoneMode ? (
@@ -501,7 +501,7 @@ export function GuessTheImageGame({
 
   if (state.status === "playing") {
     return (
-      <div className="guess-image card">
+      <div className="guess-image card play-stage">
         <header className="card-head">
           <h2>Guess the image</h2>
           <span className="pill pill-muted">Round live</span>
@@ -555,7 +555,7 @@ export function GuessTheImageGame({
   }
 
   return (
-    <div className="guess-image card">
+    <div className="guess-image card play-stage">
       <header className="card-head">
         <h2>Guess the image</h2>
         <span className="pill pill-muted">Round over</span>

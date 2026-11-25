@@ -61,6 +61,19 @@ describe("GuessTheImageGame", () => {
     vi.restoreAllMocks();
   });
 
+  it("uses the shared dark play-stage chrome on setup", () => {
+    render(
+      <GuessTheImageGame
+        session={baseSession()}
+        currentParticipantId="p1"
+        isHost
+        send={vi.fn()}
+        apiBase="http://localhost:3000"
+      />
+    );
+    expect(document.querySelector(".guess-image.play-stage")).toBeTruthy();
+  });
+
   it("sends configure after upload when host saves setup", async () => {
     const send = vi.fn();
     render(

@@ -193,6 +193,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-size: 0.82rem;
+  color: var(--text);
 }
 
 .wof-vowel-panel {
@@ -215,7 +216,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #102a43;
+  color: #f0d7a2;
 }
 
 .wof-money-strip {
@@ -235,6 +236,7 @@
   background: #fff8e1;
   border: 2px solid transparent;
   font-size: 0.85rem;
+  color: #241e18;
 }
 
 .wof-player-chip.is-turn {
@@ -244,6 +246,12 @@
 
 .wof-player-chip strong {
   font-size: 0.95rem;
+  color: #241e18;
+}
+
+.wof-player-chip .player-name-row,
+.wof-player-chip .player-name-text {
+  color: #241e18;
 }
 
 .wof-actions {
@@ -268,6 +276,7 @@
   text-align: center;
   font-weight: 600;
   min-height: 1.4em;
+  color: var(--text);
 }
 
 .wof-setup-grid {

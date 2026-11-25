@@ -111,6 +111,48 @@ describe("GameScreen", () => {
     expect(screen.getByRole("heading", { name: "My Profile" })).toBeDefined();
   });
 
+  it("asks for confirmation before ending the game and cancels without sending", () => {
+    const send = vi.fn();
+    render(
+      <GameScreen
+        session={buildSession()}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /end game/i })).toBeTruthy();
+    expect(screen.getByText(/returns everyone to the lobby/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: /end game/i })).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("sends game:end only after confirming End game", () => {
+    const send = vi.fn();
+    render(
+      <GameScreen
+        session={buildSession()}
+        currentParticipantId="p1"
+        isHost
+        canPlay
+        send={send}
+        apiBase="http://localhost:3000"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    const dialog = screen.getByRole("dialog", { name: /end game/i });
+    fireEvent.click(dialog.querySelector(".btn-primary") as HTMLButtonElement);
+    expect(send).toHaveBeenCalledWith({ type: "game:end", payload: {} });
+  });
+
   it("shows Next in queue for the host when the session queue is non-empty", () => {
     const send = vi.fn();
     render(
