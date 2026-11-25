@@ -2,6 +2,7 @@ import { useCallback, useState, type FocusEvent, type JSX, type MouseEvent } fro
 import { createPortal } from "react-dom";
 import { GameAttributeBadge } from "./GameAttributeBadge";
 import type { GameAttribute } from "../../../shared/gameAttributes";
+import { clampLobbyGameInfoTooltipLeft } from "./lobbyGameInfoTooltipPosition";
 
 export function GameBetaBadge(): JSX.Element {
   return (
@@ -22,17 +23,29 @@ export function LobbyGameInfoTooltip({
   attributes: readonly GameAttribute[];
   beta?: boolean;
 }): JSX.Element {
-  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+  const [tip, setTip] = useState<{ left: number; top: number; width: number } | null>(null);
 
-  const showFromMouse = useCallback((event: MouseEvent<HTMLButtonElement>): void => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setTip({ x: rect.left + rect.width / 2, y: rect.bottom });
+  const showFromRect = useCallback((rect: DOMRect): void => {
+    const { left, width } = clampLobbyGameInfoTooltipLeft(
+      rect.left + rect.width / 2,
+      window.innerWidth
+    );
+    setTip({ left, top: rect.bottom, width });
   }, []);
 
-  const showFromFocus = useCallback((event: FocusEvent<HTMLButtonElement>): void => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setTip({ x: rect.left + rect.width / 2, y: rect.bottom });
-  }, []);
+  const showFromMouse = useCallback(
+    (event: MouseEvent<HTMLButtonElement>): void => {
+      showFromRect(event.currentTarget.getBoundingClientRect());
+    },
+    [showFromRect]
+  );
+
+  const showFromFocus = useCallback(
+    (event: FocusEvent<HTMLButtonElement>): void => {
+      showFromRect(event.currentTarget.getBoundingClientRect());
+    },
+    [showFromRect]
+  );
 
   const hide = useCallback((): void => {
     setTip(null);
@@ -58,7 +71,7 @@ export function LobbyGameInfoTooltip({
             <div
               className="lobby-game-info-tooltip"
               role="tooltip"
-              style={{ left: tip.x, top: tip.y }}
+              style={{ left: tip.left, top: tip.top, width: tip.width }}
             >
               <p className="lobby-game-info-tooltip-desc">{description}</p>
               <ul className="lobby-game-info-tooltip-tags" aria-label={`${gameTitle} attributes`}>

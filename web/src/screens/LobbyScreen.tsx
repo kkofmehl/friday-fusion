@@ -124,8 +124,7 @@ const GAMES: GameOption[] = [
     title: "Monopoly Deal",
     description:
       "Collect three property sets—bank money, charge rent, steal deals, and wager Friday Fusion points for the pot.",
-    iconSrc: "/game_icons/monopoly_deal.png",
-    beta: true
+    iconSrc: "/game_icons/monopoly_deal.png"
   },
   {
     id: "splendor",
@@ -148,8 +147,7 @@ const GAMES: GameOption[] = [
     title: "Wheel of Fortune",
     description:
       "Spin the wheel, buy vowels, and solve four puzzles—then the money leader plays a bonus round. 2+ players.",
-    iconSrc: "/game_icons/wheel_of_fortune.png",
-    beta: true
+    iconSrc: "/game_icons/wheel_of_fortune.png"
   },
   {
     id: "trivialPursuit",

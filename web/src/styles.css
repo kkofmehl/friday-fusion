@@ -2944,8 +2944,9 @@ label {
 .lobby-game-info-tooltip {
   position: fixed;
   z-index: 1200;
-  transform: translate(-50%, 0.45rem);
-  width: min(18rem, calc(100vw - 1.5rem));
+  transform: translateY(0.45rem);
+  box-sizing: border-box;
+  max-width: calc(100vw - 1.5rem);
   padding: 0.7rem 0.8rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--line-strong);
@@ -2959,7 +2960,7 @@ label {
   margin: 0 0 0.55rem;
   font-size: 0.82rem;
   line-height: 1.4;
-  color: var(--slate-700);
+  color: var(--text);
 }
 
 .lobby-game-info-tooltip-tags {

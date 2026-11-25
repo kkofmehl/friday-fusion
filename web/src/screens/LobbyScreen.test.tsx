@@ -192,22 +192,18 @@ describe("LobbyScreen", () => {
     expect(screen.getByRole("button", { name: "About Hangman" })).toBeDefined();
   });
 
-  it("shows Beta tag on Monopoly Deal for host and guest", () => {
-    const { rerender } = render(
-      <LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />
-    );
+  it("does not show Beta on Monopoly Deal or Wheel of Fortune", () => {
+    render(<LobbyScreen session={buildSession()} currentParticipantId="p1" isHost send={vi.fn()} />);
 
-    const hostCard = screen.getByRole("heading", { name: /Monopoly Deal/ }).closest("article");
-    if (!hostCard) throw new Error("expected Monopoly Deal host card");
-    expect(within(hostCard).getByLabelText("Beta release")).toBeDefined();
+    for (const title of ["Monopoly Deal", "Wheel of Fortune"]) {
+      const card = screen.getByRole("heading", { name: new RegExp(title) }).closest("article");
+      if (!card) throw new Error(`expected ${title} host card`);
+      expect(within(card).queryByLabelText("Beta release")).toBeNull();
+    }
 
-    rerender(
-      <LobbyScreen session={buildSession()} currentParticipantId="p2" isHost={false} send={vi.fn()} />
-    );
-
-    const guestTile = screen.getByRole("heading", { name: /Monopoly Deal/ }).closest("article");
-    if (!guestTile) throw new Error("expected Monopoly Deal guest tile");
-    expect(within(guestTile).getByLabelText("Beta release")).toBeDefined();
+    const stillBeta = screen.getByRole("heading", { name: /Splendor/ }).closest("article");
+    if (!stillBeta) throw new Error("expected Splendor host card");
+    expect(within(stillBeta).getByLabelText("Beta release")).toBeDefined();
   });
 
   it("shows game description and tags in guest info tooltip on focus", () => {
@@ -217,7 +213,7 @@ describe("LobbyScreen", () => {
 
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip.textContent).toContain("Collect three property sets");
-    expect(within(tooltip).getByLabelText("Beta release")).toBeDefined();
+    expect(within(tooltip).queryByLabelText("Beta release")).toBeNull();
     expect(within(tooltip).getByLabelText(/Scorable points\. Session scoreboard tracks points/i)).toBeDefined();
     expect(within(tooltip).getByLabelText(/^Game\. Structured rounds/i)).toBeDefined();
   });
