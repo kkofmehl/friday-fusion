@@ -2392,6 +2392,85 @@ describe("SessionService", () => {
     expect(afterPass.gameState.state.mediumPhaseEndsAt).toBe(firstMediumEndsAt);
   });
 
+  it("Catch Phrase: holder can skip one clue per hold without passing", async () => {
+    const setup = await createService();
+    tempDir = setup.tempDir;
+    const host = await setup.service.createSession("Host");
+    const g1 = await setup.service.joinSession(host.joinCode, "Guest 1");
+    const g2 = await setup.service.joinSession(host.joinCode, "Guest 2");
+    const g3 = await setup.service.joinSession(host.joinCode, "Guest 3");
+
+    await setup.service.startGame(host.sessionId, "catchPhrase");
+    await setup.service.catchPhraseSetTeams(
+      host.sessionId,
+      host.participantId,
+      [host.participantId, g2.participantId],
+      [g1.participantId, g3.participantId]
+    );
+    await setup.service.catchPhraseBeginPlay(host.sessionId, host.participantId);
+    const waiting = setup.service.getState(host.sessionId);
+    if (waiting.gameState?.type !== "catchPhrase" || waiting.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase playing");
+    }
+    if (waiting.gameState.state.roundPhase !== "awaitingRoundStart") {
+      throw new Error("expected awaiting round start");
+    }
+    const holderId = waiting.gameState.state.holderId;
+    const nonHolderId = [host.participantId, g1.participantId, g2.participantId, g3.participantId].find(
+      (id) => id !== holderId
+    );
+    if (!nonHolderId) {
+      throw new Error("expected non-holder");
+    }
+
+    await setup.service.catchPhraseStartRound(host.sessionId, holderId);
+    const live = setup.service.getState(host.sessionId, holderId);
+    if (live.gameState?.type !== "catchPhrase" || live.gameState.state.status !== "playing") {
+      throw new Error("expected live catchPhrase");
+    }
+    if (live.gameState.state.roundPhase !== "live") {
+      throw new Error("expected live round");
+    }
+    expect(live.gameState.state.clueSkipsRemaining).toBe(1);
+    const firstPhrase = live.gameState.state.myPhrase;
+    expect(firstPhrase).toBeTruthy();
+    const endsAt = live.gameState.state.roundEndsAt;
+    const holderBefore = live.gameState.state.holderId;
+
+    await expect(setup.service.catchPhraseSkipClue(host.sessionId, nonHolderId)).rejects.toThrow(
+      "Only the current holder can skip a clue."
+    );
+
+    await setup.service.catchPhraseSkipClue(host.sessionId, holderId);
+    const afterSkip = setup.service.getState(host.sessionId, holderId);
+    if (afterSkip.gameState?.type !== "catchPhrase" || afterSkip.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase after skip");
+    }
+    if (afterSkip.gameState.state.roundPhase !== "live") {
+      throw new Error("expected still live after skip");
+    }
+    expect(afterSkip.gameState.state.holderId).toBe(holderBefore);
+    expect(afterSkip.gameState.state.roundEndsAt).toBe(endsAt);
+    expect(afterSkip.gameState.state.clueSkipsRemaining).toBe(0);
+    expect(afterSkip.gameState.state.myPhrase).toBeTruthy();
+    expect(afterSkip.gameState.state.myPhrase).not.toBe(firstPhrase);
+
+    await expect(setup.service.catchPhraseSkipClue(host.sessionId, holderId)).rejects.toThrow(
+      "You already used your clue skip this turn."
+    );
+
+    await setup.service.catchPhraseGuessed(host.sessionId, holderId);
+    const afterPass = setup.service.getState(host.sessionId);
+    if (afterPass.gameState?.type !== "catchPhrase" || afterPass.gameState.state.status !== "playing") {
+      throw new Error("expected catchPhrase after pass");
+    }
+    if (afterPass.gameState.state.roundPhase !== "live") {
+      throw new Error("expected live after pass");
+    }
+    expect(afterPass.gameState.state.holderId).not.toBe(holderId);
+    expect(afterPass.gameState.state.clueSkipsRemaining).toBe(1);
+  });
+
   it("Catch Phrase: buzzer scores non-holding team and waits for next holder tap", async () => {
     vi.useFakeTimers();
     try {

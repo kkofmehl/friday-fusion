@@ -13,6 +13,7 @@ import {
   type YahtzeeMode,
   type SessionState
 } from "../../../shared/contracts";
+import { AccentPicker } from "../components/AccentPicker";
 import { GameAttributeBadge, GameAttributeIcon, GameAttributeLegend } from "../components/GameAttributeBadge";
 import { GameBetaBadge, LobbyGameInfoTooltip } from "../components/LobbyGameInfoTooltip";
 import { PlayerList } from "../components/PlayerList";
@@ -367,6 +368,7 @@ export function LobbyScreen({
   return (
     <div className="lobby-grid">
       <div className="lobby-side-rail">
+        <AccentPicker />
         <section className="card card-players">
           <header className="card-head">
             <h2>Players</h2>

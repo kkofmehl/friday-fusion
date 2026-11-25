@@ -975,7 +975,9 @@ const catchPhrasePlayingSchema = z.discriminatedUnion("roundPhase", [
     /** Buzz when this instant is reached (end of phase 3). */
     roundEndsAt: z.number().int(),
     /** Only visible to the current holder. */
-    myPhrase: z.string().nullable()
+    myPhrase: z.string().nullable(),
+    /** Holder may skip once per hold for a new clue without passing. */
+    clueSkipsRemaining: z.union([z.literal(0), z.literal(1)])
   })
 ]);
 
@@ -2510,6 +2512,7 @@ export const clientEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("catchPhrase:beginPlay"), payload: z.object({}) }),
   z.object({ type: z.literal("catchPhrase:startRound"), payload: z.object({}) }),
   z.object({ type: z.literal("catchPhrase:guessed"), payload: z.object({}) }),
+  z.object({ type: z.literal("catchPhrase:skipClue"), payload: z.object({}) }),
   z.object({
     type: z.literal("yahtzee:toggleHold"),
     payload: z.object({ dieIndex: z.number().int().min(0).max(4) })

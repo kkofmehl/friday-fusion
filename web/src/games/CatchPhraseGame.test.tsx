@@ -83,7 +83,8 @@ describe("CatchPhraseGame", () => {
           slowPhaseEndsAt: t0 + 15_000,
           mediumPhaseEndsAt: t0 + 35_000,
           roundEndsAt: t0 + 60_000,
-          myPhrase: "moon"
+          myPhrase: "moon",
+          clueSkipsRemaining: 1
         }
       }
     });
@@ -91,5 +92,85 @@ describe("CatchPhraseGame", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /beep sound/i }));
     expect(setItem).toHaveBeenCalledWith("fridayFusion.catchPhraseBeepSound", "0");
     vi.restoreAllMocks();
+  });
+
+  it("lets the holder request a new clue when a skip remains", () => {
+    const send = vi.fn();
+    const t0 = Date.now();
+    render(
+      <CatchPhraseGame
+        session={catchPhraseSession({
+          gameState: {
+            type: "catchPhrase",
+            state: {
+              status: "playing",
+              roundPhase: "live",
+              teamAIds: ["a", "b"],
+              teamBIds: ["c", "d"],
+              teamScores: { A: 0, B: 0 },
+              holderId: "a",
+              passOrder: ["a", "b", "c", "d"],
+              roundStartedAt: t0 - 5_000,
+              slowPhaseEndsAt: t0 + 15_000,
+              mediumPhaseEndsAt: t0 + 35_000,
+              roundEndsAt: t0 + 60_000,
+              myPhrase: "moon",
+              clueSkipsRemaining: 1
+            }
+          }
+        })}
+        currentParticipantId="a"
+        isHost
+        send={send}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /new clue/i }));
+    expect(send).toHaveBeenCalledWith({ type: "catchPhrase:skipClue", payload: {} });
+  });
+
+  it("disables new clue after the skip is used and hides it for non-holders", () => {
+    const t0 = Date.now();
+    const liveBase = {
+      status: "playing" as const,
+      roundPhase: "live" as const,
+      teamAIds: ["a", "b"],
+      teamBIds: ["c", "d"],
+      teamScores: { A: 0, B: 0 },
+      holderId: "a",
+      passOrder: ["a", "b", "c", "d"],
+      roundStartedAt: t0 - 5_000,
+      slowPhaseEndsAt: t0 + 15_000,
+      mediumPhaseEndsAt: t0 + 35_000,
+      roundEndsAt: t0 + 60_000,
+      myPhrase: "moon" as string | null,
+      clueSkipsRemaining: 0 as const
+    };
+    const { rerender } = render(
+      <CatchPhraseGame
+        session={catchPhraseSession({
+          gameState: { type: "catchPhrase", state: liveBase }
+        })}
+        currentParticipantId="a"
+        isHost
+        send={vi.fn()}
+      />
+    );
+    expect((screen.getByRole("button", { name: /skip used this turn/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    rerender(
+      <CatchPhraseGame
+        session={catchPhraseSession({
+          gameState: {
+            type: "catchPhrase",
+            state: { ...liveBase, clueSkipsRemaining: 1, myPhrase: null }
+          }
+        })}
+        currentParticipantId="b"
+        isHost={false}
+        send={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /new clue/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /skip used/i })).toBeNull();
   });
 });

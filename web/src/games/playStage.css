@@ -1,25 +1,43 @@
+/* Shared in-game stage — matches dark tech chrome */
 .play-stage {
-  --felt: #1b1815;
-  --felt-raised: #26221d;
-  --surface: #f6f1e7;
-  --ink: #241e18;
-  --muted: #5c5348;
-  --muted-on-felt: #6b6258;
-  --line: rgba(36, 30, 24, 0.14);
-  --line-strong: rgba(36, 30, 24, 0.28);
-  --gold: #c6a15b;
-  --gold-deep: #8c6a32;
-  --shadow: 0 10px 24px rgba(20, 14, 8, 0.22);
-  --shadow-soft: 0 4px 10px rgba(20, 14, 8, 0.16);
+  --felt: var(--bg);
+  --felt-raised: var(--surface-raised);
+  --ink: var(--text);
+  --muted: var(--text-muted);
+  --muted-on-felt: var(--text-muted);
+  --gold: var(--accent);
+  --gold-deep: var(--accent-deep);
+  --shadow: var(--shadow-md);
+  --shadow-soft: var(--shadow-sm);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --font-display: Palatino, "Palatino Linotype", "Iowan Old Style", Georgia, serif;
+  --font-display: var(--font-sans);
 
-  color: var(--ink);
-  background:
-    radial-gradient(90% 70% at 50% 0%, rgba(255, 244, 220, 0.55), transparent 55%),
-    linear-gradient(180deg, #fffaf3, var(--surface));
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow);
+  /* Game CSS still references slate; remap for dark surfaces */
+  --slate-25: var(--bg);
+  --slate-50: var(--surface-raised);
+  --slate-100: #1a2230;
+  --slate-200: #243044;
+  --slate-300: #334155;
+  --slate-400: #64748b;
+  --slate-500: #8b95a8;
+  --slate-600: #a8b2c4;
+  --slate-700: #c5cddb;
+  --slate-800: #dde3ee;
+  --slate-900: #e8edf5;
+  --slate-950: #f5f7fb;
+
+  --emerald-100: rgba(16, 185, 129, 0.18);
+  --emerald-600: #34d399;
+  --rose-100: rgba(244, 63, 94, 0.18);
+  --rose-600: #fb7185;
+  --amber-100: rgba(245, 158, 11, 0.18);
+  --amber-600: #fbbf24;
+
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   backdrop-filter: none;
 }
 
@@ -32,15 +50,15 @@
 .play-stage h2,
 .play-stage h3 {
   margin: 0;
-  color: var(--ink);
+  color: var(--text);
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .play-stage .card-head h2,
 .play-stage h2 {
-  font-size: 1.7rem;
+  font-size: 1.45rem;
 }
 
 .play-stage .mode-option-hint,
@@ -54,7 +72,7 @@
 .play-stage .icebreaker-paste-hint,
 .play-stage .icebreaker-finished-note,
 .play-stage .truths-hint {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .play-stage .card-head h2,
@@ -62,72 +80,97 @@
 .play-stage h2,
 .play-stage h3,
 .play-stage label {
-  color: var(--ink);
+  color: var(--text);
 }
 
 .play-stage .pill,
 .play-stage .pill-status {
-  background: rgba(36, 30, 24, 0.06);
-  color: var(--gold-deep);
-  border: 1px solid rgba(140, 106, 50, 0.45);
+  background: var(--accent-soft);
+  color: var(--indigo-700);
+  border: 1px solid var(--indigo-200);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
 }
 
 .play-stage input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="range"]),
 .play-stage textarea,
 .play-stage select {
   width: 100%;
-  color: var(--ink);
-  background: #fff;
+  color: var(--text);
+  caret-color: var(--text);
+  background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 0.7rem;
-  box-shadow: inset 0 1px 2px rgba(20, 14, 8, 0.08);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 
 .play-stage input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):not([type="range"]):focus,
 .play-stage textarea:focus,
 .play-stage select:focus {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-  border-color: transparent;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  background: var(--surface-raised);
+  color: var(--text);
+  caret-color: var(--text);
+}
+
+.play-stage input:-webkit-autofill,
+.play-stage input:-webkit-autofill:hover,
+.play-stage input:-webkit-autofill:focus,
+.play-stage textarea:-webkit-autofill,
+.play-stage textarea:-webkit-autofill:hover,
+.play-stage textarea:-webkit-autofill:focus,
+.play-stage select:-webkit-autofill,
+.play-stage select:-webkit-autofill:hover,
+.play-stage select:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--surface-raised) inset;
 }
 
 .play-stage .btn {
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   min-height: 2.4rem;
   transition:
-    transform 140ms var(--ease-out),
-    background 150ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out),
     opacity 150ms var(--ease-out);
 }
 
 .play-stage .btn-primary {
-  color: #2a2112;
-  background: linear-gradient(180deg, #f0d7a2, var(--gold));
-  border-color: transparent;
-  box-shadow: var(--shadow-soft);
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 8px 20px -12px var(--accent-glow);
+}
+
+.play-stage .btn-primary:hover:not(:disabled) {
+  background: var(--accent-deep);
 }
 
 .play-stage .btn-ghost,
 .play-stage .btn-secondary {
-  color: var(--ink);
-  background: transparent;
+  color: var(--text);
+  background: var(--surface-raised);
   border-color: var(--line-strong);
   box-shadow: none;
   backdrop-filter: none;
 }
 
-.play-stage .btn-primary:hover:not(:disabled),
 .play-stage .btn-ghost:hover:not(:disabled),
 .play-stage .btn-secondary:hover:not(:disabled) {
-  transform: translateY(-1px);
+  border-color: var(--accent);
 }
 
 .play-stage .btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
+  filter: brightness(0.94);
 }
 
 .play-stage .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
 }
 
 .play-stage .btn:focus-visible,
@@ -135,8 +178,8 @@
 .play-stage .wyr-main-option:focus-visible,
 .play-stage .truths-option:focus-visible,
 .play-stage .wordle-key:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .play-stage .trivia-option,
@@ -145,47 +188,49 @@
 .play-stage .guess-who-slot-card,
 .play-stage .icebreaker-reveal-card,
 .play-stage .guess-who-reveal-card {
-  color: var(--ink);
-  background: linear-gradient(180deg, #fffaf3, var(--surface));
-  border: 1px solid var(--line-strong);
-  border-radius: 0.85rem;
-  box-shadow: var(--shadow-soft);
-  transition: transform 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
 }
 
 .play-stage .trivia-option:hover:not(:disabled),
 .play-stage .wyr-main-option:hover:not(:disabled),
 .play-stage .truths-option:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 22px rgba(12, 8, 4, 0.22);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-glow);
 }
 
 .play-stage .trivia-option:active:not(:disabled),
 .play-stage .wyr-main-option:active:not(:disabled),
 .play-stage .truths-option:active:not(:disabled) {
-  transform: translateY(0) scale(0.99);
+  filter: brightness(0.96);
 }
 
 .play-stage .trivia-option.is-picked,
 .play-stage .wyr-main-option.is-picked,
 .play-stage .truths-option.is-selected {
-  box-shadow: 0 0 0 2px var(--gold), var(--shadow-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft);
+  background: var(--accent-soft);
 }
 
 .play-stage .trivia-option.is-correct,
 .play-stage .guess-who-your-row.is-correct,
 .play-stage .truths-reveal-list li.is-truth {
-  background: #e7f6ee;
-  border-color: #1f7a52;
-  color: var(--ink);
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: var(--text);
 }
 
 .play-stage .trivia-option.is-wrong,
 .play-stage .truths-reveal-list li.is-lie,
 .play-stage .truths-recap li.is-lie {
-  background: #f8e8e4;
-  border-color: #a33b3b;
-  color: var(--ink);
+  background: rgba(244, 63, 94, 0.16);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: var(--text);
 }
 
 .play-stage .truths-recap li,
@@ -194,11 +239,11 @@
 .play-stage .story-builder-byline li,
 .play-stage .guess-who-your-row,
 .play-stage .twenty-questions-log-list li {
-  color: var(--ink);
-  background: #fff;
+  color: var(--text);
+  background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 0.85rem;
-  box-shadow: var(--shadow-soft);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
 .play-stage .story-builder-reveal,
@@ -221,7 +266,7 @@
 .play-stage .story-builder-byline li,
 .play-stage .guess-who-your-row,
 .play-stage .twenty-questions-log-list li {
-  color: var(--ink);
+  color: var(--text);
 }
 
 .play-stage .story-builder-reveal,
@@ -230,36 +275,79 @@
 .play-stage .icebreaker-question,
 .play-stage .trivia-prompt,
 .play-stage .guess-who-section-title {
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 0.9rem;
+  border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
 }
 
 .play-stage .wordle-countdown {
-  color: var(--gold-deep);
-  font-family: var(--font-display);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
 }
 
 .play-stage .wordle-key:not(.is-correct):not(.is-present):not(.is-absent) {
-  color: var(--ink);
-  background: #fff;
-  border-color: transparent;
-  box-shadow: var(--shadow-soft);
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  box-shadow: none;
 }
 
 .play-stage .wordle-key:hover:not(:disabled) {
-  transform: translateY(-1px);
+  border-color: var(--accent);
 }
 
 .play-stage .card-footer {
   border-top-color: var(--line);
 }
 
+/* Soften leftover light islands from older game CSS inside the stage */
+.play-stage .scattergories-answer-row,
+.play-stage .scattergories-review-row,
+.play-stage .scattergories-input,
+.play-stage .scattergories-points-input,
+.play-stage .scattergories-verdict-btn,
+.play-stage .guess-image-field input[type="text"],
+.play-stage .guess-image-field input[type="number"],
+.play-stage .trivia-review,
+.play-stage .icebreaker-textarea,
+.play-stage .madlibs-story,
+.play-stage .story-builder-reveal {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.play-stage .scattergories-input,
+.play-stage .scattergories-points-input,
+.play-stage .guess-image-field input[type="text"],
+.play-stage .guess-image-field input[type="number"],
+.play-stage .icebreaker-textarea {
+  caret-color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.play-stage .scattergories-input:focus,
+.play-stage .scattergories-points-input:focus,
+.play-stage .guess-image-field input[type="text"]:focus,
+.play-stage .guess-image-field input[type="number"]:focus {
+  background: var(--surface-raised);
+  color: var(--text);
+  caret-color: var(--text);
+  border-color: var(--accent);
+}
+
 @keyframes play-stage-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -616,6 +616,8 @@ type CatchPhraseGameInternal = {
   usedClueIds: string[];
   currentClueId: string | null;
   currentPhrase: string | null;
+  /** True after the current holder used their one new-clue skip this hold. */
+  clueSkipUsedThisHold: boolean;
   roundStartedAt: number | null;
   slowPhaseEndsAt: number | null;
   mediumPhaseEndsAt: number | null;
@@ -1323,6 +1325,7 @@ const ensureGameShape = (game: GameInternal): GameInternal => {
       usedClueIds: Array.isArray(g.usedClueIds) ? g.usedClueIds : [],
       currentClueId: g.currentClueId ?? null,
       currentPhrase: g.currentPhrase ?? null,
+      clueSkipUsedThisHold: g.clueSkipUsedThisHold === true,
       roundStartedAt,
       slowPhaseEndsAt,
       mediumPhaseEndsAt,
@@ -2922,6 +2925,7 @@ export class SessionService {
         usedClueIds: [],
         currentClueId: null,
         currentPhrase: null,
+        clueSkipUsedThisHold: false,
         roundStartedAt: null,
         slowPhaseEndsAt: null,
         mediumPhaseEndsAt: null,
@@ -6682,6 +6686,7 @@ export class SessionService {
       return;
     }
     game.holderIndex = nextIndex;
+    game.clueSkipUsedThisHold = false;
     game.roundPhase = "awaitingRoundStart";
     session.updatedAt = Date.now();
     await this.persist();
@@ -6733,6 +6738,7 @@ export class SessionService {
     game.holderIndex = 0;
     game.currentClueId = null;
     game.currentPhrase = null;
+    game.clueSkipUsedThisHold = false;
     game.roundStartedAt = null;
     game.slowPhaseEndsAt = null;
     game.mediumPhaseEndsAt = null;
@@ -6755,6 +6761,7 @@ export class SessionService {
       throw new Error("Only the current holder can start this round.");
     }
 
+    game.clueSkipUsedThisHold = false;
     this.catchPhraseStartLiveRound(game);
     session.updatedAt = Date.now();
     await this.persist();
@@ -6778,10 +6785,36 @@ export class SessionService {
 
     this.clearCatchPhraseTimer(sessionId);
     game.holderIndex = (game.holderIndex + 1) % game.passOrder.length;
+    game.clueSkipUsedThisHold = false;
     this.catchPhraseAssignNewClue(game);
     session.updatedAt = Date.now();
     await this.persist();
     this.scheduleCatchPhraseDeadline(sessionId);
+  }
+
+  public async catchPhraseSkipClue(sessionId: string, participantId: string): Promise<void> {
+    const session = this.getSessionOrThrow(sessionId);
+    assertParticipantActiveForGameplay(session, participantId);
+    const game = session.games[0];
+    if (game?.type !== "catchPhrase" || game.status !== "playing" || game.roundPhase !== "live") {
+      throw new Error("Catch Phrase is not in an active round.");
+    }
+    const holderId = this.catchPhraseCurrentHolderId(game);
+    if (!holderId || holderId !== participantId) {
+      throw new Error("Only the current holder can skip a clue.");
+    }
+    if (game.clueSkipUsedThisHold) {
+      throw new Error("You already used your clue skip this turn.");
+    }
+
+    const previousPhrase = game.currentPhrase;
+    this.catchPhraseAssignNewClue(game);
+    if (game.currentPhrase === previousPhrase) {
+      this.catchPhraseAssignNewClue(game);
+    }
+    game.clueSkipUsedThisHold = true;
+    session.updatedAt = Date.now();
+    await this.persist();
   }
 
   public async yahtzeeToggleHold(sessionId: string, participantId: string, dieIndex: number): Promise<void> {
@@ -8842,7 +8875,8 @@ export class SessionService {
               slowPhaseEndsAt,
               mediumPhaseEndsAt,
               roundEndsAt,
-              myPhrase: showPhrase ? game.currentPhrase : null
+              myPhrase: showPhrase ? game.currentPhrase : null,
+              clueSkipsRemaining: game.clueSkipUsedThisHold ? 0 : 1
             }
           }
         };

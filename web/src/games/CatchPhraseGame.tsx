@@ -311,6 +311,12 @@ export function CatchPhraseGame({
     unlockAudio();
     send({ type: "catchPhrase:guessed", payload: {} });
   };
+  const handleSkipClue = (): void => {
+    unlockAudio();
+    send({ type: "catchPhrase:skipClue", payload: {} });
+  };
+  const clueSkipsRemaining = state.roundPhase === "live" ? state.clueSkipsRemaining : 0;
+  const canSkipClue = isHolder && state.roundPhase === "live" && clueSkipsRemaining > 0;
 
   return (
     <section className="card catchphrase-card catchphrase-card--playing">
@@ -371,7 +377,7 @@ export function CatchPhraseGame({
           <div className="catchphrase-phrase-wrap">
             <p className="catchphrase-help">
               {isHolder
-                ? "Give clues to your team. When they get it, pass immediately."
+                ? "Give clues to your team. When they get it, pass immediately. Too hard? Use your one new-clue skip."
                 : "Listen for clues. Another player is currently holding the device."}
             </p>
             <p className={`catchphrase-phrase${phrase ? "" : " is-hidden"}`}>
@@ -387,16 +393,31 @@ export function CatchPhraseGame({
             </button>
           ) : (
             isHolder && (
-              <button type="button" className="btn btn-primary catchphrase-pass-wide" onClick={handlePass}>
-                Got it — pass
-              </button>
+              <>
+                <button type="button" className="btn btn-primary catchphrase-pass-wide" onClick={handlePass}>
+                  Got it — pass
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={!canSkipClue}
+                  onClick={handleSkipClue}
+                  title={
+                    canSkipClue
+                      ? "Replace this clue once this turn without passing"
+                      : "You already used your clue skip this turn"
+                  }
+                >
+                  {canSkipClue ? "New clue (1 skip left)" : "Skip used this turn"}
+                </button>
+              </>
             )
           )}
         </div>
         <p className="mode-option-hint">
           Each buzz is three random-length phases (slow, then medium, then fast beeps). Passing keeps the same phase
-          clock; only a buzz starts a new three-phase timer. On buzz, each player on the non-holding team gets +1 point
-          and that team gets +1 team score.
+          clock; only a buzz starts a new three-phase timer. You get one new-clue skip per hold (turn stays yours). On
+          buzz, each player on the non-holding team gets +1 point and that team gets +1 team score.
         </p>
       </div>
     </section>

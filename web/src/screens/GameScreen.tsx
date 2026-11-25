@@ -114,6 +114,7 @@ export function GameScreen({
 }): JSX.Element {
   const [profileModalParticipantId, setProfileModalParticipantId] = useState<string | null>(null);
   const [showMyProfile, setShowMyProfile] = useState(false);
+  const [showEndGameConfirm, setShowEndGameConfirm] = useState(false);
   const queueLength = session.sessionGameQueue?.length ?? 0;
   const hangmanState = session.gameState?.type === "hangman" ? session.gameState.state : null;
   const hangmanRoster = hangmanState ? activeParticipants(session.participants) : [];
@@ -566,7 +567,7 @@ export function GameScreen({
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => send({ type: "game:end", payload: {} })}
+                onClick={() => setShowEndGameConfirm(true)}
                 title="End the current game and return to the lobby"
               >
                 End game
@@ -575,6 +576,43 @@ export function GameScreen({
             )}
           </div>
         </aside>
+        {showEndGameConfirm ? (
+          <div
+            className="confirm-modal-backdrop"
+            role="presentation"
+            onClick={() => setShowEndGameConfirm(false)}
+          >
+            <div
+              className="confirm-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="end-game-confirm-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h3 id="end-game-confirm-title">End game?</h3>
+              <p>This ends the current game and returns everyone to the lobby.</p>
+              <div className="confirm-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowEndGameConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setShowEndGameConfirm(false);
+                    send({ type: "game:end", payload: {} });
+                  }}
+                >
+                  End game
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {showMyProfile && (
           <MyProfilePanel
             apiBase={apiBase}
