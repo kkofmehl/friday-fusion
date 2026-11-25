@@ -275,8 +275,9 @@ button {
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--slate-200);
+  background: var(--accent-soft);
   border-color: var(--accent);
+  color: var(--text);
 }
 
 .btn-secondary {
@@ -286,8 +287,9 @@ button {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface-raised);
+  background: var(--accent-soft);
   border-color: var(--accent);
+  color: var(--text);
 }
 
 .btn-secondary.lobby-want-game.is-selected {

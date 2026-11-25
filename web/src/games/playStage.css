@@ -162,7 +162,9 @@
 
 .play-stage .btn-ghost:hover:not(:disabled),
 .play-stage .btn-secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
   border-color: var(--accent);
+  color: var(--text);
 }
 
 .play-stage .btn:active:not(:disabled) {

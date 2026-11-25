@@ -313,6 +313,10 @@ Return: files changed, brief summary of behavior, test commands run and results,
 
 ---
 
+**2026-11-25:** The button hover on main buttons like "Leave Session" or "Close Session" and others like it washes out the text. Let's fix that
+
+---
+
 **2026-11-25:** I would like to attempt to add a type racing game to Friday fusion. The main idea is that all players will be presented a block of text that is about a paragraph in length, a timer counts down, and then each player types out the paragraph. I know some type racing apps will give live feedback about accuracy, I don't want that. The players should just type it out as fast and as accurately as they can. Once they are done they click the "Finished" button and their completion time is captured. Their text is compared against the prompt and their accuracy percentage is calculated (number of correct characters versus incorrect). They are then assesed a 0.5 second penalty for each error. The player that completed it the fastest (after assessed penalties) is the winner. Build out about 50 different prompts in a library.
 
 ---

@@ -279,3 +279,7 @@
 
 148. User requested Scattergories judging enhancement: when an answer has multiple words starting with the target letter, the host/judge can set how many of those words count via a points input before or after accepting.
 149. User asked for Yahtzee start guidance: a temporary message "First roll already done. Click on dice to hold" that fades after about 5 seconds, and a small "Held" label under each die that is kept.
+
+## 2026-11-25
+
+150. User asked whether player limits are a concern and whether a session of about 16 people would perform okay. Answered from the current architecture: no session cap and 16 connections are fine; a few games refuse or break above their deck or rules cap, and turn-based modes get long rather than slow.
